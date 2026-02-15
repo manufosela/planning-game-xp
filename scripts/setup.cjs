@@ -38,6 +38,8 @@ const {
   isActiveFirebaseProject,
   isExpectedProjectInFirebaseUseOutput,
 } = require('./firebase-project-context-helper.cjs');
+const { ensureDatabaseTargets } = require('./firebase-rtdb-target-helper.cjs');
+const { shouldClearInstallState } = require('./setup-flow-helper.cjs');
 const {
   buildGcloudAdcPrintTokenCommand,
   buildGcloudAdcLoginCommand,
@@ -163,7 +165,10 @@ class SetupWizard {
         this.rl.close();
         return;
       }
-      installState.clear();
+      if (shouldClearInstallState('restart')) {
+        installState.clear();
+        this.print('  ✅ Estado de instalación parcial eliminado. Reiniciando desde cero.\n');
+      }
     }
 
     // Detect existing installations BEFORE anything else
@@ -208,6 +213,10 @@ class SetupWizard {
         return;
       }
       // action === 'full' → continue with full setup
+      if (shouldClearInstallState(action)) {
+        installState.clear();
+        this.print('  ✅ Setup reiniciado desde cero (estado anterior limpiado).\n');
+      }
     }
 
     await this.showSetupBriefing();
@@ -765,6 +774,22 @@ class SetupWizard {
       const activeMatch = isActiveFirebaseProject(ROOT_DIR, projectId);
       if (!directMatch && !activeMatch) {
         throw new Error(`Proyecto activo distinto al esperado (${projectId}). Despliegue cancelado por seguridad.`);
+      }
+
+      this.print('\n  Configurando targets de Realtime Database (main/tests)...');
+      try {
+        const targetResult = ensureDatabaseTargets({
+          projectId,
+          databaseUrl: this.config.client.PUBLIC_FIREBASE_DATABASE_URL,
+          accountEmail: this.config.firebaseCliAccount,
+        });
+        if (targetResult.configured) {
+          this.print(`  ✅ Targets RTDB configurados automáticamente (instancia: ${targetResult.instanceName})`);
+        } else {
+          this.print('  ⚠️  No se pudieron configurar targets RTDB automáticamente (URL inválida).');
+        }
+      } catch (targetError) {
+        this.print(`  ⚠️  Error configurando targets RTDB: ${targetError.message}`);
       }
 
       this.print('\n  Desplegando reglas de base de datos...');
