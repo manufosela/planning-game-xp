@@ -3,10 +3,10 @@
  * Setup script for initializing the first App Admin
  *
  * Usage:
- *   node scripts/setup-app-admin.js <email>
+ *   node scripts/setup-app-admin.cjs <email>
  *
  * Example:
- *   node scripts/setup-app-admin.js admin@yourdomain.com
+ *   node scripts/setup-app-admin.cjs admin@yourdomain.com
  *
  * This script:
  * 1. Adds the email to /data/appAdmins in Firebase
@@ -31,8 +31,8 @@ function encodeEmailForFirebase(email) {
 async function setupAppAdmin(email) {
   if (!email || !email.includes('@')) {
     console.error('❌ Error: Se requiere un email válido');
-    console.log('\nUso: node scripts/setup-app-admin.js <email>');
-    console.log('Ejemplo: node scripts/setup-app-admin.js admin@yourdomain.com');
+    console.log('\nUso: node scripts/setup-app-admin.cjs <email>');
+    console.log('Ejemplo: node scripts/setup-app-admin.cjs admin@yourdomain.com');
     process.exit(1);
   }
 

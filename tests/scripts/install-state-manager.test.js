@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const { InstallStateManager, INSTALL_STEPS } = await import('../../scripts/install-state-manager.js');
+const { InstallStateManager, INSTALL_STEPS } = await import('../../scripts/install-state-manager.cjs');
 
 describe('InstallStateManager', () => {
   let tmpDir;

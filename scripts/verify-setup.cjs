@@ -9,16 +9,16 @@
  * - Cloud Functions deployed
  *
  * Usage:
- *   node scripts/verify-setup.js
+ *   node scripts/verify-setup.cjs
  *   npm run verify-setup
  */
 
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { McpInstanceManager } = require('./mcp-instance-manager');
-const { KjInstanceManager } = require('./kj-instance-manager');
-const { InstallStateManager } = require('./install-state-manager');
+const { McpInstanceManager } = require('./mcp-instance-manager.cjs');
+const { KjInstanceManager } = require('./kj-instance-manager.cjs');
+const { InstallStateManager } = require('./install-state-manager.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 

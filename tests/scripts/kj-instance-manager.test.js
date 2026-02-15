@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const { KjInstanceManager, KJ_REPO_URL } = await import('../../scripts/kj-instance-manager.js');
+const { KjInstanceManager, KJ_REPO_URL } = await import('../../scripts/kj-instance-manager.cjs');
 
 describe('KjInstanceManager', () => {
   let tmpDir;

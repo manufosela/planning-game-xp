@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-const { McpInstanceManager } = await import('../../scripts/mcp-instance-manager.js');
+const { McpInstanceManager } = await import('../../scripts/mcp-instance-manager.cjs');
 
 describe('McpInstanceManager', () => {
   let tmpDir;

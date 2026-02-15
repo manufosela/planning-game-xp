@@ -10,7 +10,7 @@
  * 5. MCP Server installation (multi-instance)
  *
  * Usage:
- *   node scripts/setup.js
+ *   node scripts/setup.cjs
  *   npm run setup
  */
 
@@ -19,9 +19,9 @@ const path = require('path');
 const os = require('os');
 const readline = require('readline');
 const { execSync, spawn } = require('child_process');
-const { McpInstanceManager } = require('./mcp-instance-manager');
-const { InstallStateManager } = require('./install-state-manager');
-const { KjInstanceManager } = require('./kj-instance-manager');
+const { McpInstanceManager } = require('./mcp-instance-manager.cjs');
+const { InstallStateManager } = require('./install-state-manager.cjs');
+const { KjInstanceManager } = require('./kj-instance-manager.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -149,7 +149,7 @@ class SetupWizard {
       }
       if (action === 'verify') {
         try {
-          execSync('node scripts/verify-setup.js', { stdio: 'inherit', cwd: ROOT_DIR });
+          execSync('node scripts/verify-setup.cjs', { stdio: 'inherit', cwd: ROOT_DIR });
         } catch {
           // verify-setup exits with non-zero on errors, that's expected
         }
@@ -689,7 +689,7 @@ class SetupWizard {
         execSync('gcloud auth application-default login', { stdio: 'inherit' });
       }
 
-      execSync(`node scripts/setup-app-admin.js ${superAdminEmail}`, {
+      execSync(`node scripts/setup-app-admin.cjs ${superAdminEmail}`, {
         stdio: 'inherit',
         cwd: ROOT_DIR
       });
