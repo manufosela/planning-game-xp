@@ -30,6 +30,7 @@ const { formatStepHeader } = require('./setup-ui-formatters.cjs');
 const { collectMultilineInput } = require('./readline-multiline.cjs');
 const { checkFirestoreEnabled } = require('./firestore-status-checker.cjs');
 const { checkFunctionsEnabled } = require('./functions-status-checker.cjs');
+const { buildPreEnvironmentGuidance, shouldConfigurePreNowByDefault } = require('./pre-environment-guidance.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -542,12 +543,15 @@ class SetupWizard {
   }
 
   async configurePreEnvironment() {
-    this.print('Para PRE se recomienda usar un proyecto clonado/snapshot, separado de PROD.\n');
-    this.print('El comando npm run pre incluye una verificación de seguridad que bloquea si PRE=PROD.\n');
+    buildPreEnvironmentGuidance().forEach((line) => this.print(line));
+    this.print('');
 
-    const configureNow = await this.confirm('¿Quieres configurar ahora valores específicos para .env.pre?', true);
+    const configureNow = await this.confirm(
+      '¿Quieres configurar ahora valores específicos para .env.pre?',
+      shouldConfigurePreNowByDefault()
+    );
     if (!configureNow) {
-      this.print('  ⏭️  Se usará la misma base que DEV. Podrás editar .env.pre después.');
+      this.print('  ⏭️  Se usará la misma configuración base por ahora. Podrás editar .env.pre después.');
       return;
     }
 
