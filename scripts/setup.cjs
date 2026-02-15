@@ -33,9 +33,18 @@ const { checkFunctionsEnabled } = require('./functions-status-checker.cjs');
 const { buildPreEnvironmentGuidance, shouldConfigurePreNowByDefault } = require('./pre-environment-guidance.cjs');
 const { parseFirebaseAccounts, appendFirebaseAccountFlag } = require('./firebase-account-helper.cjs');
 const { buildDeployCommands } = require('./deploy-command-helper.cjs');
-const { setDefaultFirebaseProject, isActiveFirebaseProject } = require('./firebase-project-context-helper.cjs');
-const { buildGcloudAdcPrintTokenCommand, buildGcloudAdcLoginCommand } = require('./gcloud-adc-helper.cjs');
+const {
+  setDefaultFirebaseProject,
+  isActiveFirebaseProject,
+  isExpectedProjectInFirebaseUseOutput,
+} = require('./firebase-project-context-helper.cjs');
+const {
+  buildGcloudAdcPrintTokenCommand,
+  buildGcloudAdcLoginCommand,
+  buildGcloudAdcLoginNoBrowserCommand,
+} = require('./gcloud-adc-helper.cjs');
 const { formatMcpInstanceLabel, buildMcpActionOptions } = require('./mcp-setup-helper.cjs');
+const { resolveInputPath, buildDefaultMcpUserIdentity } = require('./setup-input-helper.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -743,8 +752,18 @@ class SetupWizard {
 
     try {
       this.print('\n  Seleccionando proyecto Firebase...');
-      execSync(this.withFirebaseAccount(`firebase use ${projectId}`), { stdio: 'inherit', cwd: ROOT_DIR });
-      if (!isActiveFirebaseProject(ROOT_DIR, projectId, { accountEmail: this.config.firebaseCliAccount })) {
+      const useOutput = String(execSync(this.withFirebaseAccount(`firebase use ${projectId}`), {
+        stdio: 'pipe',
+        cwd: ROOT_DIR,
+        encoding: 'utf8',
+      }) || '');
+      if (useOutput.trim()) {
+        this.print(useOutput.trim());
+      }
+
+      const directMatch = isExpectedProjectInFirebaseUseOutput(useOutput, projectId);
+      const activeMatch = isActiveFirebaseProject(ROOT_DIR, projectId);
+      if (!directMatch && !activeMatch) {
         throw new Error(`Proyecto activo distinto al esperado (${projectId}). Despliegue cancelado por seguridad.`);
       }
 
@@ -837,7 +856,14 @@ class SetupWizard {
         execSync(buildGcloudAdcPrintTokenCommand(gcloudAccount), { stdio: 'pipe' });
       } catch {
         this.print('\n  Necesitas autenticarte con gcloud...');
-        execSync(buildGcloudAdcLoginCommand(gcloudAccount), { stdio: 'inherit' });
+        try {
+          execSync(buildGcloudAdcLoginCommand(gcloudAccount), { stdio: 'inherit' });
+        } catch (loginError) {
+          this.print('\n  ⚠️  Falló autenticación web de gcloud.');
+          this.print('  Prueba este comando manual (sin navegador):');
+          this.print(`  ${buildGcloudAdcLoginNoBrowserCommand(gcloudAccount)}`);
+          throw loginError;
+        }
       }
 
       execSync(`node scripts/setup-app-admin.cjs ${superAdminEmail}`, {
@@ -1063,7 +1089,7 @@ class SetupWizard {
       return;
     }
 
-    const resolvedPath = path.resolve(keyPath);
+    const resolvedPath = resolveInputPath(keyPath, os.homedir());
     try {
       manager.copyServiceAccountKey(instanceName, resolvedPath);
       this.print('  ✅ serviceAccountKey.json copiado');
@@ -1081,17 +1107,14 @@ class SetupWizard {
       return;
     }
 
-    const developerId = await this.question('  Developer ID (ej: dev_001)');
     const developerName = await this.question('  Tu nombre');
     const developerEmail = await this.question('  Tu email');
+    const identity = buildDefaultMcpUserIdentity({ developerName, developerEmail });
 
-    if (developerId && developerName && developerEmail) {
+    if (identity.developerName && identity.developerEmail) {
       try {
-        manager.writeMcpUserConfig(instanceName, {
-          developerId,
-          developerName,
-          developerEmail,
-        });
+        manager.writeMcpUserConfig(instanceName, identity);
+        this.print(`  ℹ️  Developer ID asignado automáticamente: ${identity.developerId}`);
         this.print('  ✅ Identidad configurada');
       } catch (error) {
         this.print(`  ⚠️  ${error.message}`);
@@ -1212,9 +1235,55 @@ class SetupWizard {
     // Step: kj_cloned
     if (!installState.isStepCompleted(state, 'kj_cloned')) {
       this.print('\n  Configurando Karajan-Code...\n');
+      this.print('  Karajan-Code es una instalación global compartida (no por instancia).\n');
+
+      this.print('  Verificando prerequisitos para clonar desde GitHub...');
+      const gitAvailable = kjManager.isGitAvailable();
+      const sshAccess = kjManager.hasGithubSshAccess();
+      this.print(`    Git CLI: ${gitAvailable ? '✅' : '❌'}`);
+      this.print(`    Acceso SSH a GitHub: ${sshAccess ? '✅' : '❌'}`);
+
+      if (!gitAvailable) {
+        this.print('\n  ❌ Git no está disponible en este sistema.');
+        this.print('  Instala Git y vuelve a ejecutar setup.');
+        return;
+      }
+
+      if (!sshAccess) {
+        this.print('\n  ⚠️  No hay acceso SSH a GitHub. El clone puede pedir credenciales.');
+        this.print('  1. Reintentar verificación SSH');
+        this.print('  2. Continuar (clone igualmente)');
+        this.print('  3. Omitir Karajan por ahora');
+        const sshChoice = await this.question('  Selecciona [1-3]', '1');
+
+        if (sshChoice === '1') {
+          const sshRetry = kjManager.hasGithubSshAccess();
+          this.print(`  Reintento SSH: ${sshRetry ? '✅' : '❌'}`);
+          if (!sshRetry) {
+            this.print('  Omitiendo Karajan por ahora. Puedes configurarlo después desde "Gestionar Karajan + Bridge".');
+            return;
+          }
+        } else if (sshChoice === '3') {
+          this.print('  Omitiendo Karajan por ahora. Puedes configurarlo después desde "Gestionar Karajan + Bridge".');
+          return;
+        }
+      }
 
       const defaultKjDir = path.join(path.dirname(ROOT_DIR), 'karajan-code');
-      const kjDir = await this.question('  Directorio para Karajan-Code', defaultKjDir);
+      this.print('\n  ¿Cómo quieres continuar?');
+      this.print('  1. Usar un Karajan-Code ya clonado');
+      this.print('  2. Clonar Karajan-Code en una ruta nueva');
+      const kjChoice = await this.question('  Selecciona [1-2]', '2');
+
+      const inputDir = await this.question('  Directorio para Karajan-Code', defaultKjDir);
+      const kjDir = resolveInputPath(inputDir, os.homedir());
+      const useExisting = kjChoice === '1';
+
+      if (useExisting && !kjManager.isKjInstalled(kjDir)) {
+        this.print(`  ❌ No se encontró Karajan-Code válido en: ${kjDir}`);
+        this.print('  Usa una ruta existente o elige clonar una ruta nueva.');
+        return;
+      }
 
       if (kjManager.isKjInstalled(kjDir)) {
         this.print('  Karajan-Code encontrado. Actualizando...');

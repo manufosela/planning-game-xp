@@ -12,7 +12,13 @@ function buildGcloudAdcLoginCommand(accountEmail) {
   return withAccount('gcloud auth application-default login', accountEmail);
 }
 
+function buildGcloudAdcLoginNoBrowserCommand(accountEmail) {
+  const base = 'gcloud auth application-default login --no-browser --scopes=https://www.googleapis.com/auth/cloud-platform';
+  return withAccount(base, accountEmail);
+}
+
 module.exports = {
   buildGcloudAdcPrintTokenCommand,
   buildGcloudAdcLoginCommand,
+  buildGcloudAdcLoginNoBrowserCommand,
 };

@@ -99,6 +99,35 @@ class KjInstanceManager {
   // ─── Repo Management ──────────────────────────────────────────────────
 
   /**
+   * Check if git CLI is available.
+   * @returns {boolean}
+   */
+  isGitAvailable() {
+    try {
+      this._execSync('git --version', { stdio: 'pipe' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Check if GitHub SSH authentication is available.
+   * @returns {boolean}
+   */
+  hasGithubSshAccess() {
+    const command = 'ssh -T -o StrictHostKeyChecking=accept-new git@github.com';
+    const isSuccessText = (text) => String(text || '').includes("successfully authenticated");
+
+    try {
+      const output = this._execSync(command, { stdio: 'pipe', encoding: 'utf8' });
+      return isSuccessText(output);
+    } catch (error) {
+      return isSuccessText(error?.stdout) || isSuccessText(error?.stderr) || false;
+    }
+  }
+
+  /**
    * Clone Karajan-Code repository.
    * @param {string} targetDir - Target directory for clone
    * @returns {string} The target directory path

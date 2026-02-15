@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { appendFirebaseAccountFlag } = require('./firebase-account-helper.cjs');
 
 function setDefaultFirebaseProject(rootDir, projectId) {
   const rcPath = path.join(rootDir, '.firebaserc');
@@ -22,19 +21,27 @@ function setDefaultFirebaseProject(rootDir, projectId) {
 
 function isActiveFirebaseProject(rootDir, projectId, deps = {}) {
   const run = deps.execSync || execSync;
-  const command = appendFirebaseAccountFlag('firebase use', deps.accountEmail);
+  const command = 'firebase use';
   try {
     const outputRaw = String(run(command, { encoding: 'utf8', stdio: 'pipe', cwd: rootDir }) || '');
-    const output = outputRaw.replace(/\u001b\[[0-9;]*m/g, '');
-    return output.includes(`Active Project: ${projectId}`)
-      || output.includes(`Now using project ${projectId}`)
-      || output.includes(`(${projectId})`);
+    return isExpectedProjectInFirebaseUseOutput(outputRaw, projectId);
   } catch {
     return false;
   }
 }
 
+function isExpectedProjectInFirebaseUseOutput(outputRaw, projectId) {
+  const output = String(outputRaw || '').replace(/\u001b\[[0-9;]*m/g, '');
+  const expected = String(projectId || '').trim();
+  if (!expected) return false;
+  return output.includes(`Active Project: ${expected}`)
+    || output.includes(`Now using project ${expected}`)
+    || output.includes(`Proyecto activo: ${expected}`)
+    || output.includes(`(${expected})`);
+}
+
 module.exports = {
   setDefaultFirebaseProject,
   isActiveFirebaseProject,
+  isExpectedProjectInFirebaseUseOutput,
 };

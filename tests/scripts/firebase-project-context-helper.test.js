@@ -6,6 +6,7 @@ import os from 'os';
 const {
   setDefaultFirebaseProject,
   isActiveFirebaseProject,
+  isExpectedProjectInFirebaseUseOutput,
 } = await import('../../scripts/firebase-project-context-helper.cjs');
 
 describe('firebase-project-context-helper', () => {
@@ -35,5 +36,17 @@ describe('firebase-project-context-helper', () => {
   it('should detect active project from modern firebase use output', () => {
     const execSync = vi.fn(() => 'Now using project my-project');
     expect(isActiveFirebaseProject('/tmp', 'my-project', { execSync })).toBe(true);
+  });
+
+  it('should detect active project from spanish firebase use output', () => {
+    const execSync = vi.fn(() => 'Proyecto activo: my-project');
+    expect(isActiveFirebaseProject('/tmp', 'my-project', { execSync })).toBe(true);
+  });
+
+  it('should detect expected project from firebase use command output', () => {
+    expect(isExpectedProjectInFirebaseUseOutput('Now using project my-project', 'my-project')).toBe(true);
+    expect(isExpectedProjectInFirebaseUseOutput('Active Project: my-project', 'my-project')).toBe(true);
+    expect(isExpectedProjectInFirebaseUseOutput('Proyecto activo: my-project', 'my-project')).toBe(true);
+    expect(isExpectedProjectInFirebaseUseOutput('Now using project other-project', 'my-project')).toBe(false);
   });
 });

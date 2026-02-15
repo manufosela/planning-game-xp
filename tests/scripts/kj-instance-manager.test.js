@@ -207,6 +207,40 @@ describe('KjInstanceManager', () => {
     });
   });
 
+  describe('repository access checks', () => {
+    it('should return true when git is available', () => {
+      mockExecSync.mockReturnValueOnce('git version 2.43.0');
+      expect(manager.isGitAvailable()).toBe(true);
+      expect(mockExecSync).toHaveBeenCalledWith('git --version', expect.objectContaining({ stdio: 'pipe' }));
+    });
+
+    it('should return false when git is not available', () => {
+      mockExecSync.mockImplementationOnce(() => { throw new Error('git not found'); });
+      expect(manager.isGitAvailable()).toBe(false);
+    });
+
+    it('should return true when github ssh auth succeeds', () => {
+      mockExecSync.mockReturnValueOnce('Hi user! You\'ve successfully authenticated');
+      expect(manager.hasGithubSshAccess()).toBe(true);
+      expect(mockExecSync).toHaveBeenCalledWith(
+        'ssh -T -o StrictHostKeyChecking=accept-new git@github.com',
+        expect.objectContaining({ stdio: 'pipe' })
+      );
+    });
+
+    it('should return false when github ssh auth fails', () => {
+      mockExecSync.mockImplementationOnce(() => { throw new Error('Permission denied'); });
+      expect(manager.hasGithubSshAccess()).toBe(false);
+    });
+
+    it('should return true when ssh command throws with authenticated message in stderr', () => {
+      const error = new Error('exit code 1');
+      error.stderr = "Hi user! You've successfully authenticated, but GitHub does not provide shell access.";
+      mockExecSync.mockImplementationOnce(() => { throw error; });
+      expect(manager.hasGithubSshAccess()).toBe(true);
+    });
+  });
+
   // ─── Installer Delegation ────────────────────────────────────────
 
   describe('runKjInstallerInteractive()', () => {
