@@ -22,6 +22,7 @@ const { execSync, spawn } = require('child_process');
 const { McpInstanceManager } = require('./mcp-instance-manager.cjs');
 const { InstallStateManager } = require('./install-state-manager.cjs');
 const { KjInstanceManager } = require('./kj-instance-manager.cjs');
+const { detectExistingState } = require('./setup-existing-state.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -237,49 +238,7 @@ class SetupWizard {
   // ─── Existing state detection ──────────────────────────────────────
 
   detectExistingState() {
-    const state = {
-      hasExistingSetup: false,
-      envFiles: {},
-      firebaseProjectId: null,
-      firebaseDatabaseUrl: null,
-      mcpInstances: [],
-      matchingInstance: null,
-    };
-
-    // Check env files and parse PROJECT_ID / DATABASE_URL
-    for (const env of ['dev', 'pre', 'prod']) {
-      const envPath = path.join(ROOT_DIR, `.env.${env}`);
-      if (fs.existsSync(envPath)) {
-        state.envFiles[env] = true;
-        state.hasExistingSetup = true;
-
-        try {
-          const content = fs.readFileSync(envPath, 'utf8');
-          const projectMatch = content.match(/^PUBLIC_FIREBASE_PROJECT_ID=(.+)$/m);
-          const dbMatch = content.match(/^PUBLIC_FIREBASE_DATABASE_URL=(.+)$/m);
-          if (projectMatch) state.firebaseProjectId = projectMatch[1].trim();
-          if (dbMatch) state.firebaseDatabaseUrl = dbMatch[1].trim();
-        } catch {
-          // Ignore parse errors
-        }
-      }
-    }
-
-    // Check MCP instances
-    try {
-      const manager = new McpInstanceManager();
-      state.mcpInstances = manager.listInstances();
-      if (state.firebaseProjectId) {
-        state.matchingInstance = manager.findByFirebaseProject(state.firebaseProjectId);
-      }
-      if (state.mcpInstances.length > 0) {
-        state.hasExistingSetup = true;
-      }
-    } catch {
-      // Manager not available or no instances
-    }
-
-    return state;
+    return detectExistingState(ROOT_DIR);
   }
 
   async offerExistingSetupOptions(state) {
