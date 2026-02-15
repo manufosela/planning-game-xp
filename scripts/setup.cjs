@@ -24,6 +24,7 @@ const { InstallStateManager } = require('./install-state-manager.cjs');
 const { KjInstanceManager } = require('./kj-instance-manager.cjs');
 const { detectExistingState } = require('./setup-existing-state.cjs');
 const { buildSetupBriefingLines, detectFirebaseCliInstalled } = require('./setup-briefing.cjs');
+const { parseFirebaseWebConfigInput } = require('./firebase-web-config-parser.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -79,6 +80,18 @@ class SetupWizard {
     const answer = await this.question(prompt + suffix);
     if (!answer) return defaultYes;
     return answer.toLowerCase().startsWith('s') || answer.toLowerCase().startsWith('y');
+  }
+
+  async questionMultiline(prompt, endToken = 'END') {
+    this.print(prompt);
+    this.print(`Pega el bloque y termina con una línea que contenga solo ${endToken}.\n`);
+    const lines = [];
+    while (true) {
+      const line = await this.question('  >');
+      if (line.trim() === endToken) break;
+      lines.push(line);
+    }
+    return lines.join('\n');
   }
 
   print(msg) {
@@ -384,7 +397,8 @@ class SetupWizard {
 
   async configureFirebase() {
     this.print('Necesitas los datos de configuración de tu proyecto Firebase.');
-    this.print('Los encuentras en: Firebase Console → Project Settings → Your apps\n');
+    this.print('Los encuentras en: Firebase Console → Project Settings → Your apps');
+    this.print('Puedes introducirlos manualmente o pegar el bloque firebaseConfig.\n');
 
     // Check if already logged in
     try {
@@ -397,20 +411,52 @@ class SetupWizard {
       }
     }
 
-    // Get Firebase config values
+    this.print('¿Cómo quieres cargar la configuración de Firebase?');
+    this.print('  1. Introducir valores uno a uno');
+    this.print('  2. Pegar JSON/bloque firebaseConfig (recomendado)\n');
+
+    const mode = await this.question('Selecciona [1-2]', '2');
+
+    if (mode === '2') {
+      const rawInput = await this.questionMultiline(
+        'Pega aquí el JSON o bloque firebaseConfig (desde "const firebaseConfig = { ... }"):'
+      );
+      try {
+        const parsed = parseFirebaseWebConfigInput(rawInput);
+        Object.assign(this.config.client, parsed);
+        this.print('  ✅ Configuración Firebase importada desde bloque JSON');
+      } catch (error) {
+        this.print(`  ⚠️  No se pudo parsear el bloque: ${error.message}`);
+        this.print('  Continuamos con entrada manual.\n');
+        await this.collectFirebaseConfigManually();
+      }
+    } else {
+      await this.collectFirebaseConfigManually();
+    }
+
+    const superAdminEmail = await this.question(
+      `  ${ENV_TEMPLATE.client.find(i => i.key === 'PUBLIC_SUPER_ADMIN_EMAIL').desc} *`,
+      this.config.client.PUBLIC_SUPER_ADMIN_EMAIL || ''
+    );
+    this.config.client.PUBLIC_SUPER_ADMIN_EMAIL = superAdminEmail;
+    this.config.client.PUBLIC_AUTH_PROVIDER = this.config.client.PUBLIC_AUTH_PROVIDER || 'google';
+
+    // Copy super admin email to functions config
+    this.config.functions['PUBLIC_SUPER_ADMIN_EMAIL'] = this.config.client['PUBLIC_SUPER_ADMIN_EMAIL'];
+  }
+
+  async collectFirebaseConfigManually() {
     for (const item of ENV_TEMPLATE.client) {
-      const value = await this.question(`  ${item.desc}${item.required ? ' *' : ''}`);
+      const currentValue = this.config.client[item.key] || item.default || '';
+      const value = await this.question(`  ${item.desc}${item.required ? ' *' : ''}`, currentValue);
       if (item.required && !value) {
-        this.print(`    ⚠️  Este campo es requerido`);
-        const retry = await this.question(`  ${item.desc} *`);
+        this.print('    ⚠️  Este campo es requerido');
+        const retry = await this.question(`  ${item.desc} *`, currentValue);
         this.config.client[item.key] = retry;
       } else {
         this.config.client[item.key] = value;
       }
     }
-
-    // Copy super admin email to functions config
-    this.config.functions['PUBLIC_SUPER_ADMIN_EMAIL'] = this.config.client['PUBLIC_SUPER_ADMIN_EMAIL'];
   }
 
   async configurePreEnvironment() {
