@@ -23,6 +23,7 @@ const { McpInstanceManager } = require('./mcp-instance-manager.cjs');
 const { InstallStateManager } = require('./install-state-manager.cjs');
 const { KjInstanceManager } = require('./kj-instance-manager.cjs');
 const { detectExistingState } = require('./setup-existing-state.cjs');
+const { buildSetupBriefingLines, detectFirebaseCliInstalled } = require('./setup-briefing.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -212,25 +213,12 @@ class SetupWizard {
   }
 
   async showSetupBriefing() {
-    this.print('╔══════════════════════════════════════════════════════════════╗');
-    this.print('║              PLANNING GAME XP — SETUP WIZARD                ║');
-    this.print('╠══════════════════════════════════════════════════════════════╣');
-    this.print('║ OBLIGATORIO:                                                 ║');
-    this.print('║  ☐ Proyecto Firebase creado                                 ║');
-    this.print('║  ☐ Firebase CLI instalado                                   ║');
-    this.print('║  ☐ Auth de Firebase habilitada                              ║');
-    this.print('║                                                              ║');
-    this.print('║ DECISIONES:                                                  ║');
-    this.print('║  1. Proveedor de autenticación                              ║');
-    this.print('║  2. Nombre de organización (cabecera)                       ║');
-    this.print('║  3. Notificaciones: solo push o push + email                ║');
-    this.print('║  4. Integraciones (MCP / Karajan / Bridge)                  ║');
-    this.print('║                                                              ║');
-    this.print('║ PRE recomendado: proyecto clonado/snapshot (no PROD).       ║');
-    this.print('║ npm run pre bloquea si detecta que PRE=PROD.                ║');
-    this.print('║                                                              ║');
-    this.print('║ Consejo: revisa config-examples/ antes de empezar.          ║');
-    this.print('╚══════════════════════════════════════════════════════════════╝\n');
+    const lines = buildSetupBriefingLines({
+      firebaseCliInstalled: detectFirebaseCliInstalled(),
+      repoUrl: 'https://github.com/manufosela/planning-game-xp',
+    });
+    lines.forEach((line) => this.print(line));
+    this.print('');
 
     await this.question('Pulsa Enter para continuar o Ctrl+C para preparar requisitos primero');
   }
