@@ -154,6 +154,21 @@ const BugCardSpecificStyles = css`
     background: rgba(0,0,0,0.05);
   }
 
+  .ia-link-button {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: inherit;
+    font-size: 0.95em;
+    cursor: pointer;
+    padding: 0 0.35em;
+    margin-left: 0.3em;
+    transition: background 0.2s;
+  }
+  .ia-link-button:hover {
+    background: rgba(0,0,0,0.05);
+  }
+
   .attachment-section {
     padding: 1rem;
     border: 1px solid var(--border-subtle);

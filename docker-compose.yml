@@ -22,6 +22,24 @@ services:
       retries: 5
     restart: unless-stopped
 
+  bridge:
+    build:
+      context: ./bridge
+      dockerfile: Dockerfile
+    container_name: planninggame-bridge
+    ports:
+      - "${BRIDGE_PORT:-3100}:3100"
+    environment:
+      - BRIDGE_PORT=3100
+      - GOOGLE_APPLICATION_CREDENTIALS=/config/serviceAccountKey.json
+      - DATABASE_URL=${DATABASE_URL}
+      - BRIDGE_API_KEY=${BRIDGE_API_KEY}
+      - KJ_HOME=/kj-home
+    volumes:
+      - ${KJ_HOME:-~/.karajan}:/kj-home:ro
+      - ${SERVICE_ACCOUNT_KEY_PATH:-./serviceAccountKey.json}:/config/serviceAccountKey.json:ro
+    restart: unless-stopped
+
 volumes:
   sonarqube_data:
   sonarqube_logs:

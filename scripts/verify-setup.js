@@ -16,6 +16,9 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { McpInstanceManager } = require('./mcp-instance-manager');
+const { KjInstanceManager } = require('./kj-instance-manager');
+const { InstallStateManager } = require('./install-state-manager');
 
 const ROOT_DIR = path.join(__dirname, '..');
 
@@ -89,6 +92,17 @@ class SetupVerifier {
     console.log('\n☁️  Cloud Functions:');
     this.checkCloudFunctions();
 
+    // 7. MCP Server
+    console.log('\n🔌 MCP Server:');
+    this.checkMCP();
+
+    // 8. Karajan-Code + Bridge Server
+    console.log('\n🤖 Karajan-Code + Bridge Server:');
+    this.checkKarajanAndBridge();
+
+    // 9. Installation state
+    this.checkInstallState();
+
     // Summary
     this.printSummary();
   }
@@ -150,6 +164,136 @@ class SetupVerifier {
       const content = fs.readFileSync(indexPath, 'utf8');
       return requiredFunctions.every(fn => content.includes(`exports.${fn}`));
     });
+  }
+
+  checkMCP() {
+    const manager = new McpInstanceManager();
+
+    // Engine check
+    this.check('MCP Engine instalado', () => {
+      if (manager.isEngineInstalled()) return true;
+      return 'warning';
+    });
+
+    if (manager.isEngineInstalled()) {
+      const version = manager.getEngineVersion();
+      if (version) {
+        console.log(`      Versión: ${version}`);
+      }
+    }
+
+    // Manifest check
+    const manifestPath = manager.manifestPath;
+    this.check('Manifest de instancias existe', () => {
+      if (fs.existsSync(manifestPath)) return true;
+      return 'warning';
+    });
+
+    // Instance checks
+    const instances = manager.listInstances();
+    if (instances.length === 0) {
+      console.log('      No hay instancias MCP configuradas (opcional)');
+    }
+
+    for (const instance of instances) {
+      console.log(`\n    Instancia: ${instance.name}`);
+
+      this.check(`  [${instance.name}] serviceAccountKey.json`, () => {
+        return manager.hasServiceAccountKey(instance.name);
+      });
+
+      this.check(`  [${instance.name}] mcp.user.json`, () => {
+        if (manager.hasMcpUser(instance.name)) return true;
+        return 'warning';
+      });
+
+      // Check Claude registration
+      this.check(`  [${instance.name}] Registrado en Claude`, () => {
+        try {
+          const output = execSync('claude mcp list', { encoding: 'utf8', stdio: 'pipe' });
+          const mcpName = `planning-game-${instance.name}`;
+          if (output.includes(mcpName)) return true;
+          return 'warning';
+        } catch {
+          return 'warning';
+        }
+      });
+    }
+  }
+
+  checkKarajanAndBridge() {
+    const kjManager = new KjInstanceManager();
+
+    // Check Docker availability
+    this.check('Docker disponible', () => {
+      if (kjManager.isDockerAvailable()) return true;
+      return 'warning';
+    });
+
+    this.check('Docker Compose disponible', () => {
+      if (kjManager.isDockerComposeAvailable()) return true;
+      return 'warning';
+    });
+
+    // Check KJ instances
+    const kjInstances = kjManager.listInstances();
+    if (kjInstances.length === 0) {
+      console.log('      No hay instancias Karajan-Code configuradas (Tier 3 no instalado)');
+    }
+
+    for (const instance of kjInstances) {
+      console.log(`\n    Instancia KJ: ${instance.name}`);
+
+      this.check(`  [${instance.name}] KJ repo existe`, () => {
+        return instance.kjRepoPath && fs.existsSync(instance.kjRepoPath);
+      });
+
+      this.check(`  [${instance.name}] KJ instalado`, () => {
+        if (instance.kjRepoPath && kjManager.isKjInstalled(instance.kjRepoPath)) return true;
+        return 'warning';
+      });
+    }
+
+    // Check Bridge Server
+    this.check('Bridge Server Docker container', () => {
+      if (kjManager.isBridgeRunning()) return true;
+      return 'warning';
+    });
+
+    // Check bridge config in docker-compose
+    this.check('Bridge definido en docker-compose.yml', () => {
+      const composePath = path.join(ROOT_DIR, 'docker-compose.yml');
+      if (!fs.existsSync(composePath)) return 'warning';
+      const content = fs.readFileSync(composePath, 'utf8');
+      if (content.includes('bridge:') && content.includes('planninggame-bridge')) return true;
+      return 'warning';
+    });
+
+    // Health check if bridge is running
+    if (kjManager.isBridgeRunning()) {
+      this.check('Bridge Server health check', () => {
+        try {
+          const result = execSync('curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/health', {
+            encoding: 'utf8',
+            stdio: 'pipe',
+            timeout: 5000,
+          });
+          return result.trim() === '200';
+        } catch {
+          return false;
+        }
+      });
+    }
+  }
+
+  checkInstallState() {
+    const installState = new InstallStateManager();
+    if (installState.isInProgress()) {
+      const state = installState.load();
+      console.log(`\n⚠️  Instalación interrumpida detectada (tier ${state.tier}, último paso: ${state.lastStep})`);
+      console.log('    Ejecuta "npm run setup" para continuar la instalación.');
+      this.warnings.push('Instalación interrumpida pendiente');
+    }
   }
 
   printSummary() {

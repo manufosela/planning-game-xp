@@ -17,6 +17,7 @@ import { isCurrentUserSuperAdmin } from '../utils/super-admin-check.js';
 import { openScenarioModal } from '../utils/scenario-modal.js';
 import { getPriorityDisplay } from '../utils/priority-utils.js';
 import { stateTransitionService } from '../services/state-transition-service.js';
+import { aiExecutionService } from '../services/ai-execution-service.js';
 import { TASK_SCHEMA } from '../schemas/card-field-schemas.js';
 import { generateTimestamp, extractDatePart } from '../utils/timestamp-utils.js';
 import './FirebaseStorageUploader.js';
@@ -101,7 +102,9 @@ export class TaskCard extends CommitsDisplayMixin(NotesManagerMixin(BaseCard)) {
       // Warning when projectId doesn't match URL
       _projectIdMismatch: { type: Boolean, state: true },
       // Converting legacy description to user story
-      _isConvertingDescription: { type: Boolean, state: true }
+      _isConvertingDescription: { type: Boolean, state: true },
+      // Bridge Server availability for AI execution
+      _isBridgeAvailable: { type: Boolean, state: true }
     };
   }
 
@@ -696,6 +699,12 @@ this.canEditPermission = permissions.canEdit || false;
       // Para nuevas tareas, obtener el projectId del contexto global
       this._attemptToLoadProjectFromContext();
     }
+
+    // Check Bridge Server availability for AI execution button
+    this._isBridgeAvailable = false;
+    aiExecutionService.ensureInitialized().then(() => {
+      this._isBridgeAvailable = aiExecutionService.isAvailable();
+    }).catch(() => { this._isBridgeAvailable = false; });
 
     // Escuchar el evento de respuesta para todos los datos de la tarjeta
     this._onProvideTaskCardData = (e) => {
@@ -2588,6 +2597,7 @@ this.isSuperAdmin = false;
             ${this.attachment ? html`<span class="attachment-indicator" title="Tiene archivo adjunto">📎</span>` : ''}
             <button class="copy-link-button" title="Copiar enlace" @click=${this.copyCardUrl}>🔗</button>
             ${this._projectHasIa() ? html`<button class="ia-link-button" title="Generar enlace IA (1 uso, 15 min)" @click=${(e) => { e.stopPropagation(); this._generateIaLink(); }}>🤖</button>` : ''}
+            ${this._isBridgeAvailable && this._isNotDone() ? html`<button class="ia-link-button" title="Ejecutar tarea con IA" @click=${(e) => { e.stopPropagation(); this._handleExecuteAi(); }}>⚡</button>` : ''}
             ${this.canMoveToProject ? html`<button class="move-project-button" title="Mover a otro proyecto" @click=${(e) => { e.stopPropagation(); this._handleMoveToProject(e); }}>📦</button>` : ''}
             ${this.canDelete ? html`<button class="delete-button" @click=${this.showDeleteModal}>🗑️</button>` : ''}
           </div>
@@ -3139,6 +3149,9 @@ return html`<div class="no-related-tasks">No hay tareas relacionadas</div>`;
           ` : ''}
           ${this._projectHasIa() && this._isNotDone() ? html`
             <span class="icon-btn" role="button" title="Generar enlace IA (1 uso, 15 min)" @click=${(e) => { e.stopPropagation(); this._generateIaLink(); }}>🤖</span>
+          ` : ''}
+          ${this._isBridgeAvailable && this._isNotDone() ? html`
+            <span class="icon-btn" role="button" title="Ejecutar tarea con IA" @click=${(e) => { e.stopPropagation(); this._handleExecuteAi(); }}>⚡</span>
           ` : ''}
         </div>
       </div>
@@ -3985,6 +3998,70 @@ this.repositoryLabel = newLabel;
       bubbles: true,
       composed: true
     }));
+  }
+
+  /**
+   * Handle AI execution via Bridge Server
+   */
+  _handleExecuteAi() {
+    if (!this._isBridgeAvailable) return;
+
+    document.dispatchEvent(new CustomEvent('show-modal', {
+      detail: {
+        options: {
+          title: 'Ejecutar tarea con IA',
+          message: `¿Quieres ejecutar la tarea "${this.title}" con IA? Se iniciará una ejecución automática a través del Bridge Server.`,
+          button1Text: 'Ejecutar',
+          button2Text: 'Cancelar',
+          button1css: 'background-color: #0d6efd; color: white;',
+          button2css: 'background-color: #6c757d; color: white;',
+          button1Action: () => this._startAiExecution(),
+          button2Action: () => { }
+        }
+      }
+    }));
+  }
+
+  async _startAiExecution() {
+    try {
+      this._showSavingOverlay('Iniciando ejecución IA...');
+
+      const result = await aiExecutionService.execute({
+        projectId: this.projectId,
+        cardId: this.cardId,
+        cardType: 'task',
+        firebaseCardId: this.firebaseId,
+        requestedBy: this._getCurrentUserEmail() || 'unknown',
+        context: {
+          title: this.title,
+          descriptionStructured: this.descriptionStructured,
+          acceptanceCriteria: this.acceptanceCriteria,
+          acceptanceCriteriaStructured: this.acceptanceCriteriaStructured,
+          implementationPlan: this.implementationPlan,
+        },
+      });
+
+      this._hideSavingOverlay();
+
+      // Open AiExecutionPanel in a modal
+      document.dispatchEvent(new CustomEvent('show-modal', {
+        detail: {
+          options: {
+            title: `Ejecución IA - ${this.cardId}`,
+            webComponent: 'ai-execution-panel',
+            webComponentAttributes: {
+              'execution-id': result.executionId,
+              'card-id': this.cardId,
+              'project-id': this.projectId,
+            },
+            hideButtons: true,
+          }
+        }
+      }));
+    } catch (err) {
+      this._hideSavingOverlay();
+      this._showNotification(`Error al iniciar ejecución IA: ${err.message}`, 'error');
+    }
   }
 
   async _generateIaLink() {

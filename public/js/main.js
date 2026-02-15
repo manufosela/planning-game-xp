@@ -9,6 +9,7 @@ import './wc/ColorTabs.js';
 import './wc/card-history-viewer.js';
 import './wc/state-history-viewer.js';
 import './wc/AiDocumentUploader.js';
+import './wc/AiExecutionPanel.js';
 import './wc/AdrList.js';
 import './wc/VersionUpdateModal.js';
 

@@ -24,6 +24,10 @@ import Layout from '../layouts/Layout.astro';
         <span class="tab-icon">🧑‍💻</span>
         Developer Metrics
       </button>
+      <button class="tab-button" data-tab="ai-executions">
+        <span class="tab-icon">⚡</span>
+        AI Executions
+      </button>
     </div>
 
     <div class="year-selector-controls">
@@ -62,11 +66,17 @@ import Layout from '../layouts/Layout.astro';
         </div>
       </div>
     </div>
+
+    <div class="tab-content" id="ai-executions-tab">
+      <ai-executions-dashboard></ai-executions-dashboard>
+    </div>
   </div>
 </Layout>
 
 <script type="module">
   import '/js/wc/GanttChart.js';
+  import '/js/wc/AiExecutionsDashboard.js';
+  import '/js/wc/AiExecutionPanel.js';
   import '/js/wc/SprintPointsChart.js';
   import { database, ref, onValue, get, superAdminEmail } from '/firebase-config.js';
   import { getLists } from '/js/utils/common-functions.js';

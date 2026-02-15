@@ -5,13 +5,16 @@ Esta guía te llevará paso a paso a través de la instalación completa de Plan
 ## Índice
 
 1. [Requisitos Previos](#requisitos-previos)
-2. [Instalación Rápida (Recomendada)](#instalación-rápida)
-3. [Instalación Manual](#instalación-manual)
-4. [Configuración de Firebase](#configuración-de-firebase)
-5. [Configuración de Microsoft Graph (Emails)](#configuración-de-microsoft-graph)
-6. [Primer Despliegue](#primer-despliegue)
-7. [Verificación](#verificación)
-8. [Solución de Problemas](#solución-de-problemas)
+2. [Tiers de Instalación](#tiers-de-instalación)
+3. [Instalación Rápida (Recomendada)](#instalación-rápida)
+4. [Instalación Manual](#instalación-manual)
+5. [Configuración de Firebase](#configuración-de-firebase)
+6. [Configuración de Microsoft Graph (Emails)](#configuración-de-microsoft-graph)
+7. [Primer Despliegue](#primer-despliegue)
+8. [MCP Server (Claude Code)](#mcp-server)
+9. [Karajan-Code + Bridge Server (IA)](#karajan-code--bridge-server)
+10. [Verificación](#verificación)
+11. [Solución de Problemas](#solución-de-problemas)
 
 ---
 
@@ -31,7 +34,8 @@ Esta guía te llevará paso a paso a través de la instalación completa de Plan
 | Software | Propósito | Verificar con |
 |----------|-----------|---------------|
 | gcloud CLI | Setup de App Admin | `gcloud --version` |
-| Docker | Emuladores locales | `docker --version` |
+| Docker | Bridge Server (Tier 3) | `docker --version` |
+| Docker Compose | Bridge Server (Tier 3) | `docker compose version` |
 
 ### Instalación de Requisitos
 
@@ -47,6 +51,36 @@ npm install -g firebase-tools
 # gcloud CLI (opcional, para setup de admin)
 # Ver: https://cloud.google.com/sdk/docs/install
 ```
+
+---
+
+## Tiers de Instalación
+
+Planning Game XP soporta 3 niveles de instalación:
+
+| Tier | Componentes | Funcionalidad IA | Requisitos Extra |
+|------|------------|-------------------|------------------|
+| **1** | Solo Planning Game | Ninguna | Ninguno |
+| **2** | PG + MCP Server | MCP via Claude Code CLI | Claude Code |
+| **3** | PG + MCP + Karajan-Code + Bridge | Ejecución IA desde la UI web | Docker, Claude Code |
+
+### Tier 1: Solo Planning Game
+La instalación básica. Gestión de proyectos ágiles completa sin integración IA.
+
+### Tier 2: Planning Game + MCP
+Añade el MCP Server que permite gestionar Planning Game desde Claude Code (crear tareas, bugs, sprints, etc. via CLI).
+
+### Tier 3: Planning Game + MCP + Karajan-Code + Bridge (IA completa)
+Instalación completa con ejecución de tareas por IA directamente desde la interfaz web:
+- **Karajan-Code**: Orquestador de IA que ejecuta tareas automáticamente
+- **Bridge Server** (Docker): Conecta la UI web con Karajan-Code via REST + WebSocket
+- **Dashboard IA**: Visualización en tiempo real de ejecuciones activas
+- **Botón ⚡**: En cada tarjeta/bug para lanzar ejecución IA
+
+El asistente `npm run setup` te permite elegir el tier durante la instalación.
+
+### Instalación Resumible
+Si la instalación se interrumpe (especialmente en Tier 3), el wizard la detecta al re-ejecutar `npm run setup` y ofrece continuar desde el punto de interrupción.
 
 ---
 
@@ -279,6 +313,173 @@ npm run setup:app-admin -- tu-email@dominio.com
 npm run build
 npm run deploy
 ```
+
+---
+
+## MCP Server
+
+El MCP Server permite gestionar Planning Game desde Claude Code (tareas, bugs, sprints, etc.). El paso 8 del setup wizard lo instala automáticamente con soporte multi-instancia.
+
+### Instalación durante el setup
+
+El asistente `npm run setup` incluye la instalación del MCP como paso 8. Si lo omites, puedes instalarlo después re-ejecutando `npm run setup` y seleccionando la opción 3 ("Añadir un nuevo MCP").
+
+### Arquitectura multi-instancia
+
+El MCP usa un engine compartido y múltiples instancias independientes:
+
+```
+~/mcp-servers/
+├── planning-game/                          # Engine compartido (git clone)
+│   ├── index.js
+│   └── package.json
+└── planning-game-instances/                # Instancias
+    ├── instances.json                      # Manifest de instancias
+    ├── pro/                                # Instancia "pro"
+    │   ├── .env
+    │   ├── serviceAccountKey.json
+    │   └── mcp.user.json
+    └── dev/                                # Instancia "dev" (opcional)
+        ├── .env
+        ├── serviceAccountKey.json
+        └── mcp.user.json
+```
+
+Cada instancia se registra en Claude como `planning-game-{nombre}` (ej: `planning-game-pro`).
+
+### Re-ejecutar setup para gestionar MCP
+
+Al re-ejecutar `npm run setup`, el wizard detecta instalaciones existentes y ofrece:
+
+1. **Actualizar MCP existente** - Cambiar serviceAccountKey, identidad, re-registrar
+2. **Reinstalar MCP** - Borrar instancia actual y crear nueva
+3. **Añadir nuevo MCP** - Crear instancia adicional conectada a otro Planning Game
+4. **Verificar instalación** - Ejecutar verificación completa
+5. **Setup completo** - Re-ejecutar todo el wizard desde cero
+
+### Instalación manual del MCP
+
+Si prefieres instalar manualmente:
+
+```bash
+# 1. Clonar el engine
+git clone https://github.com/AgilePlanning-io/planning-game-mcp.git ~/mcp-servers/planning-game
+cd ~/mcp-servers/planning-game && npm install
+
+# 2. Crear directorio de instancia
+mkdir -p ~/mcp-servers/planning-game-instances/pro
+
+# 3. Copiar serviceAccountKey.json
+cp /path/to/serviceAccountKey.json ~/mcp-servers/planning-game-instances/pro/
+
+# 4. Crear mcp.user.json
+echo '{"developerId":"dev_XXX","developerName":"Tu Nombre","developerEmail":"tu@email.com"}' \
+  > ~/mcp-servers/planning-game-instances/pro/mcp.user.json
+
+# 5. Registrar en Claude
+claude mcp add planning-game-pro -s user \
+  -e DATABASE_URL=https://tu-proyecto.firebaseio.com \
+  -e GOOGLE_APPLICATION_CREDENTIALS=~/mcp-servers/planning-game-instances/pro/serviceAccountKey.json \
+  -e MCP_USER_CONFIG=~/mcp-servers/planning-game-instances/pro/mcp.user.json \
+  -- node ~/mcp-servers/planning-game/index.js
+```
+
+### Migración desde instalación legacy
+
+Si tienes una instalación MCP anterior (sin multi-instancia), el setup wizard la migra automáticamente a una instancia llamada "pro" y re-registra en Claude como `planning-game-pro`.
+
+---
+
+## Karajan-Code + Bridge Server
+
+> **Solo Tier 3** - Esta sección solo aplica si seleccionas Tier 3 durante `npm run setup`.
+
+### Arquitectura
+
+```
+┌─────────────────┐      ┌─────────────────┐      ┌──────────────────┐
+│  PG Web UI      │      │ Bridge Server   │      │ Karajan-Code     │
+│  (Navegador)    │◄────►│ (Docker)        │◄────►│ (CLI)            │
+│                 │ WS+  │  Express + ws   │ CLI  │                  │
+│  Botón ⚡       │ REST │  localhost:3100  │spawn │  kj run          │
+│  Dashboard IA   │      │                 │      │                  │
+└────────┬────────┘      └────────┬────────┘      └──────────────────┘
+         │                        │
+         │  Firebase RTDB         │  Firebase RTDB
+         ▼                        ▼
+   ┌──────────────────────────────────────┐
+   │     Firebase Realtime Database       │
+   │  /aiExecutions/{executionId}         │
+   │  /aiExecutionsByCard/{proj}/{card}   │
+   └──────────────────────────────────────┘
+```
+
+### Instalación automática (recomendada)
+
+El asistente `npm run setup` (Tier 3) gestiona todo:
+
+1. Clona el repositorio de Karajan-Code
+2. Ejecuta el instalador de KJ (wizard interactivo propio)
+3. Construye la imagen Docker del Bridge Server
+4. Inicia el Bridge Server
+5. Registra el MCP de Karajan-Code en Claude
+
+### Instalación manual del Bridge
+
+```bash
+# 1. Construir la imagen Docker
+docker compose build bridge
+
+# 2. Configurar variables de entorno
+export DATABASE_URL=https://tu-proyecto.firebaseio.com
+export BRIDGE_API_KEY=$(openssl rand -hex 32)
+export KJ_HOME=~/.karajan
+export SERVICE_ACCOUNT_KEY_PATH=/path/to/serviceAccountKey.json
+
+# 3. Iniciar el Bridge
+docker compose up -d bridge
+
+# 4. Verificar
+curl http://localhost:3100/health
+# Respuesta esperada: {"status":"ok","uptime":...}
+```
+
+### Gestión del Bridge Server
+
+```bash
+# Ver estado
+docker ps | grep planninggame-bridge
+
+# Ver logs
+docker compose logs -f bridge
+
+# Reiniciar
+docker compose restart bridge
+
+# Parar
+docker compose stop bridge
+```
+
+### Funcionalidades IA en la UI
+
+Cuando el Bridge está activo y configurado:
+
+- **Botón ⚡** aparece en cada TaskCard y BugCard (si no está completada)
+- **AiExecutionPanel**: Modal con progreso en tiempo real (WebSocket + RTDB)
+- **Dashboard IA**: Tab "AI Executions" en el dashboard del proyecto
+- **Cancelación**: Posibilidad de cancelar ejecuciones en curso
+
+### Firebase RTDB para ejecuciones IA
+
+La configuración del Bridge se almacena en RTDB `/config/bridge`:
+```json
+{
+  "url": "http://localhost:3100",
+  "apiKey": "hex-random-32-bytes"
+}
+```
+
+Las ejecuciones se registran en `/aiExecutions/{executionId}` con estado, checkpoints y resultados en tiempo real.
 
 ---
 

@@ -48,7 +48,15 @@ export const AppEvents = {
   COMPONENT_READY: 'app:component-ready',
 
   // Section events
-  SECTION_CHANGED: 'app:section-changed'
+  SECTION_CHANGED: 'app:section-changed',
+
+  // AI Execution events
+  AI_EXECUTION_STARTED: 'app:ai-execution-started',
+  AI_EXECUTION_CHECKPOINT: 'app:ai-execution-checkpoint',
+  AI_EXECUTION_COMPLETED: 'app:ai-execution-completed',
+  AI_EXECUTION_ERROR: 'app:ai-execution-error',
+  AI_EXECUTION_CANCELLED: 'app:ai-execution-cancelled',
+  BRIDGE_STATUS_CHANGED: 'app:bridge-status-changed',
 };
 
 /**

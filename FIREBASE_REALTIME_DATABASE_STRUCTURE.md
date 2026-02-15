@@ -17,7 +17,9 @@ La base de datos Firebase Realtime Database está organizada en las siguientes c
 ├── global/          # Configuración global de IA (agents, prompts, instructions)
 ├── global-history/  # Historial de cambios en configuración global
 ├── adrs/            # Architecture Decision Records por proyecto
-└── adr-history/     # Historial de cambios en ADRs
+├── adr-history/     # Historial de cambios en ADRs
+├── aiExecutions/    # Ejecuciones de IA (Bridge → Karajan-Code)
+└── aiExecutionsByCard/ # Índice de ejecuciones por tarjeta
 ```
 
 ## 1. Colección: `cards`
@@ -745,6 +747,122 @@ adr-history/
 │   │   │   ├── updatedBy: string
 │   │   │   ├── changes: object
 │   │   │   └── previousValues: object
+```
+
+## 13. Colección: `aiExecutions`
+
+Contiene los registros de ejecuciones de IA lanzadas desde la UI de Planning Game a través del Bridge Server hacia Karajan-Code.
+
+### Estructura:
+
+```
+aiExecutions/
+├── {executionId}/
+│   ├── executionId: string           # ID único (exec_xxxxxxxxxxxx)
+│   ├── cardId: string                # Card ID (PLN-TSK-0042)
+│   ├── cardType: string              # "task" | "bug"
+│   ├── projectId: string             # ID del proyecto
+│   ├── firebaseCardId: string        # Firebase push key de la card
+│   ├── status: string                # "queued" | "running" | "completed" | "failed" | "cancelled"
+│   ├── phase: string                 # "coder" | "sonar" | "reviewer" | null
+│   ├── iteration: number             # Iteración actual (1-based)
+│   ├── maxIterations: number         # Máximo de iteraciones configuradas
+│   ├── requestedBy: string           # Developer ID que solicitó la ejecución
+│   ├── requestedAt: string           # ISO timestamp de la solicitud
+│   ├── startedAt: string | null      # ISO timestamp de inicio real
+│   ├── completedAt: string | null    # ISO timestamp de finalización
+│   ├── bridgeInstanceId: string      # ID de la instancia Bridge
+│   ├── kjSessionId: string | null    # ID de sesión de Karajan-Code
+│   ├── checkpoints/
+│   │   ├── {index}/
+│   │   │   ├── stage: string         # "coder" | "sonar" | "reviewer"
+│   │   │   ├── iteration: number
+│   │   │   ├── status: string        # "running" | "completed" | "failed"
+│   │   │   ├── timestamp: string
+│   │   │   └── summary: string | null
+│   ├── result: object | null         # Resultado final (commits, archivos, etc.)
+│   └── error: string | null          # Mensaje de error si falló
+```
+
+### Estados de ejecución:
+
+| Estado | Significado |
+|--------|-------------|
+| `queued` | Solicitud recibida, pendiente de iniciar |
+| `running` | KJ está ejecutando la tarea |
+| `completed` | Ejecución finalizada con éxito |
+| `failed` | Ejecución falló |
+| `cancelled` | Cancelada por el usuario |
+
+### Ejemplo:
+
+```json
+{
+  "aiExecutions": {
+    "exec_a1b2c3d4e5f6": {
+      "executionId": "exec_a1b2c3d4e5f6",
+      "cardId": "PLN-TSK-0042",
+      "cardType": "task",
+      "projectId": "PlanningGame",
+      "firebaseCardId": "-NxyzAbcDef",
+      "status": "running",
+      "phase": "coder",
+      "iteration": 1,
+      "maxIterations": 3,
+      "requestedBy": "dev_010",
+      "requestedAt": "2026-02-14T10:30:00Z",
+      "startedAt": "2026-02-14T10:30:05Z",
+      "completedAt": null,
+      "bridgeInstanceId": "bridge-pro",
+      "kjSessionId": "s_2026-02-14T10-30-05-123Z",
+      "checkpoints": {
+        "0": { "stage": "coder", "iteration": 1, "status": "completed", "timestamp": "2026-02-14T10:31:00Z", "summary": "Generated implementation" },
+        "1": { "stage": "sonar", "iteration": 1, "status": "running", "timestamp": "2026-02-14T10:32:00Z" }
+      },
+      "result": null,
+      "error": null
+    }
+  }
+}
+```
+
+## 14. Colección: `aiExecutionsByCard`
+
+Índice secundario que permite buscar ejecuciones por tarjeta de forma eficiente.
+
+### Estructura:
+
+```
+aiExecutionsByCard/
+├── {projectId}/
+│   ├── {firebaseCardId}/
+│   │   ├── latestExecutionId: string    # ID de la última ejecución
+│   │   └── history/
+│   │       ├── {executionId}/
+│   │       │   ├── status: string
+│   │       │   ├── requestedAt: string
+│   │       │   └── requestedBy: string
+```
+
+### Ejemplo:
+
+```json
+{
+  "aiExecutionsByCard": {
+    "PlanningGame": {
+      "-NxyzAbcDef": {
+        "latestExecutionId": "exec_a1b2c3d4e5f6",
+        "history": {
+          "exec_a1b2c3d4e5f6": {
+            "status": "running",
+            "requestedAt": "2026-02-14T10:30:00Z",
+            "requestedBy": "dev_010"
+          }
+        }
+      }
+    }
+  }
+}
 ```
 
 > Para más información sobre el sistema de configuración global y ADRs, ver [GLOBAL_CONFIG.md](./GLOBAL_CONFIG.md)
