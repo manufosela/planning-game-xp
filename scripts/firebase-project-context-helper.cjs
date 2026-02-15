@@ -24,8 +24,11 @@ function isActiveFirebaseProject(rootDir, projectId, deps = {}) {
   const run = deps.execSync || execSync;
   const command = appendFirebaseAccountFlag('firebase use', deps.accountEmail);
   try {
-    const output = String(run(command, { encoding: 'utf8', stdio: 'pipe', cwd: rootDir }) || '');
-    return output.includes(`Active Project: ${projectId}`) || output.includes(`(${projectId})`);
+    const outputRaw = String(run(command, { encoding: 'utf8', stdio: 'pipe', cwd: rootDir }) || '');
+    const output = outputRaw.replace(/\u001b\[[0-9;]*m/g, '');
+    return output.includes(`Active Project: ${projectId}`)
+      || output.includes(`Now using project ${projectId}`)
+      || output.includes(`(${projectId})`);
   } catch {
     return false;
   }

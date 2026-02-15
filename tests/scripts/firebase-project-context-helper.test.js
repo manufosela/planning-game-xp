@@ -31,4 +31,9 @@ describe('firebase-project-context-helper', () => {
     const execSync = vi.fn(() => 'Active Project: my-project (my-project)');
     expect(isActiveFirebaseProject('/tmp', 'my-project', { execSync })).toBe(true);
   });
+
+  it('should detect active project from modern firebase use output', () => {
+    const execSync = vi.fn(() => 'Now using project my-project');
+    expect(isActiveFirebaseProject('/tmp', 'my-project', { execSync })).toBe(true);
+  });
 });

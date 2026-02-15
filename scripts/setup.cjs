@@ -34,6 +34,8 @@ const { buildPreEnvironmentGuidance, shouldConfigurePreNowByDefault } = require(
 const { parseFirebaseAccounts, appendFirebaseAccountFlag } = require('./firebase-account-helper.cjs');
 const { buildDeployCommands } = require('./deploy-command-helper.cjs');
 const { setDefaultFirebaseProject, isActiveFirebaseProject } = require('./firebase-project-context-helper.cjs');
+const { buildGcloudAdcPrintTokenCommand, buildGcloudAdcLoginCommand } = require('./gcloud-adc-helper.cjs');
+const { formatMcpInstanceLabel, buildMcpActionOptions } = require('./mcp-setup-helper.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -821,12 +823,21 @@ class SetupWizard {
     }
 
     try {
+      this.print('  Para asignar App Admin se usa Firebase Admin SDK con credenciales ADC de gcloud.');
+      this.print('  Esto NO autentica como Super Admin de la app; solo usa una cuenta con permisos de admin en Firebase.\n');
+
+      const defaultGcloudAccount = this.config.firebaseCliAccount || '';
+      const gcloudAccount = await this.question(
+        '  Cuenta gcloud para esta operación (email instalador Firebase, vacío=cuenta activa)',
+        defaultGcloudAccount
+      );
+
       // Check if gcloud is authenticated
       try {
-        execSync('gcloud auth application-default print-access-token', { stdio: 'pipe' });
+        execSync(buildGcloudAdcPrintTokenCommand(gcloudAccount), { stdio: 'pipe' });
       } catch {
         this.print('\n  Necesitas autenticarte con gcloud...');
-        execSync('gcloud auth application-default login', { stdio: 'inherit' });
+        execSync(buildGcloudAdcLoginCommand(gcloudAccount), { stdio: 'inherit' });
       }
 
       execSync(`node scripts/setup-app-admin.cjs ${superAdminEmail}`, {
@@ -844,26 +855,31 @@ class SetupWizard {
   async setupMCP(mode = 'new', existingInstance = null) {
     const manager = new McpInstanceManager();
 
-    // 1. Legacy migration (automatic, only on first detection)
-    try {
-      const legacy = manager.detectLegacyInstallation();
-      if (legacy.found) {
-        this.print('  Detectada instalación MCP legacy. Migrando a multi-instancia...');
-        const migrated = manager.migrateLegacy();
-        if (migrated) {
-          this.print(`  ✅ Migrada a instancia "pro" (planning-game-pro)`);
-          if (mode === 'new') {
-            // If we just migrated, the user might not need another instance
-            if (!await this.confirm('\n¿Deseas crear una instancia MCP adicional?', false)) {
-              this.mcpInstalled = true;
-              this.mcpInstanceName = 'pro';
-              return;
+    // 1. Legacy migration (explicit opt-in only)
+    if (mode === 'new' && !existingInstance) {
+      try {
+        const legacy = manager.detectLegacyInstallation();
+        if (legacy.found) {
+          this.print('  Detectada instalación MCP legacy: "planning-game".');
+          this.print('  No se modificará nada automáticamente.\n');
+
+          if (await this.confirm('  ¿Quieres migrar ahora esa instalación legacy a "planning-game-pro"?', false)) {
+            const migrated = manager.migrateLegacy();
+            if (migrated) {
+              this.print('  ✅ Migrada a instancia "pro" (planning-game-pro)');
+              if (!await this.confirm('\n¿Deseas crear una instancia MCP adicional?', false)) {
+                this.mcpInstalled = true;
+                this.mcpInstanceName = 'pro';
+                return;
+              }
             }
+          } else {
+            this.print('  ⏭️  Se mantiene la instalación legacy sin cambios.');
           }
         }
+      } catch {
+        // Legacy detection failed, continue normally
       }
-    } catch {
-      // Legacy detection failed, continue normally
     }
 
     // 2. Mode: replace → delete existing instance first
@@ -890,6 +906,41 @@ class SetupWizard {
       if (!await this.confirm('¿Deseas instalar el MCP Server?', false)) {
         this.print('  ⏭️  Puedes instalarlo después con: npm run setup (opción 3)');
         return;
+      }
+    }
+
+    if (mode === 'new' && !existingInstance) {
+      const existingInstances = manager.listInstances().filter((instance) => !instance?.stale);
+      const options = buildMcpActionOptions(existingInstances);
+
+      if (existingInstances.length > 0) {
+        this.print('\n  Instancias MCP existentes:');
+        existingInstances.forEach((instance, idx) => this.print(`  ${idx + 1}. ${formatMcpInstanceLabel(instance)}`));
+        this.print('');
+      }
+
+      if (options.length > 1) {
+        this.print('  ¿Qué quieres hacer con MCP?');
+        options.forEach((opt) => this.print(`  ${opt.key}. ${opt.label}`));
+
+        const actionChoice = await this.question('  Selecciona opción MCP', '1');
+        const action = options.find((opt) => opt.key === actionChoice)?.action || 'use-existing';
+
+        if (action === 'use-existing') {
+          const selected = await this.selectExistingMcpInstance(existingInstances);
+          if (!selected) {
+            this.print('  ⏭️  No se seleccionó instancia válida. Se creará una nueva instancia MCP.');
+          } else {
+            this.mcpInstalled = true;
+            this.mcpInstanceName = selected.name;
+            this.print(`  ✅ Se usará la instancia MCP existente: planning-game-${selected.name}`);
+
+            if (await this.confirm('  ¿Quieres actualizar ahora su configuración?', false)) {
+              await this.updateExistingInstance(manager, selected);
+            }
+            return;
+          }
+        }
       }
     }
 
@@ -959,6 +1010,20 @@ class SetupWizard {
     }
 
     return name;
+  }
+
+  async selectExistingMcpInstance(instances) {
+    if (!Array.isArray(instances) || instances.length === 0) return null;
+
+    this.print('\n  Selecciona una instancia existente:');
+    instances.forEach((instance, idx) => {
+      this.print(`  ${idx + 1}. ${formatMcpInstanceLabel(instance)}`);
+    });
+
+    const selection = await this.question(`  Instancia [1-${instances.length}]`, '1');
+    const index = Number.parseInt(selection, 10);
+    if (!Number.isInteger(index) || index < 1 || index > instances.length) return null;
+    return instances[index - 1];
   }
 
   async ensureMcpEngine(manager) {
