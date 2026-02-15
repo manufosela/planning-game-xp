@@ -303,13 +303,12 @@ class SetupWizard {
     this.print('Instancias existentes:\n');
     instances.forEach((inst, idx) => this.print(`  ${idx + 1}. ${inst.name} (${inst.directory})`));
     this.print('\nOpciones:');
-    this.print('  1. Usar una instancia existente (recomendado)');
+    this.print('  1. Usar una instancia existente (recomendado, se actualizará automáticamente)');
     this.print('  2. Crear nueva instancia');
-    this.print('  3. Actualizar una instancia y usarla');
-    this.print('  4. Continuar en repo plantilla (avanzado, no recomendado)\n');
+    this.print('  3. Continuar en repo plantilla (avanzado, no recomendado)\n');
 
-    const choice = await this.question('Selecciona [1-4]', '1');
-    if (choice === '4') {
+    const choice = await this.question('Selecciona [1-3]', '1');
+    if (choice === '3') {
       this.print('⚠️  Continuando en repo plantilla por solicitud explícita.\n');
       return true;
     }
@@ -327,13 +326,12 @@ class SetupWizard {
       return false;
     }
 
-    if (choice === '3') {
-      try {
-        appInstanceManager.updateInstance(selected.name);
-        this.print(`✅ Instancia "${selected.name}" actualizada.`);
-      } catch (error) {
-        this.print(`⚠️  No se pudo actualizar la instancia: ${error.message}`);
-      }
+    try {
+      appInstanceManager.updateInstance(selected.name);
+      this.print(`✅ Instancia "${selected.name}" actualizada.`);
+    } catch (error) {
+      this.print(`⚠️  No se pudo actualizar la instancia: ${error.message}`);
+      this.print('   Se lanzará setup con la versión actual de la instancia.');
     }
 
     await this.launchSetupInInstance(selected.directory);
@@ -924,6 +922,9 @@ class SetupWizard {
       const rulesPrep = ensureRequiredFirebaseRuleFiles(ROOT_DIR);
       if (rulesPrep.created.length > 0) {
         this.print(`  ✅ Archivos de reglas generados automáticamente: ${rulesPrep.created.join(', ')}`);
+      }
+      if (rulesPrep.repaired.length > 0) {
+        this.print(`  ✅ Archivos de reglas reparados automáticamente: ${rulesPrep.repaired.join(', ')}`);
       }
       execSync(deployCommands.rules, { stdio: 'inherit', cwd: ROOT_DIR });
 
