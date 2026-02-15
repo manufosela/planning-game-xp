@@ -31,6 +31,9 @@ const { collectMultilineInput } = require('./readline-multiline.cjs');
 const { checkFirestoreEnabled } = require('./firestore-status-checker.cjs');
 const { checkFunctionsEnabled } = require('./functions-status-checker.cjs');
 const { buildPreEnvironmentGuidance, shouldConfigurePreNowByDefault } = require('./pre-environment-guidance.cjs');
+const { parseFirebaseAccounts, appendFirebaseAccountFlag } = require('./firebase-account-helper.cjs');
+const { buildDeployCommands } = require('./deploy-command-helper.cjs');
+const { setDefaultFirebaseProject, isActiveFirebaseProject } = require('./firebase-project-context-helper.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -75,7 +78,8 @@ class SetupWizard {
       client: {},
       functions: {},
       orgName: '',
-      preClient: null
+      preClient: null,
+      firebaseCliAccount: ''
     };
     this.mcpInstalled = false;
     this.mcpInstanceName = null;
@@ -423,7 +427,7 @@ class SetupWizard {
 
     // Check if already logged in
     try {
-      execSync('firebase projects:list', { stdio: 'pipe' });
+      execSync(this.withFirebaseAccount('firebase projects:list'), { stdio: 'pipe' });
       this.print('✅ Ya estás autenticado en Firebase\n');
     } catch {
       this.print('Necesitas autenticarte en Firebase...\n');
@@ -431,6 +435,8 @@ class SetupWizard {
         execSync('firebase login', { stdio: 'inherit' });
       }
     }
+
+    await this.selectFirebaseCliAccount();
 
     this.print('¿Cómo quieres cargar la configuración de Firebase?');
     this.print('  1. Introducir valores uno a uno');
@@ -456,6 +462,8 @@ class SetupWizard {
     }
 
     await this.ensureRequiredFirebaseClientFields();
+    setDefaultFirebaseProject(ROOT_DIR, this.config.client.PUBLIC_FIREBASE_PROJECT_ID);
+    this.print(`  ✅ .firebaserc actualizado (default=${this.config.client.PUBLIC_FIREBASE_PROJECT_ID})`);
     await this.verifyRequiredFirebaseServices();
 
     const superAdminEmail = await this.question(
@@ -504,7 +512,9 @@ class SetupWizard {
 
     this.print('\nVerificando servicios requeridos en Firebase...');
 
-    const firestore = checkFirestoreEnabled(projectId);
+    const firestore = checkFirestoreEnabled(projectId, {
+      accountEmail: this.config.firebaseCliAccount,
+    });
     if (firestore.enabled === true) {
       this.print('  ✅ Firestore habilitado');
     } else if (firestore.enabled === false) {
@@ -517,7 +527,9 @@ class SetupWizard {
       }
     }
 
-    const functions = checkFunctionsEnabled(projectId);
+    const functions = checkFunctionsEnabled(projectId, {
+      accountEmail: this.config.firebaseCliAccount,
+    });
     if (functions.enabled === true) {
       this.print('  ✅ Cloud Functions habilitadas');
     } else if (functions.enabled === false) {
@@ -725,27 +737,76 @@ class SetupWizard {
     }
 
     const projectId = this.config.client['PUBLIC_FIREBASE_PROJECT_ID'];
+    const deployCommands = buildDeployCommands(projectId, this.config.firebaseCliAccount);
 
     try {
       this.print('\n  Seleccionando proyecto Firebase...');
-      execSync(`firebase use ${projectId}`, { stdio: 'inherit', cwd: ROOT_DIR });
+      execSync(this.withFirebaseAccount(`firebase use ${projectId}`), { stdio: 'inherit', cwd: ROOT_DIR });
+      if (!isActiveFirebaseProject(ROOT_DIR, projectId, { accountEmail: this.config.firebaseCliAccount })) {
+        throw new Error(`Proyecto activo distinto al esperado (${projectId}). Despliegue cancelado por seguridad.`);
+      }
 
       this.print('\n  Desplegando reglas de base de datos...');
-      execSync('npm run deploy:rules', { stdio: 'inherit', cwd: ROOT_DIR });
+      execSync(deployCommands.rules, { stdio: 'inherit', cwd: ROOT_DIR });
 
       this.print('\n  Desplegando Cloud Functions...');
-      execSync('npm run deploy:functions', { stdio: 'inherit', cwd: ROOT_DIR });
+      execSync(deployCommands.functions, { stdio: 'inherit', cwd: ROOT_DIR });
 
       this.print('\n  Construyendo aplicación...');
       execSync('npm run build', { stdio: 'inherit', cwd: ROOT_DIR });
 
       this.print('\n  Desplegando hosting...');
-      execSync('npm run deploy:hosting', { stdio: 'inherit', cwd: ROOT_DIR });
+      execSync(deployCommands.hosting, { stdio: 'inherit', cwd: ROOT_DIR });
 
       this.print('\n  ✅ Despliegue completado!');
     } catch (error) {
       this.print(`\n  ❌ Error en el despliegue: ${error.message}`);
       this.print('  Puedes intentar desplegar manualmente después.');
+    }
+  }
+
+  withFirebaseAccount(command) {
+    return appendFirebaseAccountFlag(command, this.config.firebaseCliAccount);
+  }
+
+  async selectFirebaseCliAccount() {
+    let accounts = [];
+    try {
+      const output = execSync('firebase login:list', { stdio: 'pipe', encoding: 'utf8' });
+      accounts = parseFirebaseAccounts(output);
+    } catch {
+      // ignore
+    }
+
+    if (accounts.length === 0) {
+      const manual = await this.question('Cuenta Firebase CLI para esta instancia (email, opcional)');
+      this.config.firebaseCliAccount = manual || '';
+      if (this.config.firebaseCliAccount) {
+        this.print(`  ✅ Cuenta Firebase seleccionada: ${this.config.firebaseCliAccount}`);
+      }
+      return;
+    }
+
+    this.print('Cuentas detectadas en Firebase CLI:');
+    accounts.forEach((account, idx) => this.print(`  ${idx + 1}. ${account}`));
+    this.print(`  ${accounts.length + 1}. Usar cuenta activa por defecto`);
+    this.print(`  ${accounts.length + 2}. Escribir otro email`);
+
+    const choice = await this.question(`Selecciona [1-${accounts.length + 2}]`, String(accounts.length + 1));
+    const parsed = Number.parseInt(choice, 10);
+
+    if (parsed >= 1 && parsed <= accounts.length) {
+      this.config.firebaseCliAccount = accounts[parsed - 1];
+    } else if (parsed === accounts.length + 2) {
+      this.config.firebaseCliAccount = await this.question('Email de cuenta Firebase');
+    } else {
+      this.config.firebaseCliAccount = '';
+    }
+
+    if (this.config.firebaseCliAccount) {
+      this.print(`  ✅ Cuenta Firebase seleccionada: ${this.config.firebaseCliAccount}`);
+    } else {
+      this.print('  ℹ️  Se usará la cuenta activa por defecto de Firebase CLI');
     }
   }
 

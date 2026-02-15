@@ -14,6 +14,12 @@ describe('checkFunctionsEnabled', () => {
     expect(result.source).toBe('json');
   });
 
+  it('should include --account flag when account email is provided', () => {
+    const execSync = vi.fn(() => JSON.stringify({ result: [] }));
+    checkFunctionsEnabled('my-project', { execSync, accountEmail: 'pro@example.com' });
+    expect(execSync.mock.calls[0][0]).toContain('--account pro@example.com');
+  });
+
   it('should return disabled when api-not-enabled error is returned', () => {
     const execSync = vi.fn(() => {
       const err = new Error('Cloud Functions API has not been used in project');

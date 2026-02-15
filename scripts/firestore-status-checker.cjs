@@ -1,9 +1,16 @@
 const { execSync } = require('child_process');
+const { appendFirebaseAccountFlag } = require('./firebase-account-helper.cjs');
 
 function checkFirestoreEnabled(projectId, deps = {}) {
   const run = deps.execSync || execSync;
-  const commandJson = `firebase firestore:databases:list --project ${projectId} --json`;
-  const commandText = `firebase firestore:databases:list --project ${projectId}`;
+  const commandJson = appendFirebaseAccountFlag(
+    `firebase firestore:databases:list --project ${projectId} --json`,
+    deps.accountEmail
+  );
+  const commandText = appendFirebaseAccountFlag(
+    `firebase firestore:databases:list --project ${projectId}`,
+    deps.accountEmail
+  );
 
   try {
     const output = String(run(commandJson, { stdio: 'pipe', encoding: 'utf8' }) || '').trim();

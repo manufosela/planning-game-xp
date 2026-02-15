@@ -18,6 +18,12 @@ describe('checkFirestoreEnabled', () => {
     expect(result.source).toBe('json');
   });
 
+  it('should include --account flag when account email is provided', () => {
+    const execSync = vi.fn(() => JSON.stringify({ result: [] }));
+    checkFirestoreEnabled('my-project', { execSync, accountEmail: 'pro@example.com' });
+    expect(execSync.mock.calls[0][0]).toContain('--account pro@example.com');
+  });
+
   it('should return disabled when firestore list json has no databases', () => {
     const execSync = vi.fn(() => JSON.stringify({ result: [] }));
 

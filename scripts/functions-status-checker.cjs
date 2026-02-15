@@ -1,9 +1,16 @@
 const { execSync } = require('child_process');
+const { appendFirebaseAccountFlag } = require('./firebase-account-helper.cjs');
 
 function checkFunctionsEnabled(projectId, deps = {}) {
   const run = deps.execSync || execSync;
-  const commandJson = `firebase functions:list --project ${projectId} --json`;
-  const commandText = `firebase functions:list --project ${projectId}`;
+  const commandJson = appendFirebaseAccountFlag(
+    `firebase functions:list --project ${projectId} --json`,
+    deps.accountEmail
+  );
+  const commandText = appendFirebaseAccountFlag(
+    `firebase functions:list --project ${projectId}`,
+    deps.accountEmail
+  );
 
   try {
     run(commandJson, { stdio: 'pipe', encoding: 'utf8' });
