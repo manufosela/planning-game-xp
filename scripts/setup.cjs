@@ -45,6 +45,7 @@ const {
   hasDatabaseTargetConfigured,
 } = require('./firebase-rtdb-target-helper.cjs');
 const { shouldClearInstallState } = require('./setup-flow-helper.cjs');
+const { ensureRequiredFirebaseRuleFiles } = require('./firebase-rules-files-helper.cjs');
 const {
   buildGcloudAdcPrintTokenCommand,
   buildGcloudAdcLoginCommand,
@@ -920,6 +921,10 @@ class SetupWizard {
       }
 
       this.print('\n  Desplegando reglas de base de datos...');
+      const rulesPrep = ensureRequiredFirebaseRuleFiles(ROOT_DIR);
+      if (rulesPrep.created.length > 0) {
+        this.print(`  ✅ Archivos de reglas generados automáticamente: ${rulesPrep.created.join(', ')}`);
+      }
       execSync(deployCommands.rules, { stdio: 'inherit', cwd: ROOT_DIR });
 
       this.print('\n  Desplegando Cloud Functions...');
