@@ -16,7 +16,6 @@ const {getMessaging} = require("firebase-admin/messaging");
 const logger = require("firebase-functions/logger");
 const {defineSecret} = require("firebase-functions/params");
 const axios = require("axios");
-const {ConfidentialClientApplication} = require("@azure/msal-node");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -25,6 +24,7 @@ const { handleBugFixed } = require("./handlers/on-bug-fixed");
 const { handleTaskStatusValidation } = require("./handlers/on-task-status-validation");
 const { handleSyncCardViews } = require("./handlers/sync-card-views");
 const { handlePortalBugResolved } = require("./handlers/on-portal-bug-resolved");
+const { getEmailProvider } = require('./email-providers/provider-factory');
 
 const normalizeEmail = (email) => (email || '').toString().trim().toLowerCase();
 
@@ -87,12 +87,6 @@ const ALLOWED_SIGNUP_EMAIL_DOMAINS = (process.env.PUBLIC_ALLOWED_EMAIL_DOMAINS |
   .map(d => d.trim())
   .filter(Boolean);
 
-// Define secrets for Azure AD configuration
-const msClientId = defineSecret("MS_CLIENT_ID");
-const msClientSecret = defineSecret("MS_CLIENT_SECRET");
-const msTenantId = defineSecret("MS_TENANT_ID");
-const msFromEmail = defineSecret("MS_FROM_EMAIL");
-const msAlertEmail = defineSecret("MS_ALERT_EMAIL"); // Email address for system alerts (e.g. localhost URL detection)
 const IA_GLOBAL_ENABLE = defineSecret("IA_GLOBAL_ENABLE"); // optional: 'true'/'false'
 const IA_API_KEY = defineSecret("IA_API_KEY");
 const CREATE_CARD_API_KEY = defineSecret("CREATE_CARD_API_KEY"); // API Key for creating cards programmatically
@@ -162,115 +156,11 @@ function buildUserStoryText(task) {
 }
 
 /**
- * MS Graph API configuration using Firebase Functions v2 secrets
- * Set secrets using: firebase functions:secrets:set MS_CLIENT_ID
+ * Send email through configured provider
  */
-function getMsalConfig() {
-  return {
-    auth: {
-      clientId: msClientId.value(),
-      clientSecret: msClientSecret.value(),
-      authority: `https://login.microsoftonline.com/${msTenantId.value()}`
-    }
-  };
-}
-
-// Initialize MSAL client - will be created in functions that need it
-
-/**
- * Get MS Graph API access token
- */
-async function getGraphAccessToken() {
-  try {
-    const msalConfig = getMsalConfig();
-    const cca = new ConfidentialClientApplication(msalConfig);
-    
-    const clientCredentialRequest = {
-      scopes: ['https://graph.microsoft.com/.default']
-    };
-    
-    const response = await cca.acquireTokenByClientCredential(clientCredentialRequest);
-    return response.accessToken;
-  } catch (error) {
-    logger.error('Error getting MS Graph access token:', error);
-    throw error;
-  }
-}
-
-/**
- * Send email using MS Graph API
- */
-async function sendEmail(accessToken, toEmails, subject, htmlContent) {
-  // Block email sending on emulator to prevent localhost URLs and test noise
-  if (process.env.FUNCTIONS_EMULATOR === 'true') {
-    logger.info(`[EMULATOR] Email blocked — to: ${toEmails.join(', ')}, subject: "${subject}"`);
-    return;
-  }
-
-  // Guard: block emails containing localhost URLs in production and alert IT
-  if (htmlContent.includes('localhost')) {
-    const alertSubject = '[ALERTA] Cloud Function intentó enviar email con localhost';
-    const alertBody = `<p>Una Cloud Function intentó enviar un email con URLs localhost en producción.</p>
-      <p><strong>Destinatarios originales:</strong> ${toEmails.join(', ')}</p>
-      <p><strong>Asunto original:</strong> ${subject}</p>
-      <p><strong>PUBLIC_APP_URL actual:</strong> ${process.env.PUBLIC_APP_URL || '(no definida)'}</p>
-      <p>El email original fue bloqueado. Revisar la configuración de <code>functions/.env</code>.</p>`;
-
-    logger.error(`Email blocked: contains localhost URLs. Subject: "${subject}", to: ${toEmails.join(', ')}`);
-
-    try {
-      const alertData = {
-        message: {
-          subject: alertSubject,
-          body: { contentType: 'HTML', content: alertBody },
-          toRecipients: [{ emailAddress: { address: msAlertEmail.value() || msFromEmail.value() } }]
-        },
-        saveToSentItems: true
-      };
-      await axios.post(
-        `https://graph.microsoft.com/v1.0/users/${msFromEmail.value()}/sendMail`,
-        alertData,
-        { headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' } }
-      );
-      logger.info(`Alert email sent to ${msAlertEmail.value() || msFromEmail.value()}`);
-    } catch (alertError) {
-      logger.error('Failed to send alert email:', alertError.message);
-    }
-
-    throw new Error('Email blocked: contains localhost URLs. Alert sent to IT.');
-  }
-
-  try {
-    const emailData = {
-      message: {
-        subject: subject,
-        body: {
-          contentType: 'HTML',
-          content: htmlContent
-        },
-        toRecipients: toEmails.map(email => ({
-          emailAddress: { address: email }
-        }))
-      },
-      saveToSentItems: true
-    };
-
-    await axios.post(
-      `https://graph.microsoft.com/v1.0/users/${msFromEmail.value()}/sendMail`,
-      emailData,
-      {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    logger.info(`Email sent successfully to: ${toEmails.join(', ')}`);
-  } catch (error) {
-    logger.error('Error sending email:', error.response?.data || error.message);
-    throw error;
-  }
+async function sendEmail(toEmails, subject, htmlContent) {
+  const provider = getEmailProvider();
+  return provider.sendEmail(toEmails, subject, htmlContent);
 }
 
 /**
@@ -549,7 +439,7 @@ function analyzeAllPendingTasks(tasks) {
 /**
  * Notify admin about missing email configuration for a project
  */
-async function notifyAdminMissingConfiguration(projectId, accessToken) {
+async function notifyAdminMissingConfiguration(projectId) {
   const adminEmailContent = generateEmailTemplate(`⚠️ Configuración Faltante`, {
     todoTasks: [{
       title: `El proyecto "${projectId}" no tiene emails resolubles en /projects + /data`,
@@ -564,7 +454,6 @@ async function notifyAdminMissingConfiguration(projectId, accessToken) {
   });
 
   await sendEmail(
-    accessToken,
     [process.env.PUBLIC_SUPER_ADMIN_EMAIL || 'admin@example.com'],
     `⚠️ Configuración de emails faltante para proyecto ${projectId}`,
     adminEmailContent
@@ -585,12 +474,11 @@ function hasReportableIssues(taskSummary) {
 /**
  * Send weekly summary email to team members
  */
-async function sendTeamSummaryEmail(accessToken, emails, projectName, taskSummary, projectId) {
+async function sendTeamSummaryEmail(emails, projectName, taskSummary, projectId) {
   if (emails.length === 0) return;
 
   const emailContent = generateEmailTemplate(projectName, taskSummary);
   await sendEmail(
-    accessToken,
     emails,
     `📊 Resumen Semanal de Tareas Pendientes - ${projectName}`,
     emailContent
@@ -601,7 +489,7 @@ async function sendTeamSummaryEmail(accessToken, emails, projectName, taskSummar
 /**
  * Send validation tasks email to stakeholders
  */
-async function sendStakeholderValidationEmail(accessToken, stakeholderEmails, projectName, taskSummary, projectId) {
+async function sendStakeholderValidationEmail(stakeholderEmails, projectName, taskSummary, projectId) {
   if (taskSummary.toValidateTasks.length === 0 || stakeholderEmails.length === 0) return;
 
   const stakeholderEmailContent = generateEmailTemplate(
@@ -617,7 +505,6 @@ async function sendStakeholderValidationEmail(accessToken, stakeholderEmails, pr
   );
 
   await sendEmail(
-    accessToken,
     stakeholderEmails,
     `✅ Tareas Esperando Validación - ${projectName}`,
     stakeholderEmailContent
@@ -628,7 +515,7 @@ async function sendStakeholderValidationEmail(accessToken, stakeholderEmails, pr
 /**
  * Process a single project for weekly summary
  */
-async function processProjectForWeeklySummary(projectId, project, developersDirectory, stakeholdersDirectory, accessToken, db) {
+async function processProjectForWeeklySummary(projectId, project, developersDirectory, stakeholdersDirectory, db) {
   logger.info(`Processing project: ${projectId}`);
 
   const developerEmails = extractEmails(project?.developers, developersDirectory);
@@ -636,7 +523,7 @@ async function processProjectForWeeklySummary(projectId, project, developersDire
 
   if (developerEmails.length === 0 && stakeholderEmails.length === 0) {
     logger.warn(`No team emails found for project ${projectId}, notifying admin`);
-    await notifyAdminMissingConfiguration(projectId, accessToken);
+    await notifyAdminMissingConfiguration(projectId);
     return;
   }
 
@@ -655,8 +542,8 @@ async function processProjectForWeeklySummary(projectId, project, developersDire
   }
 
   const projectName = project.name || projectId;
-  await sendTeamSummaryEmail(accessToken, [...developerEmails], projectName, taskSummary, projectId);
-  await sendStakeholderValidationEmail(accessToken, stakeholderEmails, projectName, taskSummary, projectId);
+  await sendTeamSummaryEmail([...developerEmails], projectName, taskSummary, projectId);
+  await sendStakeholderValidationEmail(stakeholderEmails, projectName, taskSummary, projectId);
 }
 
 /**
@@ -678,11 +565,9 @@ async function sendWeeklyTaskSummaryLegacy() {
     const developersDirectory = developersSnapshot.val() || {};
     const stakeholdersDirectory = stakeholdersSnapshot.val() || {};
 
-    const accessToken = await getGraphAccessToken();
-
     for (const [projectId, project] of Object.entries(projects)) {
       try {
-        await processProjectForWeeklySummary(projectId, project, developersDirectory, stakeholdersDirectory, accessToken, db);
+        await processProjectForWeeklySummary(projectId, project, developersDirectory, stakeholdersDirectory, db);
       } catch (error) {
         logger.error(`Error processing project ${projectId}:`, error);
       }
@@ -1098,7 +983,6 @@ async function sendWeeklyTaskSummaryPerUser(filterEmail = null) {
       return { success: true, message: 'No tasks to report', emailsSent: 0 };
     }
 
-    const accessToken = await getGraphAccessToken();
     let emailsSent = 0;
     let emailsFailed = 0;
 
@@ -1134,7 +1018,7 @@ async function sendWeeklyTaskSummaryPerUser(filterEmail = null) {
           ? `📊 Resumen Semanal - ${projectsArray[0].projectName}`
           : `📊 Resumen Semanal - ${projectCount} proyectos`;
 
-        await sendEmail(accessToken, [email], subject, emailContent);
+        await sendEmail([email], subject, emailContent);
         emailsSent++;
         logger.info(`Consolidated email sent to ${email} for ${projectCount} projects`);
 
@@ -1173,8 +1057,7 @@ async function sendWeeklyTaskSummary(filterEmail = null) {
 exports.weeklyTaskSummary = onSchedule({
   schedule: "0 9 * * 1", // Every Monday at 9:00 AM
   timeZone: "Europe/Madrid",
-  region: "europe-west1", // Belgium (closest European region)
-  secrets: [msClientId, msClientSecret, msTenantId, msFromEmail, msAlertEmail]
+  region: "europe-west1" // Belgium (closest European region)
 }, async (event) => {
   return await sendWeeklyTaskSummary();
 });
@@ -1184,8 +1067,7 @@ exports.weeklyTaskSummary = onSchedule({
  * Supports optional ?email=user@example.com parameter to filter and only send to that email
  */
 exports.testWeeklyTaskSummary = onRequest({
-  region: "europe-west1", // Belgium (closest European region)
-  secrets: [msClientId, msClientSecret, msTenantId, msFromEmail, msAlertEmail]
+  region: "europe-west1" // Belgium (closest European region)
 }, async (req, res) => {
   try {
     // Get optional email filter from query string
@@ -3120,8 +3002,7 @@ exports.getProjectEpics = onRequest({
  */
 exports.onCardToValidate = onValueUpdated({
   ref: "/cards/{projectId}/{section}/{cardId}",
-  region: "europe-west1",
-  secrets: [msClientId, msClientSecret, msTenantId, msFromEmail, msAlertEmail]
+  region: "europe-west1"
 }, async (event) => {
   const { projectId, section, cardId } = event.params;
   const beforeData = event.data.before.val();
@@ -3135,7 +3016,6 @@ exports.onCardToValidate = onValueUpdated({
     afterData,
     {
       db,
-      getAccessToken: getGraphAccessToken,
       sendEmail,
       logger
     }
@@ -3150,8 +3030,7 @@ exports.onCardToValidate = onValueUpdated({
  */
 exports.onBugFixed = onValueUpdated({
   ref: "/cards/{projectId}/{section}/{cardId}",
-  region: "europe-west1",
-  secrets: [msClientId, msClientSecret, msTenantId, msFromEmail, msAlertEmail]
+  region: "europe-west1"
 }, async (event) => {
   const { projectId, section, cardId } = event.params;
   const beforeData = event.data.before.val();
@@ -3165,7 +3044,6 @@ exports.onBugFixed = onValueUpdated({
     afterData,
     {
       db,
-      getAccessToken: getGraphAccessToken,
       sendEmail,
       logger
     }

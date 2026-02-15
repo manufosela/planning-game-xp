@@ -9,7 +9,7 @@ Esta guía te llevará paso a paso a través de la instalación completa de Plan
 3. [Instalación Rápida (Recomendada)](#instalación-rápida)
 4. [Instalación Manual](#instalación-manual)
 5. [Configuración de Firebase](#configuración-de-firebase)
-6. [Configuración de Microsoft Graph (Emails)](#configuración-de-microsoft-graph)
+6. [Configuración de Email](#configuración-de-email)
 7. [Primer Despliegue](#primer-despliegue)
 8. [MCP Server (Claude Code)](#mcp-server)
 9. [Karajan-Code + Bridge Server (IA)](#karajan-code--bridge-server)
@@ -133,7 +133,8 @@ touch .env.dev .env.pre .env.prod
 touch functions/.env
 ```
 
-Consulta [ENV_VARIABLES.md](./ENV_VARIABLES.md) para la lista completa de variables.
+Usa como referencia canónica los ejemplos en `config-examples/`.
+Consulta también [ENV_VARIABLES.md](./ENV_VARIABLES.md) para la lista completa de variables.
 
 ### 3. Configurar Firebase
 
@@ -246,9 +247,47 @@ El asistente `npm run setup` te preguntará qué proveedor OAuth usar. Los prove
 
 ---
 
-## Configuración de Microsoft Graph
+## Configuración de Email
 
-Para habilitar notificaciones por email, necesitas configurar Microsoft Graph API.
+Planning Game XP soporta:
+
+- Microsoft Graph (`msgraph`)
+- SMTP genérico (`smtp`)
+- SendGrid (`sendgrid`)
+- Sin email (`none`, solo push)
+
+La plantilla canónica está en `config-examples/functions/.env.example`.
+
+Documentación detallada: `docs/EMAIL_PROVIDERS.md`.
+
+### Microsoft Graph
+
+Para usar Microsoft Graph, necesitas configurar Azure AD App Registration.
+
+---
+
+## Entornos Recomendados (dev / pre / prod)
+
+Recomendación práctica para evitar tocar datos reales:
+
+- `npm run dev`: usa emuladores + seed mínimo automático.
+- `npm run pre`: usa cloud (sin emuladores) para validar con datos reales.
+- `npm run build` / deploy: producción.
+
+Para `pre`, usa un proyecto clonado/snapshot (no el de producción) siempre que sea posible.
+
+`npm run pre` ahora ejecuta un guard obligatorio (`pre:guard`) que bloquea la ejecución si `.env.pre` coincide con `.env.prod` en `projectId`, `databaseURL` o `authDomain`.
+Si necesitas forzar temporalmente el uso de prod, puedes usar:
+
+```bash
+ALLOW_PRE_USING_PROD=true npm run pre
+```
+
+Plantillas rápidas en raíz:
+
+- `.env.dev.example`
+- `.env.pre.example`
+- `.env.prod.example`
 
 ### Crear App Registration en Azure
 

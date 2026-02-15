@@ -29,9 +29,19 @@ admin.initializeApp({
 const db = admin.database();
 const dbRef = db.ref('/'); // Referencia a la raíz de la base de datos
 
+function getArgValue(name) {
+  const idx = process.argv.indexOf(name);
+  if (idx === -1) return null;
+  return process.argv[idx + 1] || null;
+}
+
 // --- Carga y subida de datos ---
-// Ruta al archivo JSON - usar el archivo más actualizado
-const jsonPath = path.join(__dirname, '../../emulator-data/planning-gamexp-default-rtdb.json');
+// Ruta al archivo JSON (por defecto, seed mínimo para desarrollo)
+const seedArg = getArgValue('--seed');
+const defaultSeed = path.join(__dirname, '../../emulator-data/minimal-rtdb-seed.json');
+const jsonPath = seedArg
+  ? path.resolve(process.cwd(), seedArg)
+  : defaultSeed;
 
 // Lee el archivo de forma síncrona
 try {

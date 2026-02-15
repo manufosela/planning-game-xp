@@ -111,11 +111,11 @@ function generateValidationEmailHtml(cardData, projectId, cardId, developerName)
  * @param {Object} params - { projectId, section, cardId }
  * @param {Object} beforeData - Card data before the change
  * @param {Object} afterData - Card data after the change
- * @param {Object} deps - Dependencies { db, getAccessToken, sendEmail, logger }
+ * @param {Object} deps - Dependencies { db, sendEmail, logger }
  */
 async function handleCardToValidate(params, beforeData, afterData, deps) {
   const { projectId, section, cardId } = params;
-  const { db, getAccessToken, sendEmail, logger } = deps;
+  const { db, sendEmail, logger } = deps;
 
   logger.info('onCardToValidate: Triggered', { projectId, section, cardId });
 
@@ -249,12 +249,11 @@ async function handleCardToValidate(params, beforeData, afterData, deps) {
 
   // Send email
   try {
-    const accessToken = await getAccessToken();
     const emailSubject = `[${projectId}] Tarea pendiente de validación: ${cardTitle}`;
     const emailHtml = generateValidationEmailHtml(afterData, projectId, taskCardId, developerName);
     const emails = recipientEmails.map(r => r.email);
 
-    await sendEmail(accessToken, emails, emailSubject, emailHtml);
+    await sendEmail(emails, emailSubject, emailHtml);
     logger.info('onCardToValidate: Email sent', {
       projectId,
       cardId: taskCardId,

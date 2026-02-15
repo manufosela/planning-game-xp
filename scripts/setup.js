@@ -55,7 +55,9 @@ class SetupWizard {
     });
     this.config = {
       client: {},
-      functions: {}
+      functions: {},
+      orgName: '',
+      preClient: null
     };
     this.mcpInstalled = false;
     this.mcpInstanceName = null;
@@ -157,19 +159,9 @@ class SetupWizard {
       // action === 'full' → continue with full setup
     }
 
-    this.print('Este asistente te guiará a través de la configuración completa.\n');
-    this.print('Necesitarás:');
-    this.print('  - Un proyecto de Firebase creado');
-    this.print('  - (Opcional) Credenciales de Microsoft Azure para emails');
-    this.print('  - (Opcional) API Key de OpenAI para IA\n');
+    await this.showSetupBriefing();
 
-    if (!await this.confirm('¿Deseas continuar?')) {
-      this.print('\nSetup cancelado.');
-      this.rl.close();
-      return;
-    }
-
-    const totalSteps = 8;
+    const totalSteps = 10;
 
     // Step 1: Check prerequisites
     this.printStep(1, totalSteps, 'Verificando prerequisitos...');
@@ -179,28 +171,36 @@ class SetupWizard {
     this.printStep(2, totalSteps, 'Selección de proveedor de autenticación');
     await this.configureAuth();
 
-    // Step 3: Firebase configuration
-    this.printStep(3, totalSteps, 'Configuración de Firebase');
+    // Step 3: Organization name
+    this.printStep(3, totalSteps, 'Nombre de organización');
+    await this.configureOrganizationName();
+
+    // Step 4: Firebase configuration
+    this.printStep(4, totalSteps, 'Configuración de Firebase');
     await this.configureFirebase();
 
-    // Step 4: Environment files
-    this.printStep(4, totalSteps, 'Generando archivos de entorno');
+    // Step 5: Pre environment guidance/config
+    this.printStep(5, totalSteps, 'Entorno PRE (clon/snapshot recomendado)');
+    await this.configurePreEnvironment();
+
+    // Step 6: Environment files
+    this.printStep(6, totalSteps, 'Generando archivos de entorno');
     await this.generateEnvFiles();
 
-    // Step 5: Email service (optional)
-    this.printStep(5, totalSteps, 'Configuración de servicio de emails (opcional)');
-    await this.configureMicrosoftGraph();
+    // Step 7: Email service (optional)
+    this.printStep(7, totalSteps, 'Configuración de servicio de emails (opcional)');
+    await this.configureEmailProvider();
 
-    // Step 6: Deploy
-    this.printStep(6, totalSteps, 'Despliegue inicial');
+    // Step 8: Deploy
+    this.printStep(8, totalSteps, 'Despliegue inicial');
     await this.deploy();
 
-    // Step 7: First App Admin
-    this.printStep(7, totalSteps, 'Configuración del primer App Admin');
+    // Step 9: First App Admin
+    this.printStep(9, totalSteps, 'Configuración del primer App Admin');
     await this.setupFirstAdmin();
 
-    // Step 8: Integrations (MCP, AI)
-    this.printStep(8, totalSteps, 'Integraciones (MCP, IA)');
+    // Step 10: Integrations (MCP, AI)
+    this.printStep(10, totalSteps, 'Integraciones (MCP, IA)');
     await this.selectAndSetupTier();
 
     // Done
@@ -208,6 +208,30 @@ class SetupWizard {
     this.printNextSteps();
 
     this.rl.close();
+  }
+
+  async showSetupBriefing() {
+    this.print('╔══════════════════════════════════════════════════════════════╗');
+    this.print('║              PLANNING GAME XP — SETUP WIZARD                ║');
+    this.print('╠══════════════════════════════════════════════════════════════╣');
+    this.print('║ OBLIGATORIO:                                                 ║');
+    this.print('║  ☐ Proyecto Firebase creado                                 ║');
+    this.print('║  ☐ Firebase CLI instalado                                   ║');
+    this.print('║  ☐ Auth de Firebase habilitada                              ║');
+    this.print('║                                                              ║');
+    this.print('║ DECISIONES:                                                  ║');
+    this.print('║  1. Proveedor de autenticación                              ║');
+    this.print('║  2. Nombre de organización (cabecera)                       ║');
+    this.print('║  3. Notificaciones: solo push o push + email                ║');
+    this.print('║  4. Integraciones (MCP / Karajan / Bridge)                  ║');
+    this.print('║                                                              ║');
+    this.print('║ PRE recomendado: proyecto clonado/snapshot (no PROD).       ║');
+    this.print('║ npm run pre bloquea si detecta que PRE=PROD.                ║');
+    this.print('║                                                              ║');
+    this.print('║ Consejo: revisa config-examples/ antes de empezar.          ║');
+    this.print('╚══════════════════════════════════════════════════════════════╝\n');
+
+    await this.question('Pulsa Enter para continuar o Ctrl+C para preparar requisitos primero');
   }
 
   // ─── Existing state detection ──────────────────────────────────────
@@ -405,6 +429,12 @@ class SetupWizard {
     this.print('');
   }
 
+  async configureOrganizationName() {
+    this.print('Este nombre se mostrará en la cabecera, a la izquierda del logo.\n');
+    const orgName = await this.question('Nombre de la organización (vacío para ocultar)');
+    this.config.orgName = orgName || '';
+  }
+
   async configureFirebase() {
     this.print('Necesitas los datos de configuración de tu proyecto Firebase.');
     this.print('Los encuentras en: Firebase Console → Project Settings → Your apps\n');
@@ -436,6 +466,38 @@ class SetupWizard {
     this.config.functions['PUBLIC_SUPER_ADMIN_EMAIL'] = this.config.client['PUBLIC_SUPER_ADMIN_EMAIL'];
   }
 
+  async configurePreEnvironment() {
+    this.print('Para PRE se recomienda usar un proyecto clonado/snapshot, separado de PROD.\n');
+    this.print('El comando npm run pre incluye una verificación de seguridad que bloquea si PRE=PROD.\n');
+
+    const configureNow = await this.confirm('¿Quieres configurar ahora valores específicos para .env.pre?', true);
+    if (!configureNow) {
+      this.print('  ⏭️  Se usará la misma base que DEV. Podrás editar .env.pre después.');
+      return;
+    }
+
+    const overrides = {};
+    const preKeys = [
+      'PUBLIC_FIREBASE_API_KEY',
+      'PUBLIC_FIREBASE_AUTH_DOMAIN',
+      'PUBLIC_FIREBASE_DATABASE_URL',
+      'PUBLIC_FIREBASE_PROJECT_ID',
+      'PUBLIC_FIREBASE_STORAGE_BUCKET',
+      'PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+      'PUBLIC_FIREBASE_APP_ID'
+    ];
+
+    for (const key of preKeys) {
+      const currentValue = this.config.client[key] || '';
+      const value = await this.question(`  ${key}`, currentValue);
+      overrides[key] = value;
+    }
+
+    const helpers = await import('./setup-wizard-helpers.js');
+    this.config.preClient = helpers.mergePreClientConfig(this.config.client, overrides);
+    this.print('  ✅ Configuración PRE almacenada');
+  }
+
   async generateEnvFiles() {
     const environments = ['dev', 'pre', 'prod'];
 
@@ -443,7 +505,11 @@ class SetupWizard {
       const envPath = path.join(ROOT_DIR, `.env.${env}`);
       let content = '# Firebase Configuration\n';
 
-      for (const [key, value] of Object.entries(this.config.client)) {
+      const sourceConfig = env === 'pre' && this.config.preClient
+        ? this.config.preClient
+        : this.config.client;
+
+      for (const [key, value] of Object.entries(sourceConfig)) {
         if (value) {
           content += `${key}=${value}\n`;
         }
@@ -472,37 +538,103 @@ class SetupWizard {
     }
     fs.writeFileSync(functionsEnvPath, functionsContent);
     this.print(`  ✅ Creado: functions/.env`);
+
+    await this.updateThemeConfigOrgName();
   }
 
-  async configureMicrosoftGraph() {
-    this.print('Microsoft Graph permite enviar emails de notificación.');
-    this.print('Si no lo configuras ahora, las notificaciones por email no funcionarán.\n');
+  async updateThemeConfigOrgName() {
+    const themePath = path.join(ROOT_DIR, 'public', 'theme-config.json');
+    if (!fs.existsSync(themePath)) return;
 
-    if (!await this.confirm('¿Deseas configurar Microsoft Graph?', false)) {
-      this.print('  ⏭️  Saltando configuración de Microsoft Graph');
+    try {
+      const theme = JSON.parse(fs.readFileSync(themePath, 'utf8'));
+      theme.branding = theme.branding || {};
+      theme.branding.orgName = this.config.orgName || '';
+      fs.writeFileSync(themePath, JSON.stringify(theme, null, 2) + '\n');
+      this.print('  ✅ Actualizado public/theme-config.json (branding.orgName)');
+    } catch (error) {
+      this.print(`  ⚠️  No se pudo actualizar theme-config.json: ${error.message}`);
+    }
+  }
+
+  async configureEmailProvider() {
+    this.print('Planning Game puede enviar notificaciones por email cuando hay tareas/bugs pendientes.\n');
+    this.print('¿Cómo quieres configurar notificaciones?');
+    this.print('  1. Push + Microsoft Graph');
+    this.print('  2. Push + SMTP genérico');
+    this.print('  3. Push + SendGrid');
+    this.print('  4. Solo push (sin emails)\n');
+
+    const helpers = await import('./setup-wizard-helpers.js');
+    const choice = await this.question('Selecciona [1-4]', '4');
+    const provider = helpers.resolveEmailProviderFromChoice(choice);
+    this.config.functions.EMAIL_PROVIDER = provider;
+
+    if (provider === 'none') {
+      this.print('  ✅ Configurado: solo notificaciones push');
+      await this.persistFunctionEnvUpdates({ EMAIL_PROVIDER: 'none' });
       return;
     }
 
-    this.print('\nNecesitas crear una App Registration en Azure Portal:');
-    this.print('  1. Ir a portal.azure.com');
-    this.print('  2. Azure Active Directory → App registrations');
-    this.print('  3. New registration\n');
+    const secretsToSet = { EMAIL_PROVIDER: provider };
 
-    for (const item of ENV_TEMPLATE.functions.filter(i => i.key.startsWith('MS_'))) {
-      const value = await this.question(`  ${item.desc}`);
-      this.config.functions[item.key] = value;
+    if (provider === 'msgraph') {
+      this.print('\nNecesitas App Registration en Azure AD.');
+      secretsToSet.MS_CLIENT_ID = await this.question('  Microsoft Azure Client ID');
+      secretsToSet.MS_CLIENT_SECRET = await this.question('  Microsoft Azure Client Secret');
+      secretsToSet.MS_TENANT_ID = await this.question('  Microsoft Azure Tenant ID');
+      secretsToSet.MS_FROM_EMAIL = await this.question('  Email remitente');
+      const alertEmail = await this.question('  Email alertas IT (opcional)');
+      if (alertEmail) secretsToSet.MS_ALERT_EMAIL = alertEmail;
+    } else if (provider === 'smtp') {
+      secretsToSet.SMTP_HOST = await this.question('  SMTP Host');
+      secretsToSet.SMTP_PORT = await this.question('  SMTP Port', '587');
+      secretsToSet.SMTP_SECURE = await this.question('  SMTP Secure (true/false)', 'false');
+      secretsToSet.SMTP_USER = await this.question('  SMTP User');
+      secretsToSet.SMTP_PASS = await this.question('  SMTP Password');
+      secretsToSet.SMTP_FROM_EMAIL = await this.question('  SMTP From Email');
+    } else if (provider === 'sendgrid') {
+      secretsToSet.SENDGRID_API_KEY = await this.question('  SendGrid API Key');
+      secretsToSet.SENDGRID_FROM_EMAIL = await this.question('  SendGrid From Email');
+      secretsToSet.SENDGRID_FROM_NAME = await this.question('  SendGrid From Name', 'Planning Game XP');
     }
 
-    // Update functions .env
+    await this.persistFunctionEnvUpdates(secretsToSet);
+
+    const commands = helpers.buildSecretSetCommands(secretsToSet);
+    const useAutoSecrets = await this.confirm('¿Quieres configurar estos secretos automáticamente con Firebase CLI?', true);
+
+    if (useAutoSecrets) {
+      for (const command of commands) {
+        try {
+          execSync(command, { stdio: 'inherit', cwd: ROOT_DIR, shell: '/bin/bash' });
+        } catch (error) {
+          this.print(`  ⚠️  Error configurando secreto. Puedes ejecutarlo manualmente: ${command}`);
+        }
+      }
+      this.print('  ✅ Secretos configurados (si Firebase CLI estaba autenticado)');
+    } else {
+      this.print('\nEjecuta estos comandos manualmente para guardar secretos:');
+      commands.forEach(cmd => this.print(`  ${cmd}`));
+    }
+  }
+
+  async persistFunctionEnvUpdates(values) {
     const functionsEnvPath = path.join(ROOT_DIR, 'functions', '.env');
-    let content = fs.readFileSync(functionsEnvPath, 'utf8');
-    for (const [key, value] of Object.entries(this.config.functions)) {
-      if (value && key.startsWith('MS_')) {
+    let content = fs.existsSync(functionsEnvPath) ? fs.readFileSync(functionsEnvPath, 'utf8') : '# Cloud Functions Environment\n';
+
+    for (const [key, value] of Object.entries(values)) {
+      const lineRegex = new RegExp(`^${key}=.*$`, 'm');
+      if (lineRegex.test(content)) {
+        content = content.replace(lineRegex, `${key}=${value}`);
+      } else {
+        if (!content.endsWith('\n')) content += '\n';
         content += `${key}=${value}\n`;
       }
     }
+
     fs.writeFileSync(functionsEnvPath, content);
-    this.print('  ✅ Configuración de Microsoft Graph guardada');
+    this.print('  ✅ functions/.env actualizado');
   }
 
   async deploy() {

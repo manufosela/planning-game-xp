@@ -9,14 +9,62 @@ import Layout from '../layouts/Layout.astro';
 
     <!-- Tabs -->
     <div class="admin-tabs">
-      <button id="firebaseTab" data-section="firebase" class="admin-tablink active">🔥 Firebase</button>
+      <button id="settingsTab" data-section="settings" class="admin-tablink active">🧩 System Settings</button>
+      <button id="firebaseTab" data-section="firebase" class="admin-tablink">🔥 Firebase</button>
       <button id="reportsTab" data-section="reports" class="admin-tablink">📊 Informes</button>
       <button id="isoTab" data-section="iso" class="admin-tablink">📋 Informes ISO</button>
       <button id="configTab" data-section="config" class="admin-tablink">⚙️ Configuración</button>
     </div>
 
+    <!-- System Settings Section -->
+    <div id="settingsTabContent" class="admin-tabcontent active">
+      <div class="admin-section">
+        <h2>Configuración General de la Instancia</h2>
+        <p class="section-description">Estos valores se guardan en Firebase RTDB y se pueden cambiar en cualquier momento.</p>
+
+        <div class="form-group">
+          <label for="orgNameInput">Nombre de organización (cabecera)</label>
+          <input type="text" id="orgNameInput" class="form-input" placeholder="Ej: GENIOVA">
+        </div>
+
+        <div class="form-group">
+          <label for="emailEnabledSelect">Notificaciones por email</label>
+          <select id="emailEnabledSelect" class="form-input">
+            <option value="true">Push + Email</option>
+            <option value="false">Solo Push</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="emailProviderSelect">Proveedor de email</label>
+          <select id="emailProviderSelect" class="form-input">
+            <option value="none">none</option>
+            <option value="msgraph">msgraph</option>
+            <option value="smtp">smtp</option>
+            <option value="sendgrid">sendgrid</option>
+          </select>
+          <p class="section-description" style="margin-top: 0.5rem;">
+            Nota: las credenciales sensibles se gestionan con Firebase Secrets, no desde cliente.
+          </p>
+        </div>
+
+        <div class="button-group">
+          <button id="refreshSystemSettingsBtn" class="btn btn-secondary">Refrescar</button>
+          <button id="saveSystemSettingsBtn" class="btn btn-primary">Guardar System Settings</button>
+        </div>
+
+        <div id="systemSettingsStatusMessage" class="status-message" style="display: none;"></div>
+
+        <div class="form-group" style="margin-top: 1.25rem;">
+          <label>Guía de secretos (Firebase CLI)</label>
+          <p id="systemSecretsHintTitle" class="section-description"></p>
+          <pre id="systemSecretsHintCommands" class="code-output" style="display: block;"></pre>
+        </div>
+      </div>
+    </div>
+
     <!-- Firebase Section -->
-    <div id="firebaseTabContent" class="admin-tabcontent active">
+    <div id="firebaseTabContent" class="admin-tabcontent">
       <div class="admin-section">
         <h2>Escribir JSON a ruta</h2>
         <div class="form-group">
@@ -1354,6 +1402,7 @@ import Layout from '../layouts/Layout.astro';
   import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
   import { app, superAdminEmail } from '/firebase-config.js';
   import { holidays, HOURS_PER_WORKDAY } from '/js/config/holidays-config.js';
+  import { buildSystemSettingsUpdateMap, buildSecretCommandHints } from '/js/services/system-settings-service.js';
 
   const auth = getAuth(app);
   const db = getDatabase(app);
@@ -1398,6 +1447,116 @@ import Layout from '../layouts/Layout.astro';
     document.getElementById('statusMessage').style.display = 'none';
   }
 
+  function showSystemSettingsStatus(message, type = 'info') {
+    const statusEl = document.getElementById('systemSettingsStatusMessage');
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.className = `status-message ${type}`;
+    statusEl.style.display = 'block';
+  }
+
+  function setEmailProviderUiState() {
+    const enabledSelect = document.getElementById('emailEnabledSelect');
+    const providerSelect = document.getElementById('emailProviderSelect');
+    if (!enabledSelect || !providerSelect) return;
+
+    const emailEnabled = enabledSelect.value === 'true';
+    providerSelect.disabled = !emailEnabled;
+    if (!emailEnabled) {
+      providerSelect.value = 'none';
+    }
+
+    renderSecretHints();
+  }
+
+  function renderSecretHints() {
+    const enabledSelect = document.getElementById('emailEnabledSelect');
+    const providerSelect = document.getElementById('emailProviderSelect');
+    const titleEl = document.getElementById('systemSecretsHintTitle');
+    const commandsEl = document.getElementById('systemSecretsHintCommands');
+    if (!enabledSelect || !providerSelect || !titleEl || !commandsEl) return;
+
+    const emailEnabled = enabledSelect.value === 'true';
+    const provider = providerSelect.value || 'none';
+    const hints = buildSecretCommandHints(emailEnabled, provider);
+
+    titleEl.textContent = hints.title;
+    commandsEl.textContent = hints.commands.length > 0
+      ? hints.commands.join('\n')
+      : '# No commands required';
+  }
+
+  async function loadSystemSettings() {
+    try {
+      const [orgSnap, enabledSnap, providerSnap] = await Promise.all([
+        get(ref(db, '/data/systemSettings/branding/orgName')),
+        get(ref(db, '/data/systemSettings/notifications/emailEnabled')),
+        get(ref(db, '/data/systemSettings/notifications/emailProvider'))
+      ]);
+
+      const orgName = orgSnap.exists() ? (orgSnap.val() || '') : '';
+      const emailEnabled = enabledSnap.exists() ? Boolean(enabledSnap.val()) : false;
+      const emailProvider = providerSnap.exists() ? (providerSnap.val() || 'none') : 'none';
+
+      const orgInput = document.getElementById('orgNameInput');
+      const enabledSelect = document.getElementById('emailEnabledSelect');
+      const providerSelect = document.getElementById('emailProviderSelect');
+
+      if (orgInput) orgInput.value = orgName;
+      if (enabledSelect) enabledSelect.value = emailEnabled ? 'true' : 'false';
+      if (providerSelect) providerSelect.value = emailProvider;
+
+      setEmailProviderUiState();
+      showSystemSettingsStatus('System settings cargados.', 'success');
+    } catch (error) {
+      showSystemSettingsStatus(`Error cargando system settings: ${error.message}`, 'error');
+    }
+  }
+
+  async function saveSystemSettings() {
+    const orgInput = document.getElementById('orgNameInput');
+    const enabledSelect = document.getElementById('emailEnabledSelect');
+    const providerSelect = document.getElementById('emailProviderSelect');
+
+    const orgName = orgInput ? orgInput.value : '';
+    const emailEnabled = enabledSelect ? enabledSelect.value === 'true' : false;
+    const emailProvider = providerSelect ? providerSelect.value : 'none';
+
+    const updateMap = buildSystemSettingsUpdateMap({
+      orgName,
+      emailEnabled,
+      emailProvider
+    });
+
+    try {
+      await update(ref(db), updateMap);
+      setEmailProviderUiState();
+      showSystemSettingsStatus('System settings guardados correctamente.', 'success');
+    } catch (error) {
+      showSystemSettingsStatus(`Error guardando system settings: ${error.message}`, 'error');
+    }
+  }
+
+  function setupSystemSettingsEventListeners() {
+    const saveBtn = document.getElementById('saveSystemSettingsBtn');
+    const refreshBtn = document.getElementById('refreshSystemSettingsBtn');
+    const enabledSelect = document.getElementById('emailEnabledSelect');
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', saveSystemSettings);
+    }
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', loadSystemSettings);
+    }
+    if (enabledSelect) {
+      enabledSelect.addEventListener('change', setEmailProviderUiState);
+    }
+    const providerSelect = document.getElementById('emailProviderSelect');
+    if (providerSelect) {
+      providerSelect.addEventListener('change', renderSecretHints);
+    }
+  }
+
   // Check authentication and SuperAdmin status
   onAuthStateChanged(auth, async (user) => {
     const loadingEl = document.getElementById('loadingAuth');
@@ -1427,6 +1586,7 @@ import Layout from '../layouts/Layout.astro';
     setupTabs();
 
     // Setup event listeners
+    setupSystemSettingsEventListeners();
     setupFirebaseEventListeners();
     setupReportEventListeners();
     setupISOEventListeners();
@@ -1437,6 +1597,7 @@ import Layout from '../layouts/Layout.astro';
 
     // Load developer groups for config tab
     await loadDeveloperGroups();
+    await loadSystemSettings();
   });
 
   function setupFirebaseEventListeners() {

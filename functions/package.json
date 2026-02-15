@@ -16,11 +16,13 @@
     "@azure/identity": "^4.11.1",
     "@azure/msal-node": "^2.9.2",
     "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@sendgrid/mail": "^8.1.6",
     "axios": "^1.6.2",
     "firebase-admin": "^12.6.0",
     "firebase-functions": "^7.0.2",
     "form-data": "^4.0.4",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.10.1"
   },
   "devDependencies": {
     "firebase-functions-test": "^3.1.0"

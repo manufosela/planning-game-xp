@@ -13,7 +13,6 @@ const {
 
 describe('onCardToValidate', () => {
   let mockDb;
-  let mockGetAccessToken;
   let mockSendEmail;
   let mockLogger;
   let mockPushRef;
@@ -28,7 +27,6 @@ describe('onCardToValidate', () => {
       })
     };
 
-    mockGetAccessToken = vi.fn().mockResolvedValue('mock-access-token');
     mockSendEmail = vi.fn().mockResolvedValue(undefined);
     mockLogger = {
       info: vi.fn(),
@@ -40,7 +38,6 @@ describe('onCardToValidate', () => {
   function getDeps() {
     return {
       db: mockDb,
-      getAccessToken: mockGetAccessToken,
       sendEmail: mockSendEmail,
       logger: mockLogger
     };
@@ -223,7 +220,6 @@ describe('onCardToValidate', () => {
 
       // Verify email sent
       expect(mockSendEmail).toHaveBeenCalledWith(
-        'mock-access-token',
         ['validator@example.com'],
         '[C4D] Tarea pendiente de validación: Implement login',
         expect.stringContaining('Implement login')
@@ -258,7 +254,6 @@ describe('onCardToValidate', () => {
 
       // Email sent to both
       expect(mockSendEmail).toHaveBeenCalledWith(
-        'mock-access-token',
         ['validator@example.com', 'covalidator@example.com'],
         expect.stringContaining('[NTR]'),
         expect.any(String)
@@ -285,7 +280,6 @@ describe('onCardToValidate', () => {
       expect(result).toEqual({ notified: ['solo-validator@example.com'] });
       expect(mockPushRef.set).toHaveBeenCalledTimes(1);
       expect(mockSendEmail).toHaveBeenCalledWith(
-        'mock-access-token',
         ['solo-validator@example.com'],
         expect.any(String),
         expect.any(String)

@@ -43,6 +43,7 @@ let user = null;
   </head>
   <body data-user-email={user || ''} data-authenticated="false">
     <header>
+      <span id="org-name" class="org-name"></span>
       <a href="/" class="header-logos">
         <img src="/images/icono_PGame.png" alt="Planning Game" class="planning-game-icon" />
       </a>
@@ -691,6 +692,7 @@ let user = null;
         const welcomeSubtitle = document.querySelector('.welcome-subtitle');
         if (welcomeTitle) welcomeTitle.textContent = APP_CONSTANTS.WELCOME_MESSAGES.TITLE;
         if (welcomeSubtitle) welcomeSubtitle.textContent = APP_CONSTANTS.WELCOME_MESSAGES.SUBTITLE;
+        initOrgNameListener();
         
         // Wait for MenuNav SSR to initialize
         if (window.menuNavSSR) {
@@ -727,6 +729,30 @@ let user = null;
         if (projectId) {
           projectSelected = projectId;
           updatePageTitle(projectId);
+        }
+      }
+
+      function applyOrgName(name) {
+        const orgNameEl = document.getElementById('org-name');
+        if (!orgNameEl) return;
+        orgNameEl.textContent = (name || '').trim();
+      }
+
+      function initOrgNameListener() {
+        try {
+          const orgNameRef = ref(database, '/data/systemSettings/branding/orgName');
+          onValue(orgNameRef, (snapshot) => {
+            const runtimeValue = (snapshot.val() || '').toString().trim();
+            if (runtimeValue) {
+              window.orgName = runtimeValue;
+              applyOrgName(runtimeValue);
+              return;
+            }
+
+            const brandingFallback = ThemeLoaderService.getBranding()?.orgName || '';
+            applyOrgName(brandingFallback);
+          });
+        } catch {
         }
       }
 
@@ -860,10 +886,27 @@ let user = null;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 0.75rem;
         background-color: var(--primary-color, #4a9eff);
         padding: 0.5rem 1.5rem;
         color: var(--text-on-primary, white);
         border-bottom: 2px solid var(--primary-color-dark, #357ae8);
+      }
+
+      .org-name {
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: var(--text-on-primary, white);
+        white-space: nowrap;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        max-width: 26vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .org-name:empty {
+        display: none;
       }
 
       .header-title-container {

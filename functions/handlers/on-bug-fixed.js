@@ -85,11 +85,11 @@ function generateBugFixedEmailHtml(bugData, projectId, cardId) {
  * @param {Object} params - { projectId, section, cardId }
  * @param {Object} beforeData - Bug data before the change
  * @param {Object} afterData - Bug data after the change
- * @param {Object} deps - Dependencies { db, getAccessToken, sendEmail, logger }
+ * @param {Object} deps - Dependencies { db, sendEmail, logger }
  */
 async function handleBugFixed(params, beforeData, afterData, deps) {
   const { projectId, section, cardId } = params;
-  const { db, getAccessToken, sendEmail, logger } = deps;
+  const { db, sendEmail, logger } = deps;
 
   logger.info('onBugFixed: Triggered', { projectId, section, cardId });
 
@@ -167,11 +167,10 @@ async function handleBugFixed(params, beforeData, afterData, deps) {
 
   // Send email
   try {
-    const accessToken = await getAccessToken();
     const emailSubject = `[${projectId}] Bug corregido: ${bugTitle}`;
     const emailHtml = generateBugFixedEmailHtml(afterData, projectId, bugCardId);
 
-    await sendEmail(accessToken, [recipientEmail], emailSubject, emailHtml);
+    await sendEmail([recipientEmail], emailSubject, emailHtml);
     logger.info('onBugFixed: Email sent', {
       projectId,
       cardId: bugCardId,

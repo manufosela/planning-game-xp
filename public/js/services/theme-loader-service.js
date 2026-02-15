@@ -186,6 +186,13 @@ class ThemeLoader {
     if (branding.primaryColor) {
       this.updateMetaTag('theme-color', branding.primaryColor);
     }
+
+    const orgNameEl = document.getElementById('org-name');
+    if (orgNameEl) {
+      const runtimeOrgName = (window.orgName || '').trim();
+      const brandingOrgName = (branding.orgName || '').trim();
+      orgNameEl.textContent = runtimeOrgName || brandingOrgName || '';
+    }
   }
 
   /**

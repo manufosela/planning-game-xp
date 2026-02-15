@@ -52,7 +52,10 @@ export const app = initializeApp(firebaseConfig);
 // Configuración de entorno
 const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const urlParams = new URLSearchParams(window.location.search);
-const useEmulators = urlParams.get('emulators') === 'true';
+const emulatorsParam = urlParams.get('emulators');
+const useEmulators = (runtimeEnv === 'dev' && allowEmulators)
+  ? emulatorsParam !== 'false'
+  : emulatorsParam === 'true';
 
 // Emuladores: solo si se pasa ?emulators=true en la URL
 if (isDevelopment && allowEmulators && useEmulators && !window._emulatorsPreConnected) {
