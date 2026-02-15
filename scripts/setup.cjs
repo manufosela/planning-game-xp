@@ -19,6 +19,7 @@ const path = require('path');
 const os = require('os');
 const readline = require('readline');
 const { execSync, spawn } = require('child_process');
+const { AppInstanceManager } = require('./app-instance-manager.cjs');
 const { McpInstanceManager } = require('./mcp-instance-manager.cjs');
 const { InstallStateManager } = require('./install-state-manager.cjs');
 const { KjInstanceManager } = require('./kj-instance-manager.cjs');
@@ -38,7 +39,11 @@ const {
   isActiveFirebaseProject,
   isExpectedProjectInFirebaseUseOutput,
 } = require('./firebase-project-context-helper.cjs');
-const { ensureDatabaseTargets } = require('./firebase-rtdb-target-helper.cjs');
+const {
+  ensureDatabaseTargets,
+  ensureDatabaseTargetsInFirebaserc,
+  hasDatabaseTargetConfigured,
+} = require('./firebase-rtdb-target-helper.cjs');
 const { shouldClearInstallState } = require('./setup-flow-helper.cjs');
 const {
   buildGcloudAdcPrintTokenCommand,
@@ -148,6 +153,12 @@ class SetupWizard {
 
   async run() {
     this.printHeader('Planning Game XP - Setup Wizard');
+
+    const canContinue = await this.ensureAppInstanceContext();
+    if (!canContinue) {
+      this.rl.close();
+      return;
+    }
 
     // Check for interrupted installation
     const installState = new InstallStateManager();
@@ -268,6 +279,108 @@ class SetupWizard {
     this.printNextSteps();
 
     this.rl.close();
+  }
+
+  async ensureAppInstanceContext() {
+    const appInstanceManager = new AppInstanceManager();
+    if (appInstanceManager.isInstanceDirectory(ROOT_DIR)) {
+      return true;
+    }
+
+    this.print('Este repositorio se trata como plantilla/base.');
+    this.print('Para evitar mezclar secretos/configuración, el setup se ejecuta dentro de una instancia.\n');
+
+    const instances = appInstanceManager.listInstances();
+    if (instances.length === 0) {
+      this.print('No hay instancias de Planning Game creadas todavía.\n');
+      const created = await this.createAppInstance(appInstanceManager);
+      if (!created) return false;
+      await this.launchSetupInInstance(created.directory);
+      return false;
+    }
+
+    this.print('Instancias existentes:\n');
+    instances.forEach((inst, idx) => this.print(`  ${idx + 1}. ${inst.name} (${inst.directory})`));
+    this.print('\nOpciones:');
+    this.print('  1. Usar una instancia existente (recomendado)');
+    this.print('  2. Crear nueva instancia');
+    this.print('  3. Actualizar una instancia y usarla');
+    this.print('  4. Continuar en repo plantilla (avanzado, no recomendado)\n');
+
+    const choice = await this.question('Selecciona [1-4]', '1');
+    if (choice === '4') {
+      this.print('⚠️  Continuando en repo plantilla por solicitud explícita.\n');
+      return true;
+    }
+
+    if (choice === '2') {
+      const created = await this.createAppInstance(appInstanceManager);
+      if (!created) return false;
+      await this.launchSetupInInstance(created.directory);
+      return false;
+    }
+
+    const selected = await this.selectAppInstance(instances);
+    if (!selected) {
+      this.print('No se seleccionó instancia válida.');
+      return false;
+    }
+
+    if (choice === '3') {
+      try {
+        appInstanceManager.updateInstance(selected.name);
+        this.print(`✅ Instancia "${selected.name}" actualizada.`);
+      } catch (error) {
+        this.print(`⚠️  No se pudo actualizar la instancia: ${error.message}`);
+      }
+    }
+
+    await this.launchSetupInInstance(selected.directory);
+    return false;
+  }
+
+  async createAppInstance(manager) {
+    this.print('Creación de nueva instancia de Planning Game.\n');
+    const defaultName = 'personal';
+
+    let name;
+    while (true) {
+      const input = await this.question('  Nombre de instancia (ej: personal, geniova)', defaultName);
+      try {
+        name = manager.validateInstanceName(input);
+      } catch (error) {
+        this.print(`  ⚠️  ${error.message}`);
+        continue;
+      }
+      if (manager.instanceExists(name)) {
+        this.print(`  ⚠️  Ya existe una instancia con ese nombre: ${name}`);
+        continue;
+      }
+      break;
+    }
+
+    try {
+      const instance = manager.createInstance(name, { baseRepoDir: ROOT_DIR });
+      this.print(`\n✅ Instancia creada: ${instance.directory}\n`);
+      return instance;
+    } catch (error) {
+      this.print(`\n❌ Error creando instancia: ${error.message}`);
+      this.print('Verifica acceso Git (SSH/HTTPS) y vuelve a intentarlo.\n');
+      return null;
+    }
+  }
+
+  async selectAppInstance(instances) {
+    if (!instances.length) return null;
+    const choice = await this.question(`Selecciona instancia [1-${instances.length}]`, '1');
+    const index = Number.parseInt(choice, 10);
+    if (!Number.isInteger(index) || index < 1 || index > instances.length) return null;
+    return instances[index - 1];
+  }
+
+  async launchSetupInInstance(instanceDir) {
+    this.print(`\nRelanzando setup dentro de la instancia:\n  ${instanceDir}\n`);
+    execSync('npm run setup', { cwd: instanceDir, stdio: 'inherit' });
   }
 
   async showSetupBriefing() {
@@ -783,13 +896,27 @@ class SetupWizard {
           databaseUrl: this.config.client.PUBLIC_FIREBASE_DATABASE_URL,
           accountEmail: this.config.firebaseCliAccount,
         });
+        if (targetResult.instanceName) {
+          ensureDatabaseTargetsInFirebaserc({
+            rootDir: ROOT_DIR,
+            projectId,
+            instanceName: targetResult.instanceName,
+          });
+        }
         if (targetResult.configured) {
           this.print(`  ✅ Targets RTDB configurados automáticamente (instancia: ${targetResult.instanceName})`);
         } else {
           this.print('  ⚠️  No se pudieron configurar targets RTDB automáticamente (URL inválida).');
         }
+
+        const hasMain = hasDatabaseTargetConfigured({ rootDir: ROOT_DIR, projectId, targetName: 'main' });
+        const hasTests = hasDatabaseTargetConfigured({ rootDir: ROOT_DIR, projectId, targetName: 'tests' });
+        if (!hasMain || !hasTests) {
+          throw new Error('No se pudieron persistir targets RTDB en .firebaserc');
+        }
       } catch (targetError) {
         this.print(`  ⚠️  Error configurando targets RTDB: ${targetError.message}`);
+        this.print('  Continuamos con despliegue; si falla, revisa .firebaserc -> targets.database.main/tests');
       }
 
       this.print('\n  Desplegando reglas de base de datos...');

@@ -4,7 +4,12 @@ const {
   parseRtdbInstanceNameFromUrl,
   buildDatabaseTargetApplyCommand,
   ensureDatabaseTargets,
+  ensureDatabaseTargetsInFirebaserc,
+  hasDatabaseTargetConfigured,
 } = await import('../../scripts/firebase-rtdb-target-helper.cjs');
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 describe('firebase rtdb target helper', () => {
   it('should parse instance name from RTDB URL', () => {
@@ -35,5 +40,29 @@ describe('firebase rtdb target helper', () => {
 
     expect(result.instanceName).toBe('my-project-default-rtdb');
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it('should persist targets in .firebaserc', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fb-targets-'));
+    fs.writeFileSync(path.join(root, '.firebaserc'), JSON.stringify({
+      projects: { default: 'my-project' },
+    }, null, 2));
+
+    ensureDatabaseTargetsInFirebaserc({
+      rootDir: root,
+      projectId: 'my-project',
+      instanceName: 'my-project-default-rtdb',
+    });
+
+    expect(hasDatabaseTargetConfigured({
+      rootDir: root,
+      projectId: 'my-project',
+      targetName: 'main',
+    })).toBe(true);
+    expect(hasDatabaseTargetConfigured({
+      rootDir: root,
+      projectId: 'my-project',
+      targetName: 'tests',
+    })).toBe(true);
   });
 });
