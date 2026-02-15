@@ -116,7 +116,7 @@ def check_duplicate_card_ids(input_file):
     return 0 if not duplicates else 1
 
 if __name__ == '__main__':
-    input_file = 'data/planning-gamexp-default-rtdb-cards-export 20250111.json'
+    input_file = 'data/sample-default-rtdb-cards-export 20250111.json'
     
     if len(sys.argv) > 1:
         input_file = sys.argv[1]

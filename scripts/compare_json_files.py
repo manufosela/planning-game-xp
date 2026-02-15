@@ -85,8 +85,8 @@ def compare_json_files(file1, file2):
         return False
 
 if __name__ == "__main__":
-    file1 = sys.argv[1] if len(sys.argv) > 1 else "planning-gamexp-default-rtdb.json"
-    file2 = sys.argv[2] if len(sys.argv) > 2 else "planning-gamexp-default-rtdb-2.json"
+    file1 = sys.argv[1] if len(sys.argv) > 1 else "sample-default-rtdb.json"
+    file2 = sys.argv[2] if len(sys.argv) > 2 else "sample-default-rtdb-2.json"
     
     result = compare_json_files(file1, file2)
     

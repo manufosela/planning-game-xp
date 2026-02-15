@@ -20,6 +20,7 @@ import { stateTransitionService } from '../services/state-transition-service.js'
 import { aiExecutionService } from '../services/ai-execution-service.js';
 import { TASK_SCHEMA } from '../schemas/card-field-schemas.js';
 import { generateTimestamp, extractDatePart } from '../utils/timestamp-utils.js';
+import { buildIaContextUrl } from '../utils/firebase-project-utils.js';
 import './FirebaseStorageUploader.js';
 import 'https://cdn.jsdelivr.net/npm/@manufosela/loading-layer@2.0.1/+esm';
 
@@ -4106,9 +4107,7 @@ this._showNotification('No se pudo generar el enlace IA', 'error');
   }
 
   _buildIaLinkUrl(token) {
-    const region = 'europe-west1';
-    const projectId = firebaseConfig?.projectId || 'planning-gamexp';
-    return `https://${region}-${projectId}.cloudfunctions.net/getIaContext/${token}`;
+    return buildIaContextUrl(token, firebaseConfig);
   }
 
   _generateSecureToken() {

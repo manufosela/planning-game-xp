@@ -154,7 +154,7 @@ firebase use tu-proyecto-id
 
 1. Ir a [Firebase Console](https://console.firebase.google.com/)
 2. Click en **Add project**
-3. Nombre del proyecto: `planning-gamexp` (o el que prefieras)
+3. Nombre del proyecto: `<your-project-id>` (o el que prefieras)
 4. Habilitar Google Analytics (recomendado)
 5. Esperar a que se cree el proyecto
 

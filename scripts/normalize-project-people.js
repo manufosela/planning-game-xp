@@ -2,10 +2,10 @@ import fs from 'fs';
 import path from 'path';
 
 const defaultPaths = {
-  projects: 'data/planning-gamexp-default-rtdb-projects-export (4).json',
-  developers: 'data/planning-gamexp-default-rtdb-developers-export (2).json',
-  stakeholders: 'data/planning-gamexp-default-rtdb-stakeholders-export (2).json',
-  cards: 'data/planning-gamexp-default-rtdb-cards-export (5).json'
+  projects: 'data/sample-default-rtdb-projects-export (4).json',
+  developers: 'data/sample-default-rtdb-developers-export (2).json',
+  stakeholders: 'data/sample-default-rtdb-stakeholders-export (2).json',
+  cards: 'data/sample-default-rtdb-cards-export (5).json'
 };
 
 const inputPaths = {

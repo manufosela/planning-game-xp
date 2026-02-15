@@ -253,7 +253,7 @@ class SetupWizard {
   async showSetupBriefing() {
     const lines = buildSetupBriefingLines({
       firebaseCliInstalled: detectFirebaseCliInstalled(),
-      repoUrl: 'https://github.com/manufosela/planning-game-xp',
+      repoUrl: process.env.PLANNING_GAME_REPO_URL || './INSTALL.md',
     });
     lines.forEach((line) => this.print(line));
     this.print('');

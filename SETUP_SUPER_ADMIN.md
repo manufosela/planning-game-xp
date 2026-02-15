@@ -27,7 +27,7 @@ Necesitas añadir tu email a Firebase Realtime Database manualmente:
 
 **Opción A: Usar Firebase Console**
 1. Abre [Firebase Console](https://console.firebase.google.com/)
-2. Selecciona el proyecto `planning-gamexp`
+2. Selecciona el proyecto `<your-project-id>`
 3. Ve a **Realtime Database**
 4. Navega a `/data/superAdminEmails`
 5. Añade un nuevo hijo:

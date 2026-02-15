@@ -11,13 +11,18 @@
 const admin = require('firebase-admin');
 const fs = require('fs');
 const path = require('path');
+const { resolveDatabaseUrl, loadDatabaseUrlFromEnvFiles } = require('./firebase-db-url-helper.cjs');
 
 // Get version from package.json
 const packageJsonPath = path.join(__dirname, '../package.json');
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 const version = packageJson.version;
 
-const DATABASE_URL = 'https://planning-gamexp-default-rtdb.europe-west1.firebasedatabase.app';
+const cliDatabaseUrl = process.argv[2];
+const DATABASE_URL = resolveDatabaseUrl({
+  cliArg: cliDatabaseUrl,
+  env: process.env,
+}) || loadDatabaseUrlFromEnvFiles(path.resolve(__dirname, '..'));
 
 // Paths to check for service account
 const serviceAccountPaths = [
@@ -75,6 +80,14 @@ async function initFirebase() {
 
 async function updateVersion() {
   console.log(`\n📦 Updating Firebase version to: ${version}\n`);
+
+  if (!DATABASE_URL) {
+    console.log('⚠️  No Firebase Database URL found.');
+    console.log('   Set PUBLIC_FIREBASE_DATABASE_URL/FIREBASE_DATABASE_URL in .env.*');
+    console.log('   or pass it explicitly: node scripts/update-firebase-version.cjs <databaseURL>');
+    console.log('\n   Skipping Firebase version update - deploy completed without notification.\n');
+    process.exit(0);
+  }
 
   const initialized = await initFirebase();
 

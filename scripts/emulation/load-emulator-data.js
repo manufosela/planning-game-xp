@@ -20,9 +20,12 @@ process.env.FIREBASE_DATABASE_EMULATOR_HOST = 'localhost:9001';
 // --- Inicialización de Firebase Admin ---
 // Usamos el mismo projectId que la aplicación y especificamos el namespace correcto
 // Nota: El emulador en desarrollo usa el namespace de tests
+const emulatorProjectId = process.env.FIREBASE_EMULATOR_PROJECT_ID || 'planning-game-template';
+const emulatorNamespace = process.env.FIREBASE_EMULATOR_RTDB_NAMESPACE || `${emulatorProjectId}-tests-rtdb`;
+
 admin.initializeApp({
-  projectId: 'planning-gamexp',
-  databaseURL: 'http://localhost:9001?ns=planning-gamexp-tests-rtdb'
+  projectId: emulatorProjectId,
+  databaseURL: `http://localhost:9001?ns=${emulatorNamespace}`
 });
 
 // Obtén una referencia a la Realtime Database

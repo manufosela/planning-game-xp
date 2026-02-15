@@ -137,7 +137,7 @@ La app estara disponible en http://localhost:4321
 
 ## Crear un proyecto Firebase nuevo
 
-Si quieres replicar el proyecto en tu propio Firebase (no usar `planning-gamexp`):
+Si quieres replicar el proyecto en tu propio Firebase (no usar `<your-project-id>`):
 
 ### 1. Crear el proyecto en Firebase Console
 

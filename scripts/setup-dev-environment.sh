@@ -126,7 +126,7 @@ setup_planning_game_mcp() {
         info "Adding Planning Game MCP..."
         claude mcp add planning-game --scope user \
             -e GOOGLE_APPLICATION_CREDENTIALS="$MCP_DIR/serviceAccountKey.json" \
-            -e FIREBASE_DATABASE_URL=https://planning-gamexp-default-rtdb.europe-west1.firebasedatabase.app \
+            -e FIREBASE_DATABASE_URL=https://sample-default-rtdb.europe-west1.firebasedatabase.app \
             -- node "$MCP_DIR/index.js"
         success "Planning Game MCP added"
     fi

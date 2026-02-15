@@ -205,8 +205,8 @@ def fix_duplicate_card_ids(input_file: str, output_file: str):
     return 0 if total_duplicates_fixed == 0 else 1
 
 if __name__ == '__main__':
-    input_file = 'data/planning-gamexp-default-rtdb-cards-export 20250111.json'
-    output_file = 'data/planning-gamexp-default-rtdb-cards-export 20250111.fixed.json'
+    input_file = 'data/sample-default-rtdb-cards-export 20250111.json'
+    output_file = 'data/sample-default-rtdb-cards-export 20250111.fixed.json'
     
     if len(sys.argv) > 1:
         input_file = sys.argv[1]

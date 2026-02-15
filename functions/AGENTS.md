@@ -80,4 +80,4 @@ npm run test:coverage                           # 3. Verify coverage
 ## Security & Configuration Tips
 - Keep `.env.dev`, `.env.pre`, and `.env.pro` aligned; `npm run build` assumes production credentials.
 - Regenerate the service worker with `npm run generate-sw` whenever offline behavior changes.
-- Run `firebase use planning-gamexp` before emulating, and seed test data from `emulator-data/` when tests depend on fixtures.
+- Run `firebase use <your-project-id>` before emulating, and seed test data from `emulator-data/` when tests depend on fixtures.

@@ -202,7 +202,7 @@ function processCards(inputFile, outputFile) {
   }
 
   console.log('\n⚠️  IMPORTANT: Review the fixed file before importing to Firebase!');
-  console.log('   Import command: firebase database:set /cards data/cards_fixed.json --project planning-gamexp\n');
+  console.log('   Import command: firebase database:set /cards data/cards_fixed.json --project <your-project-id>\n');
 }
 
 // Main

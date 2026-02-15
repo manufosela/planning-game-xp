@@ -15,7 +15,7 @@ import { developerDirectory } from '../public/js/config/developer-directory.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const inputPath = process.argv[2] || 'planning-gamexp-default-rtdb-2-cleaned.json';
+const inputPath = process.argv[2] || 'sample-default-rtdb-2-cleaned.json';
 const outputPath = process.argv[3] || inputPath.replace(/\.json$/, '-normalized.json');
 const usersDirPath = process.argv[4] || path.join(__dirname, '..', 'data', 'users', 'usersDirectory.firebase.json');
 

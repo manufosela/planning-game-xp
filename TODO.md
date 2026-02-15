@@ -192,7 +192,7 @@ Implementado en:
 Ejemplo de uso:
 ```bash
 curl -H "x-api-key: YOUR_KEY" \
-  "https://europe-west1-planning-gamexp.cloudfunctions.net/getProjectEpics?projectId=Cinema4D&year=2025"
+  "https://europe-west1-<your-project-id>.cloudfunctions.net/getProjectEpics?projectId=Cinema4D&year=2025"
 ```
 
 ### 17. ~~Mejoras en validación de formularios~~

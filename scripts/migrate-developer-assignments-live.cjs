@@ -33,6 +33,10 @@ const DEVELOPER_NAMES = {
 };
 
 const isDryRun = process.argv.includes('--dry-run');
+const databaseURL =
+  process.env.PUBLIC_FIREBASE_DATABASE_URL ||
+  process.env.FIREBASE_DATABASE_URL ||
+  process.env.DATABASE_URL;
 
 async function initializeFirebase() {
   // Try to load service account from common locations
@@ -61,9 +65,14 @@ async function initializeFirebase() {
     process.exit(1);
   }
 
+  if (!databaseURL) {
+    console.error('Error: Missing PUBLIC_FIREBASE_DATABASE_URL/FIREBASE_DATABASE_URL.');
+    process.exit(1);
+  }
+
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    databaseURL: 'https://planning-gamexp-default-rtdb.europe-west1.firebasedatabase.app'
+    databaseURL
   });
 
   return admin.database();

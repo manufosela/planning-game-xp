@@ -171,7 +171,7 @@ scripts/            # Build and maintenance scripts
 - **Environment Files**: `.env.dev`, `.env.pre`, `.env.pro` (from Google Drive `APP-CONFIG/Planning-GameXP`)
 - **Firebase Config**: Auto-generated from environment variables
 - **Build Directory**: `dist` (NOT `public` - critical for Firebase deployment)
-- **Firebase Project**: `planning-gamexp`
+- **Firebase Project**: `<your-project-id>`
 
 ### Key Features
 
@@ -372,7 +372,7 @@ npm run test:coverage                           # 3. Verify coverage
    - Security check runs automatically before builds: `npm run security-check`
    - Build with appropriate environment: `npm run build-prod`
    - Deploy: `npm run deploy`
-   - Verify deployment at Firebase project `planning-gamexp`
+   - Verify deployment at Firebase project `<your-project-id>`
 
 ### MCP Card Workflow Rules
 

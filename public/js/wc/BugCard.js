@@ -9,7 +9,7 @@ import { CommitsListStyles } from './commits-list-styles.js';
 import { KANBAN_STATUS_COLORS_CSS } from '../config/theme-config.js';
 import { APP_CONSTANTS } from '../constants/app-constants.js';
 import { permissionService } from '../services/permission-service.js';
-import { database, ref, get, functions, httpsCallable, set as dbSet, auth } from '../../firebase-config.js';
+import { database, ref, get, functions, httpsCallable, set as dbSet, auth, firebaseConfig } from '../../firebase-config.js';
 import { normalizeDeveloperEntries, normalizeDeveloperEntry, buildDeveloperSelectOptions, getDeveloperKey } from '../utils/developer-normalizer.js';
 import { developerDirectory } from '../config/developer-directory.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
@@ -17,6 +17,7 @@ import { openScenarioModal } from '../utils/scenario-modal.js';
 import { BUG_SCHEMA } from '../schemas/card-field-schemas.js';
 import { generateTimestamp, extractDatePart } from '../utils/timestamp-utils.js';
 import { aiExecutionService } from '../services/ai-execution-service.js';
+import { buildIaContextUrl } from '../utils/firebase-project-utils.js';
 import './FirebaseStorageUploader.js';
 
 export class BugCard extends CommitsDisplayMixin(NotesManagerMixin(BaseCard)) {
@@ -2858,9 +2859,7 @@ this.attachment = '';
    * @returns {string} The full URL
    */
   _buildIaLinkUrl(token) {
-    const region = 'europe-west1';
-    const projectId = 'planning-gamexp';
-    return `https://${region}-${projectId}.cloudfunctions.net/getIaContext/${token}`;
+    return buildIaContextUrl(token, firebaseConfig);
   }
 
   /**

@@ -102,7 +102,7 @@ def print_firestore_update_commands(last_ids):
 if __name__ == "__main__":
     import sys
     
-    json_file = sys.argv[1] if len(sys.argv) > 1 else "planning-gamexp-default-rtdb-2-cleaned-fixed-cardids-fixed-refs.json"
+    json_file = sys.argv[1] if len(sys.argv) > 1 else "sample-default-rtdb-2-cleaned-fixed-cardids-fixed-refs.json"
     
     print(f"📂 Analizando: {json_file}")
     

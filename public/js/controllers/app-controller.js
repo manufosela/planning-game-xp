@@ -43,6 +43,7 @@ import { entityDirectoryService } from '../services/entity-directory-service.js'
 import { AppEventBus, AppEvents } from '../services/app-event-bus.js';
 import { database, auth, firebaseConfig, ref, set, get } from '../../firebase-config.js';
 import { modalService } from '../services/modal-service.js';
+import { buildIaContextUrl } from '../utils/firebase-project-utils.js';
 
 export class AppController {
   constructor() {
@@ -1014,9 +1015,7 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
   }
 
   _buildIaLinkUrl(token) {
-    const region = 'europe-west1';
-    const projectId = firebaseConfig?.projectId || 'planning-gamexp';
-    return `https://${region}-${projectId}.cloudfunctions.net/getIaContext/${token}`;
+    return buildIaContextUrl(token, firebaseConfig);
   }
 
   _generateSecureToken() {

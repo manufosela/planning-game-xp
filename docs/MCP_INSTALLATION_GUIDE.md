@@ -147,7 +147,7 @@ unzip -P <password> serviceAccountKey.zip -d ~/mcp-servers/planning-game/
 # 3. Instalar el MCP (global, funciona desde cualquier proyecto)
 claude mcp add planning-game --scope user \
   -e GOOGLE_APPLICATION_CREDENTIALS=$HOME/mcp-servers/planning-game/serviceAccountKey.json \
-  -e FIREBASE_DATABASE_URL=https://planning-gamexp-default-rtdb.europe-west1.firebasedatabase.app \
+  -e FIREBASE_DATABASE_URL=https://<your-project-id>-default-rtdb.europe-west1.firebasedatabase.app \
   -- node $HOME/mcp-servers/planning-game/index.js
 ```
 
@@ -202,7 +202,7 @@ Los MCPs se configuran en archivos JSON:
       "args": ["/home/usuario/mcp-servers/planning-game/index.js"],
       "env": {
         "GOOGLE_APPLICATION_CREDENTIALS": "/home/usuario/mcp-servers/planning-game/serviceAccountKey.json",
-        "FIREBASE_DATABASE_URL": "https://planning-gamexp-default-rtdb.europe-west1.firebasedatabase.app"
+        "FIREBASE_DATABASE_URL": "https://<your-project-id>-default-rtdb.europe-west1.firebasedatabase.app"
       }
     }
   }

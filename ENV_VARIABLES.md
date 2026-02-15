@@ -112,7 +112,7 @@ MS_FROM_EMAIL=noreply@tudominio.com
 ```bash
 # URL base de la aplicación (usada en emails de notificación)
 # NUNCA debe apuntar a localhost
-PUBLIC_APP_URL=https://planning-gamexp.web.app
+PUBLIC_APP_URL=https://<your-project-id>.web.app
 ```
 
 ### Portal de Soporte (REQUERIDA si se usa portal de incidencias)

@@ -69,7 +69,7 @@ Crea las tasks y ve implementándolas una a una.
 ### Endpoint
 
 ```
-POST https://europe-west1-planning-gamexp.cloudfunctions.net/createCard
+POST https://europe-west1-<your-project-id>.cloudfunctions.net/createCard
 ```
 
 ### Autenticación
@@ -134,7 +134,7 @@ Header `x-api-key` con el valor del secret `CREATE_CARD_API_KEY`.
 
 **Crear una task (formato User Story):**
 ```bash
-curl -X POST https://europe-west1-planning-gamexp.cloudfunctions.net/createCard \
+curl -X POST https://europe-west1-<your-project-id>.cloudfunctions.net/createCard \
   -H "x-api-key: ${CREATE_CARD_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
@@ -151,7 +151,7 @@ curl -X POST https://europe-west1-planning-gamexp.cloudfunctions.net/createCard 
 
 **Crear un bug (formato User Story):**
 ```bash
-curl -X POST https://europe-west1-planning-gamexp.cloudfunctions.net/createCard \
+curl -X POST https://europe-west1-<your-project-id>.cloudfunctions.net/createCard \
   -H "x-api-key: ${CREATE_CARD_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{

@@ -28,8 +28,8 @@ Options:
 
 Example:
   node scripts/unify-developer-names.js \
-    --input planning-gamexp-default-rtdb-export.json \
-    --output planning-gamexp-default-rtdb-export-normalized.json \
+    --input sample-default-rtdb-export.json \
+    --output sample-default-rtdb-export-normalized.json \
     --apply
 `);
 }

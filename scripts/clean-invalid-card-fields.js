@@ -82,7 +82,7 @@ function cleanCards(inputFile, outputFile) {
   fs.writeFileSync(output, JSON.stringify(data, null, 2), 'utf8');
   console.log(`\nCleaned data written to: ${output}`);
   console.log('\nImport command:');
-  console.log(`  firebase database:set /cards ${output} --project planning-gamexp\n`);
+  console.log(`  firebase database:set /cards ${output} --project <your-project-id>\n`);
 }
 
 // Main

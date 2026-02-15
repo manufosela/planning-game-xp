@@ -17,9 +17,6 @@ import fs from 'fs';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 
-// Configuration
-const FIREBASE_DATABASE_URL = process.env.FIREBASE_DATABASE_URL || 'https://planning-gamexp-default-rtdb.europe-west1.firebasedatabase.app';
-
 async function main() {
   const args = process.argv.slice(2);
 
@@ -31,11 +28,17 @@ async function main() {
     console.log('');
     console.log('Environment variables:');
     console.log('  GOOGLE_APPLICATION_CREDENTIALS - Path to service account JSON');
-    console.log('  FIREBASE_DATABASE_URL - Database URL (optional)');
+    console.log('  PUBLIC_FIREBASE_DATABASE_URL / FIREBASE_DATABASE_URL - Database URL');
+    console.log('  Or pass --db-url=<databaseURL>');
     process.exit(1);
   }
 
   const inputFile = args[0];
+  const dbUrlArg = args.find((arg) => arg.startsWith('--db-url='))?.split('=')[1];
+  const firebaseDatabaseUrl = dbUrlArg
+    || process.env.PUBLIC_FIREBASE_DATABASE_URL
+    || process.env.FIREBASE_DATABASE_URL
+    || process.env.DATABASE_URL;
   const dryRun = args.includes('--dry-run');
 
   // Check input file exists
@@ -53,6 +56,12 @@ async function main() {
     console.error('  2. Click "Generate new private key"');
     console.error('  3. Save the JSON file');
     console.error('  4. Run: export GOOGLE_APPLICATION_CREDENTIALS="/path/to/serviceAccountKey.json"');
+    process.exit(1);
+  }
+
+  if (!firebaseDatabaseUrl) {
+    console.error('Error: Firebase Database URL not set.');
+    console.error('Set PUBLIC_FIREBASE_DATABASE_URL/FIREBASE_DATABASE_URL or pass --db-url=<URL>.');
     process.exit(1);
   }
 
@@ -96,12 +105,12 @@ async function main() {
 
   // Initialize Firebase Admin
   console.log('Initializing Firebase Admin...');
-  console.log(`Database URL: ${FIREBASE_DATABASE_URL}`);
+  console.log(`Database URL: ${firebaseDatabaseUrl}`);
 
   try {
     initializeApp({
       credential: cert(process.env.GOOGLE_APPLICATION_CREDENTIALS),
-      databaseURL: FIREBASE_DATABASE_URL
+      databaseURL: firebaseDatabaseUrl
     });
   } catch (error) {
     console.error('Error initializing Firebase:', error.message);

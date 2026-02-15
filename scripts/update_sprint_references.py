@@ -170,14 +170,14 @@ def update_data(data):
 
 def main():
     print("Leyendo archivo original...")
-    with open("public/planning-gamexp-default-rtdb-export.json", "r", encoding="utf-8") as f:
+    with open("public/sample-default-rtdb-export.json", "r", encoding="utf-8") as f:
         data = json.load(f)
     
     print("\nActualizando y limpiando datos...")
     updated_data = update_data(data)
     
     print("\nGuardando archivo actualizado...")
-    with open("public/planning-gamexp-default-rtdb-export-modified.json", "w", encoding="utf-8") as f:
+    with open("public/sample-default-rtdb-export-modified.json", "w", encoding="utf-8") as f:
         json.dump(updated_data, f, indent=2, ensure_ascii=False)
     
     print("¡Proceso completado!")

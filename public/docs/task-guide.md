@@ -150,7 +150,7 @@ El enlace devuelve un JSON con:
 
 ```
 Fetch this URL to get the task context and implement it following the guidelines:
-https://europe-west1-planning-gamexp.cloudfunctions.net/getIaContext/{token}
+https://europe-west1-<your-project-id>.cloudfunctions.net/getIaContext/{token}
 ```
 
 4. La IA debería:

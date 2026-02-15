@@ -158,7 +158,7 @@ def clean_json_ids(input_file, output_file):
             count += 1
 
 if __name__ == '__main__':
-    input_file = 'data/planning-gamexp-tests-rtdb-BUGS_Extranet V2-export.json'
-    output_file = 'data/planning-gamexp-tests-rtdb-BUGS_Extranet V2-export.cleaned.json'
+    input_file = 'data/sample-tests-rtdb-BUGS_Extranet V2-export.json'
+    output_file = 'data/sample-tests-rtdb-BUGS_Extranet V2-export.cleaned.json'
     
     clean_json_ids(input_file, output_file)

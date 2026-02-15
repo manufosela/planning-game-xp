@@ -11,15 +11,27 @@ import admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 
 // Initialize Firebase Admin
-const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS ||
-  '/home/manu/mcp-servers/planning-game/serviceAccountKey.json';
+const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+const databaseURL =
+  process.env.PUBLIC_FIREBASE_DATABASE_URL ||
+  process.env.FIREBASE_DATABASE_URL ||
+  process.env.DATABASE_URL;
+
+if (!serviceAccountPath) {
+  console.error('Missing GOOGLE_APPLICATION_CREDENTIALS environment variable');
+  process.exit(1);
+}
+
+if (!databaseURL) {
+  console.error('Missing PUBLIC_FIREBASE_DATABASE_URL/FIREBASE_DATABASE_URL environment variable');
+  process.exit(1);
+}
 
 try {
   const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    databaseURL: process.env.FIREBASE_DATABASE_URL ||
-      'https://planning-gamexp-default-rtdb.europe-west1.firebasedatabase.app'
+    databaseURL
   });
 } catch (e) {
   console.error('Failed to initialize Firebase:', e.message);

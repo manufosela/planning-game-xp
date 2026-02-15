@@ -147,7 +147,7 @@ jobs:
   review:
     uses: your-org/.github/.github/workflows/ai-pr-review.yml@main
     with:
-      prompt_url: "https://planning-gamexp-default-rtdb.europe-west1.firebasedatabase.app/globalConfigs/prompts/<ID>.json"
+      prompt_url: "https://<your-project-id>-default-rtdb.europe-west1.firebasedatabase.app/globalConfigs/prompts/<ID>.json"
     secrets:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```

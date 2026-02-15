@@ -111,9 +111,9 @@ def main():
     print("🔍 Validando integridad de los datos limpios...\n")
     
     # Cargar JSONs
-    original = load_json('planning-gamexp-default-rtdb.json')
-    cleaned = load_json('planning-gamexp-default-rtdb-cleaned.json')
-    history = load_json('planning-gamexp-default-rtdb-history.json')
+    original = load_json('sample-default-rtdb.json')
+    cleaned = load_json('sample-default-rtdb-cleaned.json')
+    history = load_json('sample-default-rtdb-history.json')
     
     # Contar tarjetas
     original_cards = count_cards(original)

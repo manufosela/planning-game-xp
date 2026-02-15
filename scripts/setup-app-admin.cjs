@@ -18,6 +18,8 @@
  */
 
 const admin = require('firebase-admin');
+const path = require('path');
+const { resolveDatabaseUrl, loadDatabaseUrlFromEnvFiles } = require('./firebase-db-url-helper.cjs');
 
 // Encode email for Firebase key
 function encodeEmailForFirebase(email) {
@@ -28,7 +30,7 @@ function encodeEmailForFirebase(email) {
     .replace(/#/g, '-');
 }
 
-async function setupAppAdmin(email) {
+async function setupAppAdmin(email, cliDatabaseUrl) {
   if (!email || !email.includes('@')) {
     console.error('❌ Error: Se requiere un email válido');
     console.log('\nUso: node scripts/setup-app-admin.cjs <email>');
@@ -37,12 +39,19 @@ async function setupAppAdmin(email) {
   }
 
   const normalizedEmail = email.toLowerCase().trim();
+  const databaseURL = resolveDatabaseUrl({ cliArg: cliDatabaseUrl }) ||
+    loadDatabaseUrlFromEnvFiles(path.join(__dirname, '..'));
+  if (!databaseURL) {
+    console.error('❌ Error: falta PUBLIC_FIREBASE_DATABASE_URL/FIREBASE_DATABASE_URL.');
+    console.log('Puedes pasarlo como 2º argumento: node scripts/setup-app-admin.cjs <email> <databaseURL>');
+    process.exit(1);
+  }
   console.log(`\n🔧 Configurando App Admin: ${normalizedEmail}\n`);
 
   // Initialize Firebase Admin
   try {
     admin.initializeApp({
-      databaseURL: 'https://planning-gamexp-default-rtdb.europe-west1.firebasedatabase.app'
+      databaseURL
     });
     console.log('✅ Firebase Admin inicializado');
   } catch (error) {
@@ -99,4 +108,5 @@ async function setupAppAdmin(email) {
 
 // Get email from command line
 const email = process.argv[2];
-setupAppAdmin(email);
+const cliDatabaseUrl = process.argv[3];
+setupAppAdmin(email, cliDatabaseUrl);

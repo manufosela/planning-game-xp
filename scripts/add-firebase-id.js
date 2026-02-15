@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-const inputPath = process.argv[2] || 'data/planning-gamexp-default-rtdb-export.json';
-const outputPath = process.argv[3] || 'data/planning-gamexp-default-rtdb-export.with-ids.json';
+const inputPath = process.argv[2] || 'data/sample-default-rtdb-export.json';
+const outputPath = process.argv[3] || 'data/sample-default-rtdb-export.with-ids.json';
 
 const loadJson = (filePath) => JSON.parse(fs.readFileSync(filePath, 'utf8'));
 
