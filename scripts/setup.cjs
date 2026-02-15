@@ -27,6 +27,9 @@ const { buildSetupBriefingLines, detectFirebaseCliInstalled } = require('./setup
 const { parseFirebaseWebConfigInput } = require('./firebase-web-config-parser.cjs');
 const { shouldFinalizeMultilineInput } = require('./multiline-input-helpers.cjs');
 const { formatStepHeader } = require('./setup-ui-formatters.cjs');
+const { collectMultilineInput } = require('./readline-multiline.cjs');
+const { checkFirestoreEnabled } = require('./firestore-status-checker.cjs');
+const { checkFunctionsEnabled } = require('./functions-status-checker.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -97,20 +100,16 @@ class SetupWizard {
     this.print(prompt);
     this.print('Pega el bloque y pulsa Enter en una línea vacía para continuar.');
     this.print(`(Opcional: también puedes escribir ${endToken} en una línea aparte)\n`);
-    const lines = [];
-    while (true) {
-      const line = await this.question('  >');
-      if (shouldFinalizeMultilineInput({
+    this.rl.setPrompt('  > ');
+    return collectMultilineInput(this.rl, {
+      endToken,
+      shouldFinalize: ({ line, lines, endToken: finalToken }) => shouldFinalizeMultilineInput({
         line,
         lines,
-        endToken,
+        endToken: finalToken,
         validator: parseFirebaseWebConfigInput,
-      })) {
-        break;
-      }
-      lines.push(line);
-    }
-    return lines.join('\n');
+      }),
+    });
   }
 
   print(msg) {
@@ -456,6 +455,7 @@ class SetupWizard {
     }
 
     await this.ensureRequiredFirebaseClientFields();
+    await this.verifyRequiredFirebaseServices();
 
     const superAdminEmail = await this.question(
       `  ${ENV_TEMPLATE.client.find(i => i.key === 'PUBLIC_SUPER_ADMIN_EMAIL').desc} *`,
@@ -494,6 +494,50 @@ class SetupWizard {
       const desc = item?.desc || key;
       const value = await this.question(`  ${desc} *`);
       this.config.client[key] = value;
+    }
+  }
+
+  async verifyRequiredFirebaseServices() {
+    const projectId = this.config.client.PUBLIC_FIREBASE_PROJECT_ID;
+    if (!projectId) return;
+
+    this.print('\nVerificando servicios requeridos en Firebase...');
+
+    const firestore = checkFirestoreEnabled(projectId);
+    if (firestore.enabled === true) {
+      this.print('  ✅ Firestore habilitado');
+    } else if (firestore.enabled === false) {
+      this.print('  ⚠️  Firestore no está habilitado en este proyecto.');
+      this.print('     Actívalo en: Firebase Console → Firestore Database → Create database');
+    } else {
+      this.print('  ⚠️  No se pudo verificar Firestore automáticamente.');
+      if (firestore.reason) {
+        this.print(`     Motivo: ${firestore.reason.split('\n')[0]}`);
+      }
+    }
+
+    const functions = checkFunctionsEnabled(projectId);
+    if (functions.enabled === true) {
+      this.print('  ✅ Cloud Functions habilitadas');
+    } else if (functions.enabled === false) {
+      this.print('  ⚠️  Cloud Functions API no está habilitada en este proyecto.');
+      this.print('     Actívala en: Google Cloud Console → APIs & Services → Cloud Functions API');
+      if (functions.reason) {
+        this.print(`     Motivo: ${functions.reason.split('\n')[0]}`);
+      }
+    } else {
+      this.print('  ⚠️  No se pudo verificar Cloud Functions automáticamente.');
+      if (functions.reason) {
+        this.print(`     Motivo: ${functions.reason.split('\n')[0]}`);
+      }
+    }
+
+    const missingRequired = [firestore.enabled, functions.enabled].includes(false);
+    if (missingRequired) {
+      const continueAnyway = await this.confirm('¿Quieres continuar de todos modos?', false);
+      if (!continueAnyway) {
+        throw new Error('Setup detenido para habilitar servicios de Firebase requeridos.');
+      }
     }
   }
 
