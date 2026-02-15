@@ -25,6 +25,8 @@ const { KjInstanceManager } = require('./kj-instance-manager.cjs');
 const { detectExistingState } = require('./setup-existing-state.cjs');
 const { buildSetupBriefingLines, detectFirebaseCliInstalled } = require('./setup-briefing.cjs');
 const { parseFirebaseWebConfigInput } = require('./firebase-web-config-parser.cjs');
+const { shouldFinalizeMultilineInput } = require('./multiline-input-helpers.cjs');
+const { formatStepHeader } = require('./setup-ui-formatters.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -49,6 +51,15 @@ const ENV_TEMPLATE = {
     { key: 'MS_FROM_EMAIL', desc: 'Email remitente para notificaciones', required: false },
   ]
 };
+const REQUIRED_FIREBASE_CLIENT_KEYS = [
+  'PUBLIC_FIREBASE_API_KEY',
+  'PUBLIC_FIREBASE_AUTH_DOMAIN',
+  'PUBLIC_FIREBASE_DATABASE_URL',
+  'PUBLIC_FIREBASE_PROJECT_ID',
+  'PUBLIC_FIREBASE_STORAGE_BUCKET',
+  'PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+  'PUBLIC_FIREBASE_APP_ID',
+];
 
 class SetupWizard {
   constructor() {
@@ -84,11 +95,19 @@ class SetupWizard {
 
   async questionMultiline(prompt, endToken = 'END') {
     this.print(prompt);
-    this.print(`Pega el bloque y termina con una línea que contenga solo ${endToken}.\n`);
+    this.print('Pega el bloque y pulsa Enter en una línea vacía para continuar.');
+    this.print(`(Opcional: también puedes escribir ${endToken} en una línea aparte)\n`);
     const lines = [];
     while (true) {
       const line = await this.question('  >');
-      if (line.trim() === endToken) break;
+      if (shouldFinalizeMultilineInput({
+        line,
+        lines,
+        endToken,
+        validator: parseFirebaseWebConfigInput,
+      })) {
+        break;
+      }
       lines.push(line);
     }
     return lines.join('\n');
@@ -105,7 +124,9 @@ class SetupWizard {
   }
 
   printStep(step, total, description) {
-    console.log(`\n[${step}/${total}] ${description}\n`);
+    console.log('');
+    formatStepHeader(step, total, description).forEach((line) => console.log(line));
+    console.log('');
   }
 
   async run() {
@@ -434,6 +455,8 @@ class SetupWizard {
       await this.collectFirebaseConfigManually();
     }
 
+    await this.ensureRequiredFirebaseClientFields();
+
     const superAdminEmail = await this.question(
       `  ${ENV_TEMPLATE.client.find(i => i.key === 'PUBLIC_SUPER_ADMIN_EMAIL').desc} *`,
       this.config.client.PUBLIC_SUPER_ADMIN_EMAIL || ''
@@ -446,7 +469,11 @@ class SetupWizard {
   }
 
   async collectFirebaseConfigManually() {
-    for (const item of ENV_TEMPLATE.client) {
+    const firebaseItems = ENV_TEMPLATE.client.filter((item) =>
+      item.key.startsWith('PUBLIC_FIREBASE_')
+    );
+
+    for (const item of firebaseItems) {
       const currentValue = this.config.client[item.key] || item.default || '';
       const value = await this.question(`  ${item.desc}${item.required ? ' *' : ''}`, currentValue);
       if (item.required && !value) {
@@ -456,6 +483,17 @@ class SetupWizard {
       } else {
         this.config.client[item.key] = value;
       }
+    }
+  }
+
+  async ensureRequiredFirebaseClientFields() {
+    for (const key of REQUIRED_FIREBASE_CLIENT_KEYS) {
+      const hasValue = String(this.config.client[key] || '').trim().length > 0;
+      if (hasValue) continue;
+      const item = ENV_TEMPLATE.client.find((entry) => entry.key === key);
+      const desc = item?.desc || key;
+      const value = await this.question(`  ${desc} *`);
+      this.config.client[key] = value;
     }
   }
 

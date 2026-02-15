@@ -15,7 +15,9 @@ describe('setup-briefing', () => {
     const uniqueLengths = new Set(lines.map((line) => line.length));
 
     expect(uniqueLengths.size).toBe(1);
-    expect(lines.some((line) => line.includes('✅ Firebase CLI instalado'))).toBe(true);
+    expect(lines.some((line) => line.includes('✓ Firebase CLI instalado'))).toBe(true);
+    expect(lines.some((line) => line.includes('=== OBLIGATORIO ==='))).toBe(true);
+    expect(lines.some((line) => line.includes('=== DECISIONES ==='))).toBe(true);
     expect(lines.some((line) => line.includes('Google / Microsoft / GitHub / GitLab'))).toBe(true);
     expect(lines.some((line) => line.includes('PRE recomendado'))).toBe(false);
   });

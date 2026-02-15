@@ -1,7 +1,6 @@
 const REQUIRED_KEYS = [
   'apiKey',
   'authDomain',
-  'databaseURL',
   'projectId',
   'storageBucket',
   'messagingSenderId',
@@ -41,6 +40,32 @@ function parseObject(rawInput) {
   }
 }
 
+function extractKnownPairs(rawInput) {
+  const text = String(rawInput || '');
+  const keys = [
+    'apiKey',
+    'authDomain',
+    'databaseURL',
+    'projectId',
+    'storageBucket',
+    'messagingSenderId',
+    'appId',
+    'measurementId',
+  ];
+  const extracted = {};
+
+  for (const key of keys) {
+    const quotedKeyRegex = new RegExp(`["']${key}["']\\s*:\\s*["']([^"']+)["']`);
+    const bareKeyRegex = new RegExp(`${key}\\s*:\\s*["']([^"']+)["']`);
+    const match = text.match(quotedKeyRegex) || text.match(bareKeyRegex);
+    if (match?.[1]) {
+      extracted[key] = match[1];
+    }
+  }
+
+  return extracted;
+}
+
 function ensureRequiredKeys(config) {
   const missing = REQUIRED_KEYS.filter((key) => !String(config?.[key] || '').trim());
   if (missing.length > 0) {
@@ -49,7 +74,16 @@ function ensureRequiredKeys(config) {
 }
 
 function parseFirebaseWebConfigInput(rawInput) {
-  const config = parseObject(rawInput);
+  let parsedConfig = {};
+  try {
+    parsedConfig = parseObject(rawInput);
+  } catch {
+    // Ignore and try best-effort extraction below
+  }
+  const config = {
+    ...parsedConfig,
+    ...extractKnownPairs(rawInput),
+  };
   ensureRequiredKeys(config);
 
   return {

@@ -9,7 +9,6 @@ describe('parseFirebaseWebConfigInput', () => {
     const input = JSON.stringify({
       apiKey: 'api-key',
       authDomain: 'my-project.firebaseapp.com',
-      databaseURL: 'https://my-project-default-rtdb.europe-west1.firebasedatabase.app',
       projectId: 'my-project',
       storageBucket: 'my-project.firebasestorage.app',
       messagingSenderId: '123456',
@@ -21,6 +20,7 @@ describe('parseFirebaseWebConfigInput', () => {
 
     expect(env.PUBLIC_FIREBASE_API_KEY).toBe('api-key');
     expect(env.PUBLIC_FIREBASE_PROJECT_ID).toBe('my-project');
+    expect(env.PUBLIC_FIREBASE_DATABASE_URL).toBe('');
     expect(env.PUBLIC_FIREBASE_MEASUREMENT_ID).toBe('G-ABCD1234');
   });
 
@@ -29,7 +29,6 @@ describe('parseFirebaseWebConfigInput', () => {
       const firebaseConfig = {
         apiKey: "api-key",
         authDomain: "my-project.firebaseapp.com",
-        databaseURL: "https://my-project-default-rtdb.europe-west1.firebasedatabase.app",
         projectId: "my-project",
         storageBucket: "my-project.firebasestorage.app",
         messagingSenderId: "123456",
@@ -41,6 +40,7 @@ describe('parseFirebaseWebConfigInput', () => {
 
     expect(env.PUBLIC_FIREBASE_API_KEY).toBe('api-key');
     expect(env.PUBLIC_FIREBASE_PROJECT_ID).toBe('my-project');
+    expect(env.PUBLIC_FIREBASE_DATABASE_URL).toBe('');
     expect(env.PUBLIC_FIREBASE_MEASUREMENT_ID).toBe('');
   });
 
@@ -51,5 +51,21 @@ describe('parseFirebaseWebConfigInput', () => {
     });
 
     expect(() => parseFirebaseWebConfigInput(input)).toThrow('Faltan claves requeridas');
+  });
+
+  it('should recover values from loose key-value snippet without full object', () => {
+    const input = `
+      apiKey: "api-key",
+      authDomain: "my-project.firebaseapp.com",
+      projectId: "my-project",
+      storageBucket: "my-project.firebasestorage.app",
+      messagingSenderId: "123456",
+      appId: "1:123456:web:abcd"
+    `;
+
+    const env = parseFirebaseWebConfigInput(input);
+
+    expect(env.PUBLIC_FIREBASE_API_KEY).toBe('api-key');
+    expect(env.PUBLIC_FIREBASE_PROJECT_ID).toBe('my-project');
   });
 });

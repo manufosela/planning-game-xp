@@ -34,9 +34,9 @@ function box(contentLines, width = 72, title = 'PLANNING GAME XP - SETUP WIZARD'
 }
 
 function buildSetupBriefingLines({ firebaseCliInstalled = false, repoUrl = '' } = {}) {
-  const cliMark = firebaseCliInstalled ? '✅' : '☐';
+  const cliMark = firebaseCliInstalled ? '✓' : '☐';
   const lines = [
-    ' OBLIGATORIO:',
+    ' === OBLIGATORIO ===',
     '  ☐ Proyecto Firebase creado',
     `  ${cliMark} Firebase CLI instalado`,
     '  ☐ Auth de Firebase habilitada',
@@ -44,7 +44,7 @@ function buildSetupBriefingLines({ firebaseCliInstalled = false, repoUrl = '' } 
     '  Crear proyecto: https://console.firebase.google.com/',
     '  Auth (setup): https://firebase.google.com/docs/auth/web/start',
     '',
-    ' DECISIONES:',
+    ' === DECISIONES ===',
     '  1. Proveedor de autenticación (Google / Microsoft / GitHub / GitLab)',
     '  2. Nombre de organización',
     '  3. Notificaciones (solo push o push + email)',
