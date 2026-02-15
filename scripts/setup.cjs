@@ -46,6 +46,7 @@ const {
 } = require('./firebase-rtdb-target-helper.cjs');
 const { shouldClearInstallState } = require('./setup-flow-helper.cjs');
 const { ensureRequiredFirebaseRuleFiles } = require('./firebase-rules-files-helper.cjs');
+const { ensureFunctionsDependencies } = require('./functions-deploy-prep-helper.cjs');
 const {
   buildGcloudAdcPrintTokenCommand,
   buildGcloudAdcLoginCommand,
@@ -941,6 +942,10 @@ class SetupWizard {
       execSync(deployCommands.rules, { stdio: 'inherit', cwd: ROOT_DIR });
 
       this.print('\n  Desplegando Cloud Functions...');
+      const functionsPrep = ensureFunctionsDependencies(ROOT_DIR);
+      if (functionsPrep.installed) {
+        this.print('  ✅ Dependencias de functions instaladas automáticamente.');
+      }
       execSync(deployCommands.functions, { stdio: 'inherit', cwd: ROOT_DIR });
 
       this.print('\n  Construyendo aplicación...');
