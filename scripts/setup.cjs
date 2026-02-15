@@ -301,7 +301,7 @@ class SetupWizard {
     }
 
     this.print('Instancias existentes:\n');
-    instances.forEach((inst, idx) => this.print(`  ${idx + 1}. ${inst.name} (${inst.directory})`));
+    instances.forEach((inst, idx) => this.print(`  ${idx + 1}. ${this.formatAppInstanceLabel(inst)}`));
     this.print('\nOpciones:');
     this.print('  1. Usar una instancia existente (recomendado, se actualizará automáticamente)');
     this.print('  2. Crear nueva instancia');
@@ -371,10 +371,22 @@ class SetupWizard {
 
   async selectAppInstance(instances) {
     if (!instances.length) return null;
+    if (instances.length === 1) {
+      const only = instances[0];
+      this.print(`Instancia seleccionada automáticamente: ${this.formatAppInstanceLabel(only)}`);
+      return only;
+    }
     const choice = await this.question(`Selecciona instancia [1-${instances.length}]`, '1');
     const index = Number.parseInt(choice, 10);
     if (!Number.isInteger(index) || index < 1 || index > instances.length) return null;
     return instances[index - 1];
+  }
+
+  formatAppInstanceLabel(instance) {
+    const name = instance?.name || 'unnamed';
+    const projectId = instance?.firebaseProjectId ? `project=${instance.firebaseProjectId}` : 'project=(pendiente)';
+    const directory = instance?.directory || '';
+    return `${name} [${projectId}] ${directory}`;
   }
 
   async launchSetupInInstance(instanceDir) {
