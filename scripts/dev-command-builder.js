@@ -9,8 +9,10 @@ export function buildDevInnerCommand({
   ].join(' && ');
 }
 
-export function buildEmulatorsExecCommand(innerCommand) {
-  return `firebase emulators:exec --only firestore,database,storage,ui "${innerCommand}"`;
+export function buildEmulatorsExecCommand(innerCommand, options = {}) {
+  const configPath = String(options.configPath || '').trim();
+  const configPart = configPath ? ` --config "${configPath}"` : '';
+  return `firebase emulators:exec${configPart} --only firestore,database,storage,ui "${innerCommand}"`;
 }
 
 export function shouldUseEmulatorsByDefault(runtimeEnv, allowEmulators, emulatorsQueryParam) {
@@ -27,4 +29,3 @@ export function shouldUseEmulatorsByDefault(runtimeEnv, allowEmulators, emulator
 
   return true;
 }
-

@@ -24,6 +24,11 @@ describe('dev-command-builder', () => {
     expect(wrapped).toContain('--only firestore,database,storage,ui');
   });
 
+  it('should include --config when config path is provided', () => {
+    const wrapped = buildEmulatorsExecCommand('echo hello', { configPath: '/tmp/fb.json' });
+    expect(wrapped).toContain('--config "/tmp/fb.json"');
+  });
+
   it('should auto-enable emulators for dev runtime', () => {
     expect(shouldUseEmulatorsByDefault('dev', true, null)).toBe(true);
     expect(shouldUseEmulatorsByDefault('dev', true, 'false')).toBe(false);
