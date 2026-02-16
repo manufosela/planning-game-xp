@@ -3,6 +3,7 @@ import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/fireb
 import { database, app, vapidKey } from '../../firebase-config.js';
 import { sanitizeEmailForFirebase } from '../utils/email-sanitizer.js';
 import { entityDirectoryService } from './entity-directory-service.js';
+import { shouldSetupPushToken } from '../utils/push-runtime-helper.js';
 
 class PushNotificationService {
     constructor() {
@@ -26,7 +27,10 @@ class PushNotificationService {
             
             // Solicitar permisos de notificación
             const permission = await Notification.requestPermission();
-            if (permission === 'granted') {
+            if (shouldSetupPushToken({
+              firebaseUseEmulators: Boolean(window.firebaseUseEmulators),
+              permission,
+            })) {
               await this.setupFCMToken();
             }
 

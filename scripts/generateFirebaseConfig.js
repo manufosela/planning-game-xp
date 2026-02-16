@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { resolveFirebaseWebEmulatorRuntime } from './firebase-emulator-runtime-helper.js';
 
 /**
  * Genera los archivos de configuración de Firebase en la carpeta public.
@@ -15,6 +16,14 @@ export function generateFirebaseConfig(env) {
     messagingSenderId: env.PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
     appId: env.PUBLIC_FIREBASE_APP_ID
   };
+
+  const emulatorRuntime = resolveFirebaseWebEmulatorRuntime(env);
+  const firestoreHost = emulatorRuntime.firestore.host;
+  const firestorePort = emulatorRuntime.firestore.port;
+  const databaseHost = emulatorRuntime.database.host;
+  const databasePort = emulatorRuntime.database.port;
+  const storageHost = emulatorRuntime.storage.host;
+  const storagePort = emulatorRuntime.storage.port;
 
   // Contenido de firebase-config.js
   const configContent = `
@@ -59,15 +68,17 @@ const useEmulators = (runtimeEnv === 'dev' && allowEmulators)
 
 // Emuladores: solo si se pasa ?emulators=true en la URL
 if (isDevelopment && allowEmulators && useEmulators && !window._emulatorsPreConnected) {
-  connectFirestoreEmulator(getFirestore(app), 'localhost', 8080);
-  connectDatabaseEmulator(getDatabase(app), 'localhost', 9000);
-  connectStorageEmulator(getStorage(app), 'localhost', 9199);
+  connectFirestoreEmulator(getFirestore(app), '${firestoreHost}', ${firestorePort});
+  connectDatabaseEmulator(getDatabase(app), '${databaseHost}', ${databasePort});
+  connectStorageEmulator(getStorage(app), '${storageHost}', ${storagePort});
   window._emulatorsPreConnected = true;
+  window.firebaseUseEmulators = true;
   window._connectedEmulators = ['Firestore', 'Realtime Database', 'Storage'];
   showEmulatorBar();
   console.log('🔧 Connected to Firebase Emulators: Firestore, Realtime Database, Storage');
 } else if (isDevelopment) {
   // Desarrollo normal: usar BBDD de tests, mostrar barra informativa
+  window.firebaseUseEmulators = false;
   showTestEnvironmentBar();
 }
 // En producción: no mostrar ninguna barra
@@ -116,7 +127,7 @@ function showEmulatorBar() {
   \`;
   bar.innerHTML = \`
     <span style="margin-right: 10px;">🔧 EMULADOR LOCAL</span>
-    <span style="opacity: 0.8; font-size: 12px;" title="Firestore: 8080 | Database: 9000 | Storage: 9199">
+    <span style="opacity: 0.8; font-size: 12px;" title="Firestore: ${firestorePort} | Database: ${databasePort} | Storage: ${storagePort}">
       (\${window._connectedEmulators ? window._connectedEmulators.join(', ') : 'Conectando...'})
     </span>
   \`;
