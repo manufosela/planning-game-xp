@@ -48,6 +48,7 @@ const { shouldClearInstallState } = require('./setup-flow-helper.cjs');
 const { ensureRequiredFirebaseRuleFiles } = require('./firebase-rules-files-helper.cjs');
 const { ensureFunctionsDependencies, hasBlockingAuditVulnerabilities } = require('./functions-deploy-prep-helper.cjs');
 const { enableRequiredProjectApis } = require('./firebase-api-enabler.cjs');
+const { extractMissingApiFromErrorText } = require('./firebase-api-error-parser.cjs');
 const {
   buildGcloudAdcPrintTokenCommand,
   buildGcloudAdcLoginCommand,
@@ -952,6 +953,7 @@ class SetupWizard {
           'cloudbuild.googleapis.com',
           'artifactregistry.googleapis.com',
           'firebaseextensions.googleapis.com',
+          'secretmanager.googleapis.com',
         ],
       });
       if (apiEnable.enabled) {
@@ -1001,10 +1003,11 @@ class SetupWizard {
     } catch (error) {
       this.print(`\n  ❌ Error en el despliegue: ${error.message}`);
       const errText = String(error?.stderr || '') + '\n' + String(error?.stdout || '') + '\n' + String(error?.message || '');
-      if (errText.includes('firebaseextensions.googleapis.com') && errText.includes('403')) {
+      const missingApi = extractMissingApiFromErrorText(errText);
+      if (missingApi && errText.includes('403')) {
         const projectId = this.config.client['PUBLIC_FIREBASE_PROJECT_ID'];
-        this.print('  ⚠️  La API Firebase Extensions no está habilitada o no ha propagado permisos aún.');
-        this.print(`  Ejecuta: gcloud services enable firebaseextensions.googleapis.com --project ${projectId}`);
+        this.print(`  ⚠️  La API ${missingApi} no está habilitada o no ha propagado permisos aún.`);
+        this.print(`  Ejecuta: gcloud services enable ${missingApi} --project ${projectId}`);
         this.print('  Espera 2-5 minutos y reintenta el deploy.');
       }
       this.print('  Puedes intentar desplegar manualmente después.');
