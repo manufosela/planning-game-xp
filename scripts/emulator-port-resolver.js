@@ -27,6 +27,16 @@ export function applyEmulatorPorts(firebaseConfig, portsByEmulator) {
   return next;
 }
 
+export function normalizeConfigForEmulators(firebaseConfig) {
+  const next = JSON.parse(JSON.stringify(firebaseConfig || {}));
+  if (Array.isArray(next.database)) {
+    const emulatorRulesFile = 'database.emulator.rules';
+    const fallbackRules = next.database.find((entry) => entry?.rules)?.rules || 'database.rules.json';
+    next.database = { rules: emulatorRulesFile || fallbackRules };
+  }
+  return next;
+}
+
 export async function isPortAvailable(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
@@ -63,22 +73,25 @@ export async function resolveDynamicEmulatorPorts(preferredPorts) {
 
 export async function createRuntimeFirebaseConfig(rootDir) {
   const baseConfigPath = path.join(rootDir, 'firebase.json');
-  const config = JSON.parse(fs.readFileSync(baseConfigPath, 'utf8'));
+  const rawConfig = JSON.parse(fs.readFileSync(baseConfigPath, 'utf8'));
+  const config = normalizeConfigForEmulators(rawConfig);
   const preferred = getPreferredEmulatorPorts(config);
   const { resolved, changed } = await resolveDynamicEmulatorPorts(preferred);
+  const baseChanged = JSON.stringify(rawConfig) !== JSON.stringify(config);
+  const runtimeConfig = applyEmulatorPorts(config, resolved);
+  const runtimeChanged = baseChanged || changed;
 
-  if (!changed) {
+  if (!runtimeChanged) {
     return { configPath: null, cleanup: () => {}, ports: resolved, changed: false };
   }
 
-  const runtimeConfig = applyEmulatorPorts(config, resolved);
   const tmpFile = path.join(os.tmpdir(), `planning-game-firebase-${Date.now()}-${process.pid}.json`);
   fs.writeFileSync(tmpFile, JSON.stringify(runtimeConfig, null, 2), 'utf8');
 
   return {
     configPath: tmpFile,
     ports: resolved,
-    changed: true,
+    changed: runtimeChanged,
     cleanup: () => {
       try {
         fs.unlinkSync(tmpFile);

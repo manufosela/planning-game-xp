@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getPreferredEmulatorPorts,
   applyEmulatorPorts,
+  normalizeConfigForEmulators,
 } from '../../scripts/emulator-port-resolver.js';
 
 describe('emulator-port-resolver', () => {
@@ -36,5 +37,18 @@ describe('emulator-port-resolver', () => {
     expect(source.emulators.firestore.port).toBe(8080);
     expect(updated.emulators.firestore.port).toBe(18080);
     expect(updated.emulators.database.port).toBe(19001);
+  });
+
+  it('should normalize database targets to plain rules for emulator runtime', () => {
+    const source = {
+      database: [
+        { target: 'main', rules: 'database.rules.json' },
+        { target: 'tests', rules: 'database.test.rules.json' },
+      ],
+    };
+
+    const normalized = normalizeConfigForEmulators(source);
+    expect(Array.isArray(normalized.database)).toBe(false);
+    expect(normalized.database.rules).toBe('database.emulator.rules');
   });
 });
