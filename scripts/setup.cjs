@@ -47,6 +47,7 @@ const {
 const { shouldClearInstallState } = require('./setup-flow-helper.cjs');
 const { ensureRequiredFirebaseRuleFiles } = require('./firebase-rules-files-helper.cjs');
 const { ensureFunctionsDependencies, hasBlockingAuditVulnerabilities } = require('./functions-deploy-prep-helper.cjs');
+const { enableRequiredProjectApis } = require('./firebase-api-enabler.cjs');
 const {
   buildGcloudAdcPrintTokenCommand,
   buildGcloudAdcLoginCommand,
@@ -942,6 +943,26 @@ class SetupWizard {
       execSync(deployCommands.rules, { stdio: 'inherit', cwd: ROOT_DIR });
 
       this.print('\n  Desplegando Cloud Functions...');
+      this.print('  Habilitando APIs requeridas para Functions/Extensions...');
+      const apiEnable = enableRequiredProjectApis({
+        projectId,
+        accountEmail: this.config.firebaseCliAccount,
+        services: [
+          'cloudfunctions.googleapis.com',
+          'cloudbuild.googleapis.com',
+          'artifactregistry.googleapis.com',
+          'firebaseextensions.googleapis.com',
+        ],
+      });
+      if (apiEnable.enabled) {
+        this.print('  ✅ APIs habilitadas/verificadas.');
+      } else {
+        this.print('  ⚠️  No se pudieron habilitar APIs automáticamente con gcloud.');
+        if (apiEnable.reason) {
+          this.print(`     Motivo: ${apiEnable.reason.split('\n')[0]}`);
+        }
+      }
+
       const functionsPrep = ensureFunctionsDependencies(ROOT_DIR);
       if (functionsPrep.installed) {
         this.print('  ✅ Dependencias de functions instaladas automáticamente.');
