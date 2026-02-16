@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import path from 'node:path';
 import {
   getPreferredEmulatorPorts,
   applyEmulatorPorts,
   normalizeConfigForEmulators,
+  normalizeRulesPathsForRuntime,
 } from '../../scripts/emulator-port-resolver.js';
 
 describe('emulator-port-resolver', () => {
@@ -50,5 +52,24 @@ describe('emulator-port-resolver', () => {
     const normalized = normalizeConfigForEmulators(source);
     expect(Array.isArray(normalized.database)).toBe(false);
     expect(normalized.database.rules).toBe('database.emulator.rules');
+  });
+
+  it('should convert rules paths to absolute when using runtime config in tmp', () => {
+    const rootDir = '/workspace/planning-game-xp';
+    const source = {
+      firestore: { rules: 'firestore.rules' },
+      storage: { rules: 'storage.rules' },
+      database: { rules: 'database.emulator.rules' },
+      emulators: {
+        firestore: { rules: 'firestore.rules.dev' },
+        database: { rules: 'database.emulator.rules' },
+        storage: { rules: 'storage.emulator.rules' },
+      },
+    };
+
+    const normalized = normalizeRulesPathsForRuntime(source, rootDir);
+    expect(normalized.storage.rules).toBe(path.join(rootDir, 'storage.rules'));
+    expect(normalized.firestore.rules).toBe(path.join(rootDir, 'firestore.rules'));
+    expect(normalized.emulators.storage.rules).toBe(path.join(rootDir, 'storage.emulator.rules'));
   });
 });

@@ -5,6 +5,13 @@ import net from 'node:net';
 
 const EMULATOR_TARGETS = ['firestore', 'database', 'storage', 'ui'];
 
+function toAbsoluteRulePath(rulePath, rootDir) {
+  const value = String(rulePath || '').trim();
+  if (!value) return value;
+  if (path.isAbsolute(value)) return value;
+  return path.join(rootDir, value);
+}
+
 export function getPreferredEmulatorPorts(firebaseConfig) {
   const emulators = firebaseConfig?.emulators || {};
   const preferred = {};
@@ -34,6 +41,33 @@ export function normalizeConfigForEmulators(firebaseConfig) {
     const fallbackRules = next.database.find((entry) => entry?.rules)?.rules || 'database.rules.json';
     next.database = { rules: emulatorRulesFile || fallbackRules };
   }
+  return next;
+}
+
+export function normalizeRulesPathsForRuntime(firebaseConfig, rootDir) {
+  const next = JSON.parse(JSON.stringify(firebaseConfig || {}));
+  if (!rootDir) return next;
+
+  if (next.firestore?.rules) {
+    next.firestore.rules = toAbsoluteRulePath(next.firestore.rules, rootDir);
+  }
+  if (next.storage?.rules) {
+    next.storage.rules = toAbsoluteRulePath(next.storage.rules, rootDir);
+  }
+  if (next.database?.rules) {
+    next.database.rules = toAbsoluteRulePath(next.database.rules, rootDir);
+  }
+
+  if (next.emulators?.firestore?.rules) {
+    next.emulators.firestore.rules = toAbsoluteRulePath(next.emulators.firestore.rules, rootDir);
+  }
+  if (next.emulators?.database?.rules) {
+    next.emulators.database.rules = toAbsoluteRulePath(next.emulators.database.rules, rootDir);
+  }
+  if (next.emulators?.storage?.rules) {
+    next.emulators.storage.rules = toAbsoluteRulePath(next.emulators.storage.rules, rootDir);
+  }
+
   return next;
 }
 
@@ -74,7 +108,7 @@ export async function resolveDynamicEmulatorPorts(preferredPorts) {
 export async function createRuntimeFirebaseConfig(rootDir) {
   const baseConfigPath = path.join(rootDir, 'firebase.json');
   const rawConfig = JSON.parse(fs.readFileSync(baseConfigPath, 'utf8'));
-  const config = normalizeConfigForEmulators(rawConfig);
+  const config = normalizeRulesPathsForRuntime(normalizeConfigForEmulators(rawConfig), rootDir);
   const preferred = getPreferredEmulatorPorts(config);
   const { resolved, changed } = await resolveDynamicEmulatorPorts(preferred);
   const baseChanged = JSON.stringify(rawConfig) !== JSON.stringify(config);
@@ -101,3 +135,7 @@ export async function createRuntimeFirebaseConfig(rootDir) {
     },
   };
 }
+
+export {
+  toAbsoluteRulePath,
+};
