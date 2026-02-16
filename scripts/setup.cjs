@@ -50,6 +50,7 @@ const { ensureFunctionsDependencies, hasBlockingAuditVulnerabilities } = require
 const { enableRequiredProjectApis } = require('./firebase-api-enabler.cjs');
 const { extractMissingApiFromErrorText } = require('./firebase-api-error-parser.cjs');
 const { getMissingApiFromDeployError, shouldRetryFunctionsDeploy } = require('./deploy-retry-helper.cjs');
+const { attemptAiRescue } = require('./ai-rescue-helper.cjs');
 const {
   buildGcloudAdcPrintTokenCommand,
   buildGcloudAdcLoginCommand,
@@ -1048,6 +1049,21 @@ class SetupWizard {
         this.print(`  Ejecuta: gcloud services enable ${missingApi} --project ${projectId}`);
         this.print('  Espera 2-5 minutos y reintenta el deploy.');
       }
+
+      this.print('  Intentando rescate automático con IA...');
+      const rescue = attemptAiRescue({
+        step: 'PASO 8/10 · Despliegue inicial',
+        rootDir: ROOT_DIR,
+        errorText: errText,
+      });
+      if (rescue.attempted && rescue.success) {
+        this.print(`  ✅ Rescate IA ejecutado con ${rescue.cli}. Revisa los cambios y reintenta npm run setup.`);
+      } else if (rescue.attempted && !rescue.success) {
+        this.print(`  ⚠️  El rescate IA con ${rescue.cli} falló: ${rescue.reason}`);
+      } else {
+        this.print('  ℹ️  No se encontró CLI de IA disponible (claude/codex).');
+      }
+
       this.print('  Puedes intentar desplegar manualmente después.');
     }
   }
