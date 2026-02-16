@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 const {
   parseFirebaseAccounts,
+  parseActiveFirebaseAccount,
   appendFirebaseAccountFlag,
 } = await import('../../scripts/firebase-account-helper.cjs');
 
@@ -20,6 +21,16 @@ Logged in as user:
   it('should append --account when email is provided', () => {
     const cmd = appendFirebaseAccountFlag('firebase projects:list', 'pro@example.com');
     expect(cmd).toContain('--account pro@example.com');
+  });
+
+  it('should parse active account from firebase login:list output', () => {
+    const output = `
+Logged in as mfosela@geniova.com
+
+Other available accounts (switch with "firebase login:use")
+ - mjfosela@gmail.com
+`;
+    expect(parseActiveFirebaseAccount(output)).toBe('mfosela@geniova.com');
   });
 
   it('should keep command unchanged when account is empty', () => {

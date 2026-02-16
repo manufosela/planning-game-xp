@@ -33,7 +33,11 @@ const { collectMultilineInput } = require('./readline-multiline.cjs');
 const { checkFirestoreEnabled } = require('./firestore-status-checker.cjs');
 const { checkFunctionsEnabled } = require('./functions-status-checker.cjs');
 const { buildPreEnvironmentGuidance, shouldConfigurePreNowByDefault } = require('./pre-environment-guidance.cjs');
-const { parseFirebaseAccounts, appendFirebaseAccountFlag } = require('./firebase-account-helper.cjs');
+const {
+  parseFirebaseAccounts,
+  parseActiveFirebaseAccount,
+  appendFirebaseAccountFlag,
+} = require('./firebase-account-helper.cjs');
 const { buildDeployCommands } = require('./deploy-command-helper.cjs');
 const {
   setDefaultFirebaseProject,
@@ -579,18 +583,8 @@ class SetupWizard {
     this.print('Los encuentras en: Firebase Console → Project Settings → Your apps');
     this.print('Puedes introducirlos manualmente o pegar el bloque firebaseConfig.\n');
 
-    // Check if already logged in
-    try {
-      execSync(this.withFirebaseAccount('firebase projects:list'), { stdio: 'pipe' });
-      this.print('✅ Ya estás autenticado en Firebase\n');
-    } catch {
-      this.print('Necesitas autenticarte en Firebase...\n');
-      if (await this.confirm('¿Ejecutar firebase login?')) {
-        execSync('firebase login', { stdio: 'inherit' });
-      }
-    }
-
     await this.selectFirebaseCliAccount();
+    await this.ensureFirebaseCliSessionForSelectedAccount();
 
     this.print('¿Cómo quieres cargar la configuración de Firebase?');
     this.print('  1. Introducir valores uno a uno');
@@ -1182,6 +1176,57 @@ class SetupWizard {
       this.print(`  ✅ Cuenta Firebase seleccionada: ${this.config.firebaseCliAccount}`);
     } else {
       this.print('  ℹ️  Se usará la cuenta activa por defecto de Firebase CLI');
+    }
+  }
+
+  async ensureFirebaseCliSessionForSelectedAccount() {
+    const selectedAccount = String(this.config.firebaseCliAccount || '').trim();
+    let loginListOutput = '';
+
+    try {
+      loginListOutput = String(execSync('firebase login:list', { stdio: 'pipe', encoding: 'utf8' }) || '');
+    } catch {
+      loginListOutput = '';
+    }
+
+    const availableAccounts = parseFirebaseAccounts(loginListOutput);
+    const activeAccount = parseActiveFirebaseAccount(loginListOutput);
+
+    if (!selectedAccount) {
+      if (activeAccount) {
+        this.print(`✅ Firebase autenticado con cuenta activa: ${activeAccount}\n`);
+        return;
+      }
+
+      this.print('Necesitas autenticarte en Firebase...\n');
+      if (await this.confirm('¿Ejecutar firebase login?')) {
+        execSync('firebase login', { stdio: 'inherit' });
+      }
+      return;
+    }
+
+    if (!availableAccounts.includes(selectedAccount)) {
+      this.print(`⚠️  La cuenta seleccionada (${selectedAccount}) no está autenticada en Firebase CLI.`);
+      if (await this.confirm(`¿Autenticar ahora ${selectedAccount} con firebase login:add?`, true)) {
+        execSync('firebase login:add', { stdio: 'inherit' });
+      }
+    }
+
+    if (activeAccount && activeAccount !== selectedAccount) {
+      this.print(`  Cambiando cuenta activa de Firebase CLI: ${activeAccount} -> ${selectedAccount}`);
+      try {
+        execSync(`firebase login:use ${selectedAccount}`, { stdio: 'inherit', cwd: ROOT_DIR });
+      } catch (error) {
+        this.print(`  ⚠️  No se pudo cambiar la cuenta activa automáticamente: ${error.message}`);
+      }
+    }
+
+    try {
+      execSync(this.withFirebaseAccount('firebase projects:list'), { stdio: 'pipe', cwd: ROOT_DIR });
+      this.print(`✅ Firebase autenticado y validado para: ${selectedAccount}\n`);
+    } catch {
+      this.print(`⚠️  No se pudo validar acceso con la cuenta ${selectedAccount}.`);
+      this.print('   Revisa credenciales/permisos antes de continuar.\n');
     }
   }
 
