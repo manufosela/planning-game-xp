@@ -81,3 +81,12 @@ npm run test:coverage                           # 3. Verify coverage
 - Keep `.env.dev`, `.env.pre`, and `.env.pro` aligned; `npm run build` assumes production credentials.
 - Regenerate the service worker with `npm run generate-sw` whenever offline behavior changes.
 - Run `firebase use <your-project-id>` before emulating, and seed test data from `emulator-data/` when tests depend on fixtures.
+
+## Instance Setup Policy (Critical)
+- The repository root is a template/source; it must not be treated as a configured instance.
+- `npm run setup` must orchestrate instance creation from the local template content, not from remote `git clone`.
+- Instance data must live under `~/planning-game-instances/<instance-name>`.
+- Setup must generate real config files from examples/templates using user input (`.env*`, function env, branding/theme config, etc.) inside the selected instance.
+- Secrets must be configured per Firebase project (Secret Manager), never committed.
+- Multi-instance model is configuration-driven: different env/secrets/branding/projects on top of one codebase.
+- Avoid full per-instance repo workflows when not needed; prioritize single source + per-instance deploy context.

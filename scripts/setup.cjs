@@ -114,6 +114,8 @@ class SetupWizard {
       preClient: null,
       firebaseCliAccount: ''
     };
+    this.appInstance = null;
+    this.appInstanceDir = ROOT_DIR;
     this.mcpInstalled = false;
     this.mcpInstanceName = null;
   }
@@ -299,19 +301,22 @@ class SetupWizard {
   async ensureAppInstanceContext() {
     const appInstanceManager = new AppInstanceManager();
     if (appInstanceManager.isInstanceDirectory(ROOT_DIR)) {
+      this.appInstanceDir = ROOT_DIR;
       return true;
     }
 
     this.print('Este repositorio se trata como plantilla/base.');
-    this.print('Para evitar mezclar secretos/configuración, el setup se ejecuta dentro de una instancia.\n');
+    this.print('Para evitar mezclar secretos/configuración, el setup usará una instancia mínima de configuración.\n');
 
     const instances = appInstanceManager.listInstances();
     if (instances.length === 0) {
       this.print('No hay instancias de Planning Game creadas todavía.\n');
       const created = await this.createAppInstance(appInstanceManager);
       if (!created) return false;
-      await this.launchSetupInInstance(created.directory);
-      return false;
+      this.appInstance = created;
+      this.appInstanceDir = created.directory;
+      this.print(`✅ Instancia activa: ${this.formatAppInstanceLabel(created)}\n`);
+      return true;
     }
 
     this.print('Instancias existentes:\n');
@@ -324,14 +329,17 @@ class SetupWizard {
     const choice = await this.question('Selecciona [1-3]', '1');
     if (choice === '3') {
       this.print('⚠️  Continuando en repo plantilla por solicitud explícita.\n');
+      this.appInstanceDir = ROOT_DIR;
       return true;
     }
 
     if (choice === '2') {
       const created = await this.createAppInstance(appInstanceManager);
       if (!created) return false;
-      await this.launchSetupInInstance(created.directory);
-      return false;
+      this.appInstance = created;
+      this.appInstanceDir = created.directory;
+      this.print(`✅ Instancia activa: ${this.formatAppInstanceLabel(created)}\n`);
+      return true;
     }
 
     const selected = await this.selectAppInstance(instances);
@@ -342,14 +350,15 @@ class SetupWizard {
 
     try {
       appInstanceManager.updateInstance(selected.name);
-      this.print(`✅ Instancia "${selected.name}" actualizada.`);
+      this.print(`✅ Instancia "${selected.name}" preparada.`);
     } catch (error) {
-      this.print(`⚠️  No se pudo actualizar la instancia: ${error.message}`);
-      this.print('   Se lanzará setup con la versión actual de la instancia.');
+      this.print(`⚠️  No se pudo preparar la instancia: ${error.message}`);
     }
 
-    await this.launchSetupInInstance(selected.directory);
-    return false;
+    this.appInstance = selected;
+    this.appInstanceDir = selected.directory;
+    this.print(`✅ Instancia activa: ${this.formatAppInstanceLabel(selected)}\n`);
+    return true;
   }
 
   async createAppInstance(manager) {
@@ -378,7 +387,7 @@ class SetupWizard {
       return instance;
     } catch (error) {
       this.print(`\n❌ Error creando instancia: ${error.message}`);
-      this.print('Verifica acceso Git (SSH/HTTPS) y vuelve a intentarlo.\n');
+      this.print('Revisa permisos de escritura en ~/planning-game-instances y vuelve a intentarlo.\n');
       return null;
     }
   }
@@ -403,9 +412,51 @@ class SetupWizard {
     return `${name} [${projectId}] ${directory}`;
   }
 
-  async launchSetupInInstance(instanceDir) {
-    this.print(`\nRelanzando setup dentro de la instancia:\n  ${instanceDir}\n`);
-    execSync('npm run setup', { cwd: instanceDir, stdio: 'inherit' });
+  getActiveInstanceDir() {
+    return this.appInstanceDir || ROOT_DIR;
+  }
+
+  getActiveInstancePath(...segments) {
+    return path.join(this.getActiveInstanceDir(), ...segments);
+  }
+
+  getInstanceFunctionsEnvPath() {
+    return this.getActiveInstancePath('functions', '.env');
+  }
+
+  materializeInstanceConfigInTemplate() {
+    const overlays = [
+      { from: this.getActiveInstancePath('.firebaserc'), to: path.join(ROOT_DIR, '.firebaserc') },
+      { from: this.getActiveInstancePath('.env.dev'), to: path.join(ROOT_DIR, '.env.dev') },
+      { from: this.getActiveInstancePath('.env.pre'), to: path.join(ROOT_DIR, '.env.pre') },
+      { from: this.getActiveInstancePath('.env.prod'), to: path.join(ROOT_DIR, '.env.prod') },
+      { from: this.getInstanceFunctionsEnvPath(), to: path.join(ROOT_DIR, 'functions', '.env') },
+      { from: this.getActiveInstancePath('public', 'theme-config.json'), to: path.join(ROOT_DIR, 'public', 'theme-config.json') },
+    ];
+
+    const backups = [];
+    for (const overlay of overlays) {
+      if (!fs.existsSync(overlay.from)) continue;
+      const toExists = fs.existsSync(overlay.to);
+      backups.push({
+        to: overlay.to,
+        existed: toExists,
+        content: toExists ? fs.readFileSync(overlay.to, 'utf8') : null,
+      });
+      fs.mkdirSync(path.dirname(overlay.to), { recursive: true });
+      fs.copyFileSync(overlay.from, overlay.to);
+    }
+
+    return () => {
+      for (let idx = backups.length - 1; idx >= 0; idx--) {
+        const backup = backups[idx];
+        if (backup.existed) {
+          fs.writeFileSync(backup.to, backup.content, 'utf8');
+        } else if (fs.existsSync(backup.to)) {
+          fs.unlinkSync(backup.to);
+        }
+      }
+    };
   }
 
   async showSetupBriefing() {
@@ -422,7 +473,7 @@ class SetupWizard {
   // ─── Existing state detection ──────────────────────────────────────
 
   detectExistingState() {
-    return detectExistingState(ROOT_DIR);
+    return detectExistingState(this.getActiveInstanceDir());
   }
 
   async offerExistingSetupOptions(state) {
@@ -610,8 +661,8 @@ class SetupWizard {
     }
 
     await this.ensureRequiredFirebaseClientFields();
-    setDefaultFirebaseProject(ROOT_DIR, this.config.client.PUBLIC_FIREBASE_PROJECT_ID);
-    this.print(`  ✅ .firebaserc actualizado (default=${this.config.client.PUBLIC_FIREBASE_PROJECT_ID})`);
+    setDefaultFirebaseProject(this.getActiveInstanceDir(), this.config.client.PUBLIC_FIREBASE_PROJECT_ID);
+    this.print(`  ✅ .firebaserc de instancia actualizado (default=${this.config.client.PUBLIC_FIREBASE_PROJECT_ID})`);
     await this.verifyRequiredFirebaseServices();
 
     const superAdminEmail = await this.question(
@@ -739,9 +790,10 @@ class SetupWizard {
 
   async generateEnvFiles() {
     const environments = ['dev', 'pre', 'prod'];
+    const instanceDir = this.getActiveInstanceDir();
 
     for (const env of environments) {
-      const envPath = path.join(ROOT_DIR, `.env.${env}`);
+      const envPath = path.join(instanceDir, `.env.${env}`);
       let content = '# Firebase Configuration\n';
 
       const sourceConfig = env === 'pre' && this.config.preClient
@@ -764,11 +816,12 @@ class SetupWizard {
       }
 
       fs.writeFileSync(envPath, content);
-      this.print(`  ✅ Creado: .env.${env}`);
+      this.print(`  ✅ Creado: ${path.relative(instanceDir, envPath)}`);
     }
 
     // Functions .env
-    const functionsEnvPath = path.join(ROOT_DIR, 'functions', '.env');
+    const functionsEnvPath = this.getInstanceFunctionsEnvPath();
+    fs.mkdirSync(path.dirname(functionsEnvPath), { recursive: true });
     let functionsContent = '# Cloud Functions Environment\n';
     for (const [key, value] of Object.entries(this.config.functions)) {
       if (value) {
@@ -776,21 +829,26 @@ class SetupWizard {
       }
     }
     fs.writeFileSync(functionsEnvPath, functionsContent);
-    this.print(`  ✅ Creado: functions/.env`);
+    this.print('  ✅ Creado: functions/.env (instancia)');
 
     await this.updateThemeConfigOrgName();
   }
 
   async updateThemeConfigOrgName() {
-    const themePath = path.join(ROOT_DIR, 'public', 'theme-config.json');
-    if (!fs.existsSync(themePath)) return;
+    const sourceThemePath = path.join(ROOT_DIR, 'public', 'theme-config.json');
+    const instanceThemePath = this.getActiveInstancePath('public', 'theme-config.json');
+    if (!fs.existsSync(sourceThemePath)) return;
 
     try {
-      const theme = JSON.parse(fs.readFileSync(themePath, 'utf8'));
+      const baseContent = fs.existsSync(instanceThemePath)
+        ? fs.readFileSync(instanceThemePath, 'utf8')
+        : fs.readFileSync(sourceThemePath, 'utf8');
+      const theme = JSON.parse(baseContent);
       theme.branding = theme.branding || {};
       theme.branding.orgName = this.config.orgName || '';
-      fs.writeFileSync(themePath, JSON.stringify(theme, null, 2) + '\n');
-      this.print('  ✅ Actualizado public/theme-config.json (branding.orgName)');
+      fs.mkdirSync(path.dirname(instanceThemePath), { recursive: true });
+      fs.writeFileSync(instanceThemePath, JSON.stringify(theme, null, 2) + '\n');
+      this.print('  ✅ Actualizado public/theme-config.json en instancia (branding.orgName)');
     } catch (error) {
       this.print(`  ⚠️  No se pudo actualizar theme-config.json: ${error.message}`);
     }
@@ -859,7 +917,8 @@ class SetupWizard {
   }
 
   async persistFunctionEnvUpdates(values) {
-    const functionsEnvPath = path.join(ROOT_DIR, 'functions', '.env');
+    const functionsEnvPath = this.getInstanceFunctionsEnvPath();
+    fs.mkdirSync(path.dirname(functionsEnvPath), { recursive: true });
     let content = fs.existsSync(functionsEnvPath) ? fs.readFileSync(functionsEnvPath, 'utf8') : '# Cloud Functions Environment\n';
 
     for (const [key, value] of Object.entries(values)) {
@@ -873,7 +932,7 @@ class SetupWizard {
     }
 
     fs.writeFileSync(functionsEnvPath, content);
-    this.print('  ✅ functions/.env actualizado');
+    this.print('  ✅ functions/.env de instancia actualizado');
   }
 
   getConfiguredSecretValue(secretName) {
@@ -882,7 +941,7 @@ class SetupWizard {
       return String(fromConfig).trim();
     }
 
-    const functionsEnvPath = path.join(ROOT_DIR, 'functions', '.env');
+    const functionsEnvPath = this.getInstanceFunctionsEnvPath();
     if (fs.existsSync(functionsEnvPath)) {
       const envContent = fs.readFileSync(functionsEnvPath, 'utf8');
       const match = envContent.match(new RegExp(`^${secretName}=(.*)$`, 'm'));
@@ -940,6 +999,7 @@ class SetupWizard {
 
     const projectId = this.config.client['PUBLIC_FIREBASE_PROJECT_ID'];
     const deployCommands = buildDeployCommands(projectId, this.config.firebaseCliAccount);
+    const restoreTemplateConfig = this.materializeInstanceConfigInTemplate();
 
     try {
       this.print('\n  Seleccionando proyecto Firebase...');
@@ -953,7 +1013,7 @@ class SetupWizard {
       }
 
       const directMatch = isExpectedProjectInFirebaseUseOutput(useOutput, projectId);
-      const activeMatch = isActiveFirebaseProject(ROOT_DIR, projectId);
+      const activeMatch = isActiveFirebaseProject(this.getActiveInstanceDir(), projectId);
       if (!directMatch && !activeMatch) {
         throw new Error(`Proyecto activo distinto al esperado (${projectId}). Despliegue cancelado por seguridad.`);
       }
@@ -967,7 +1027,7 @@ class SetupWizard {
         });
         if (targetResult.instanceName) {
           ensureDatabaseTargetsInFirebaserc({
-            rootDir: ROOT_DIR,
+            rootDir: this.getActiveInstanceDir(),
             projectId,
             instanceName: targetResult.instanceName,
           });
@@ -978,8 +1038,8 @@ class SetupWizard {
           this.print('  ⚠️  No se pudieron configurar targets RTDB automáticamente (URL inválida).');
         }
 
-        const hasMain = hasDatabaseTargetConfigured({ rootDir: ROOT_DIR, projectId, targetName: 'main' });
-        const hasTests = hasDatabaseTargetConfigured({ rootDir: ROOT_DIR, projectId, targetName: 'tests' });
+        const hasMain = hasDatabaseTargetConfigured({ rootDir: this.getActiveInstanceDir(), projectId, targetName: 'main' });
+        const hasTests = hasDatabaseTargetConfigured({ rootDir: this.getActiveInstanceDir(), projectId, targetName: 'tests' });
         if (!hasMain || !hasTests) {
           throw new Error('No se pudieron persistir targets RTDB en .firebaserc');
         }
@@ -1131,6 +1191,8 @@ class SetupWizard {
       }
 
       this.print('  Puedes intentar desplegar manualmente después.');
+    } finally {
+      restoreTemplateConfig();
     }
   }
 

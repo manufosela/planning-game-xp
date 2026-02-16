@@ -8,21 +8,6 @@ const DEFAULT_INSTANCES_DIR = path.join(os.homedir(), 'planning-game-instances')
 const MANIFEST_FILE_NAME = 'app-instances.json';
 const INSTANCE_MARKER_FILE = '.planning-game-instance.json';
 const MANIFEST_SCHEMA_VERSION = 1;
-const INSTANCE_COPY_EXCLUDES = new Set([
-  '.git',
-  'node_modules',
-  '.astro',
-  'dist',
-  'coverage',
-  'test-results',
-  '.env',
-  '.env.dev',
-  '.env.pre',
-  '.env.prod',
-  '.env.test',
-  '.env.e2e',
-  'functions/.env',
-]);
 
 class AppInstanceManager {
   constructor(baseStateDir, instancesDir, deps = {}) {
@@ -80,26 +65,6 @@ class AppInstanceManager {
     return sourcePath;
   }
 
-  shouldExcludeFromCopy(relativePath) {
-    const rel = String(relativePath || '').replace(/\\/g, '/');
-    if (!rel) return false;
-    if (INSTANCE_COPY_EXCLUDES.has(rel)) return true;
-    for (const excluded of INSTANCE_COPY_EXCLUDES) {
-      if (rel.startsWith(`${excluded}/`)) return true;
-    }
-    return false;
-  }
-
-  copyRepoToInstance(sourceDir, targetDir) {
-    fs.cpSync(sourceDir, targetDir, {
-      recursive: true,
-      filter: (sourcePath) => {
-        const rel = path.relative(sourceDir, sourcePath);
-        return !this.shouldExcludeFromCopy(rel);
-      },
-    });
-  }
-
   createInstance(name, { baseRepoDir, sourceRepoUrl } = {}) {
     const validated = this.validateInstanceName(name);
     if (this.instanceExists(validated)) {
@@ -112,7 +77,9 @@ class AppInstanceManager {
     }
 
     fs.mkdirSync(this.instancesDir, { recursive: true });
-    this.copyRepoToInstance(source, targetDir);
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.mkdirSync(path.join(targetDir, 'functions'), { recursive: true });
+    fs.mkdirSync(path.join(targetDir, 'public'), { recursive: true });
     this.writeInstanceMarker(targetDir, { name: validated, sourceRepo: source });
 
     const manifest = this.loadManifest();
@@ -131,12 +98,9 @@ class AppInstanceManager {
   updateInstance(name) {
     const instance = this.findByName(name);
     if (!instance) throw new Error(`Instancia no encontrada: ${name}`);
-    const source = String(instance.sourceRepo || '').trim();
-    if (source && fs.existsSync(source) && fs.statSync(source).isDirectory()) {
-      this.copyRepoToInstance(source, instance.directory);
-    } else {
-      this._execSync('git pull --ff-only', { cwd: instance.directory, stdio: 'pipe' });
-    }
+    fs.mkdirSync(instance.directory, { recursive: true });
+    fs.mkdirSync(path.join(instance.directory, 'functions'), { recursive: true });
+    fs.mkdirSync(path.join(instance.directory, 'public'), { recursive: true });
 
     const manifest = this.loadManifest();
     manifest.instances[name].updatedAt = new Date().toISOString();

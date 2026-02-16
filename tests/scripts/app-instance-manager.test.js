@@ -42,8 +42,9 @@ describe('AppInstanceManager', () => {
 
     expect(instance.name).toBe('personal');
     expect(fs.existsSync(path.join(instance.directory, INSTANCE_MARKER_FILE))).toBe(true);
-    expect(fs.existsSync(path.join(instance.directory, 'package.json'))).toBe(true);
-    expect(fs.existsSync(path.join(instance.directory, 'node_modules'))).toBe(false);
+    expect(fs.existsSync(path.join(instance.directory, 'functions'))).toBe(true);
+    expect(fs.existsSync(path.join(instance.directory, 'public'))).toBe(true);
+    expect(fs.existsSync(path.join(instance.directory, 'package.json'))).toBe(false);
     expect(manager.instanceExists('personal')).toBe(true);
   });
 
@@ -61,7 +62,6 @@ describe('AppInstanceManager', () => {
   it('should update existing instance with git pull', () => {
     const instanceDir = path.join(instancesDir, 'personal');
     fs.mkdirSync(instanceDir, { recursive: true });
-    fs.writeFileSync(path.join(instanceDir, 'package.json'), '{}');
 
     const manifest = manager.loadManifest();
     manifest.instances.personal = {
@@ -74,7 +74,8 @@ describe('AppInstanceManager', () => {
     manager.saveManifest(manifest);
 
     manager.updateInstance('personal');
-    expect(fs.existsSync(path.join(instanceDir, 'scripts', 'setup.cjs'))).toBe(true);
+    expect(fs.existsSync(path.join(instanceDir, 'functions'))).toBe(true);
+    expect(fs.existsSync(path.join(instanceDir, 'public'))).toBe(true);
     expect(mockExecSync).not.toHaveBeenCalledWith('git pull --ff-only', expect.anything());
   });
 });
