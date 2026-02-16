@@ -3,29 +3,18 @@ import admin from 'firebase-admin';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { resolveRtdbEmulatorConfig } from './load-emulator-data-helper.js';
 
 // Para obtener __dirname en ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// --- Conexión con el emulador ---
-// Establece las variables de entorno para apuntar a los emuladores.
-// Es crucial hacer esto ANTES de inicializar la app.
-process.env.FIREBASE_DATABASE_EMULATOR_HOST = 'localhost:9001';
-// Si también usaras otros emuladores en el script, los añadirías aquí:
-// process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
-// process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
-// process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
-
-// --- Inicialización de Firebase Admin ---
-// Usamos el mismo projectId que la aplicación y especificamos el namespace correcto
-// Nota: El emulador en desarrollo usa el namespace de tests
-const emulatorProjectId = process.env.FIREBASE_EMULATOR_PROJECT_ID || 'planning-game-template';
-const emulatorNamespace = process.env.FIREBASE_EMULATOR_RTDB_NAMESPACE || `${emulatorProjectId}-tests-rtdb`;
+const emulatorConfig = resolveRtdbEmulatorConfig(process.env);
+process.env.FIREBASE_DATABASE_EMULATOR_HOST = emulatorConfig.host;
 
 admin.initializeApp({
-  projectId: emulatorProjectId,
-  databaseURL: `http://localhost:9001?ns=${emulatorNamespace}`
+  projectId: emulatorConfig.projectId,
+  databaseURL: emulatorConfig.databaseURL
 });
 
 // Obtén una referencia a la Realtime Database
