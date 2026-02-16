@@ -68,6 +68,7 @@ const {
 const { formatMcpInstanceLabel, buildMcpActionOptions } = require('./mcp-setup-helper.cjs');
 const { resolveInputPath, buildDefaultMcpUserIdentity } = require('./setup-input-helper.cjs');
 const { applyInstanceOverlays } = require('./instance-config-overlay.cjs');
+const { buildScopedSecretCommands } = require('./secret-command-helper.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -279,6 +280,7 @@ class SetupWizard {
     // Step 7: Email service (optional)
     this.printStep(7, totalSteps, 'Configuración de servicio de emails (opcional)');
     await this.configureEmailProvider();
+    await this.configureIaAcceptance();
 
     // Step 8: Deploy
     this.printStep(8, totalSteps, 'Despliegue inicial');
@@ -868,7 +870,13 @@ class SetupWizard {
 
     await this.persistFunctionEnvUpdates(secretsToSet);
 
-    const commands = helpers.buildSecretSetCommands(secretsToSet);
+    const commands = buildScopedSecretCommands(
+      helpers.buildSecretSetCommands(secretsToSet),
+      {
+        projectId: this.config.client.PUBLIC_FIREBASE_PROJECT_ID,
+        accountEmail: this.config.firebaseCliAccount,
+      }
+    );
     const useAutoSecrets = await this.confirm('¿Quieres configurar estos secretos automáticamente con Firebase CLI?', true);
 
     if (useAutoSecrets) {
@@ -883,6 +891,70 @@ class SetupWizard {
     } else {
       this.print('\nEjecuta estos comandos manualmente para guardar secretos:');
       commands.forEach(cmd => this.print(`  ${cmd}`));
+    }
+  }
+
+  async configureIaAcceptance() {
+    this.print('\nConfiguración IA para Acceptance Criteria y análisis de bugs.\n');
+    this.print('Esta funcionalidad requiere OpenAI API Key (secreto IA_API_KEY en Functions).');
+
+    const enableIa = await this.confirm('¿Quieres habilitar IA ahora?', true);
+    if (!enableIa) {
+      this.config.functions.IA_GLOBAL_ENABLE = 'false';
+      await this.persistFunctionEnvUpdates({ IA_GLOBAL_ENABLE: 'false' });
+      this.print('  ✅ IA deshabilitada por configuración (IA_GLOBAL_ENABLE=false)');
+      return;
+    }
+
+    let apiKey = await this.question('  OpenAI API Key (ej. sk-...)');
+    if (!apiKey) {
+      this.print('  ⚠️  Sin API key no se puede usar IA para Acceptance Criteria.');
+      const disableIa = await this.confirm('¿Deshabilitar IA por ahora?', true);
+      if (disableIa) {
+        this.config.functions.IA_GLOBAL_ENABLE = 'false';
+        await this.persistFunctionEnvUpdates({ IA_GLOBAL_ENABLE: 'false' });
+        this.print('  ✅ IA deshabilitada por configuración.');
+        return;
+      }
+      apiKey = await this.question('  OpenAI API Key (requerida para habilitar IA)');
+      if (!apiKey) {
+        this.config.functions.IA_GLOBAL_ENABLE = 'false';
+        await this.persistFunctionEnvUpdates({ IA_GLOBAL_ENABLE: 'false' });
+        this.print('  ✅ IA deshabilitada por falta de API key.');
+        return;
+      }
+    }
+
+    const iaSecrets = {
+      IA_GLOBAL_ENABLE: 'true',
+      IA_API_KEY: apiKey,
+    };
+    this.config.functions.IA_GLOBAL_ENABLE = 'true';
+    this.config.functions.IA_API_KEY = apiKey;
+    await this.persistFunctionEnvUpdates(iaSecrets);
+
+    const helpers = await import('./setup-wizard-helpers.js');
+    const commands = buildScopedSecretCommands(
+      helpers.buildSecretSetCommands(iaSecrets),
+      {
+        projectId: this.config.client.PUBLIC_FIREBASE_PROJECT_ID,
+        accountEmail: this.config.firebaseCliAccount,
+      }
+    );
+
+    const useAutoSecrets = await this.confirm('¿Configurar secretos IA automáticamente con Firebase CLI?', true);
+    if (useAutoSecrets) {
+      for (const command of commands) {
+        try {
+          execSync(command, { stdio: 'inherit', cwd: ROOT_DIR, shell: '/bin/bash' });
+        } catch (error) {
+          this.print(`  ⚠️  Error configurando secreto IA. Puedes ejecutarlo manualmente: ${command}`);
+        }
+      }
+      this.print('  ✅ Secretos IA configurados (si Firebase CLI estaba autenticado)');
+    } else {
+      this.print('\nEjecuta estos comandos manualmente para secretos IA:');
+      commands.forEach((cmd) => this.print(`  ${cmd}`));
     }
   }
 
