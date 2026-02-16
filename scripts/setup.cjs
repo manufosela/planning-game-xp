@@ -49,6 +49,7 @@ const { ensureRequiredFirebaseRuleFiles } = require('./firebase-rules-files-help
 const { ensureFunctionsDependencies, hasBlockingAuditVulnerabilities } = require('./functions-deploy-prep-helper.cjs');
 const { enableRequiredProjectApis } = require('./firebase-api-enabler.cjs');
 const { extractMissingApiFromErrorText } = require('./firebase-api-error-parser.cjs');
+const { getMissingApiFromDeployError, shouldRetryFunctionsDeploy } = require('./deploy-retry-helper.cjs');
 const {
   buildGcloudAdcPrintTokenCommand,
   buildGcloudAdcLoginCommand,
@@ -975,22 +976,59 @@ class SetupWizard {
       if (hasBlockingAuditVulnerabilities(functionsPrep.auditAfter)) {
         this.print('  ⚠️  Siguen vulnerabilidades MODERATE/HIGH/CRITICAL en functions tras audit fix.');
       }
-      try {
-        const functionsOutput = String(execSync(deployCommands.functions, {
-          stdio: 'pipe',
-          cwd: ROOT_DIR,
-          encoding: 'utf8',
-          maxBuffer: 1024 * 1024 * 20,
-        }) || '');
-        if (functionsOutput.trim()) {
-          this.print(functionsOutput.trim());
+      const maxFunctionsDeployAttempts = 3;
+      let functionsDeployed = false;
+      let lastFunctionsError = null;
+
+      for (let attempt = 1; attempt <= maxFunctionsDeployAttempts; attempt++) {
+        try {
+          const functionsOutput = String(execSync(deployCommands.functions, {
+            stdio: 'pipe',
+            cwd: ROOT_DIR,
+            encoding: 'utf8',
+            maxBuffer: 1024 * 1024 * 20,
+          }) || '');
+          if (functionsOutput.trim()) {
+            this.print(functionsOutput.trim());
+          }
+          functionsDeployed = true;
+          break;
+        } catch (functionsError) {
+          lastFunctionsError = functionsError;
+          const stdout = String(functionsError?.stdout || '');
+          const stderr = String(functionsError?.stderr || '');
+          const merged = `${stdout}\n${stderr}`.trim();
+          if (merged) this.print(merged);
+
+          if (!shouldRetryFunctionsDeploy(merged, attempt, maxFunctionsDeployAttempts)) {
+            throw functionsError;
+          }
+
+          const missingApi = getMissingApiFromDeployError(merged);
+          if (!missingApi) {
+            throw functionsError;
+          }
+
+          this.print(`  ⚠️  Intento ${attempt}/${maxFunctionsDeployAttempts}: falta API ${missingApi}. Reintentando automáticamente...`);
+          const missingApiEnable = enableRequiredProjectApis({
+            projectId,
+            accountEmail: this.config.firebaseCliAccount,
+            services: [missingApi],
+          });
+          if (missingApiEnable.enabled) {
+            this.print(`  ✅ API ${missingApi} habilitada/verificada.`);
+          } else {
+            this.print(`  ⚠️  No se pudo habilitar automáticamente ${missingApi}.`);
+          }
+
+          const waitSeconds = 40;
+          this.print(`  ⏳ Esperando ${waitSeconds}s para propagación antes del reintento...`);
+          await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
         }
-      } catch (functionsError) {
-        const stdout = String(functionsError?.stdout || '');
-        const stderr = String(functionsError?.stderr || '');
-        const merged = `${stdout}\n${stderr}`.trim();
-        if (merged) this.print(merged);
-        throw functionsError;
+      }
+
+      if (!functionsDeployed && lastFunctionsError) {
+        throw lastFunctionsError;
       }
 
       this.print('\n  Construyendo aplicación...');
