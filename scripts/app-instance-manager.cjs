@@ -8,6 +8,21 @@ const DEFAULT_INSTANCES_DIR = path.join(os.homedir(), 'planning-game-instances')
 const MANIFEST_FILE_NAME = 'app-instances.json';
 const INSTANCE_MARKER_FILE = '.planning-game-instance.json';
 const MANIFEST_SCHEMA_VERSION = 1;
+const INSTANCE_COPY_EXCLUDES = new Set([
+  '.git',
+  'node_modules',
+  '.astro',
+  'dist',
+  'coverage',
+  'test-results',
+  '.env',
+  '.env.dev',
+  '.env.pre',
+  '.env.prod',
+  '.env.test',
+  '.env.e2e',
+  'functions/.env',
+]);
 
 class AppInstanceManager {
   constructor(baseStateDir, instancesDir, deps = {}) {
@@ -54,15 +69,35 @@ class AppInstanceManager {
   }
 
   resolveSourceRepo(baseRepoDir) {
-    const cwd = String(baseRepoDir || '').trim();
-    if (!cwd) throw new Error('baseRepoDir is required');
-    try {
-      const remote = String(this._execSync('git config --get remote.origin.url', { cwd, encoding: 'utf8', stdio: 'pipe' }) || '').trim();
-      if (remote) return remote;
-    } catch {
-      // fallback below
+    const raw = String(baseRepoDir || '').trim();
+    if (!raw) {
+      throw new Error('baseRepoDir is required');
     }
-    return cwd;
+    const sourcePath = path.resolve(raw);
+    if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isDirectory()) {
+      throw new Error(`Directorio base no válido: ${sourcePath}`);
+    }
+    return sourcePath;
+  }
+
+  shouldExcludeFromCopy(relativePath) {
+    const rel = String(relativePath || '').replace(/\\/g, '/');
+    if (!rel) return false;
+    if (INSTANCE_COPY_EXCLUDES.has(rel)) return true;
+    for (const excluded of INSTANCE_COPY_EXCLUDES) {
+      if (rel.startsWith(`${excluded}/`)) return true;
+    }
+    return false;
+  }
+
+  copyRepoToInstance(sourceDir, targetDir) {
+    fs.cpSync(sourceDir, targetDir, {
+      recursive: true,
+      filter: (sourcePath) => {
+        const rel = path.relative(sourceDir, sourcePath);
+        return !this.shouldExcludeFromCopy(rel);
+      },
+    });
   }
 
   createInstance(name, { baseRepoDir, sourceRepoUrl } = {}) {
@@ -70,14 +105,14 @@ class AppInstanceManager {
     if (this.instanceExists(validated)) {
       throw new Error(`La instancia "${validated}" ya existe.`);
     }
-    const source = String(sourceRepoUrl || '').trim() || this.resolveSourceRepo(baseRepoDir);
+    const source = this.resolveSourceRepo(baseRepoDir || sourceRepoUrl);
     const targetDir = path.join(this.instancesDir, validated);
     if (fs.existsSync(targetDir)) {
       throw new Error(`El directorio ya existe: ${targetDir}`);
     }
 
     fs.mkdirSync(this.instancesDir, { recursive: true });
-    this._execSync(`git clone "${source}" "${targetDir}"`, { stdio: 'pipe' });
+    this.copyRepoToInstance(source, targetDir);
     this.writeInstanceMarker(targetDir, { name: validated, sourceRepo: source });
 
     const manifest = this.loadManifest();
@@ -96,7 +131,12 @@ class AppInstanceManager {
   updateInstance(name) {
     const instance = this.findByName(name);
     if (!instance) throw new Error(`Instancia no encontrada: ${name}`);
-    this._execSync('git pull --ff-only', { cwd: instance.directory, stdio: 'pipe' });
+    const source = String(instance.sourceRepo || '').trim();
+    if (source && fs.existsSync(source) && fs.statSync(source).isDirectory()) {
+      this.copyRepoToInstance(source, instance.directory);
+    } else {
+      this._execSync('git pull --ff-only', { cwd: instance.directory, stdio: 'pipe' });
+    }
 
     const manifest = this.loadManifest();
     manifest.instances[name].updatedAt = new Date().toISOString();

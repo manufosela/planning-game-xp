@@ -12,6 +12,7 @@ describe('AppInstanceManager', () => {
   let tmpDir;
   let stateDir;
   let instancesDir;
+  let templateDir;
   let mockExecSync;
   let manager;
 
@@ -19,6 +20,13 @@ describe('AppInstanceManager', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'app-inst-'));
     stateDir = path.join(tmpDir, '.planning-game');
     instancesDir = path.join(tmpDir, 'planning-game-instances');
+    templateDir = path.join(tmpDir, 'template-repo');
+    fs.mkdirSync(templateDir, { recursive: true });
+    fs.writeFileSync(path.join(templateDir, 'package.json'), '{"name":"planning-game"}');
+    fs.mkdirSync(path.join(templateDir, 'scripts'), { recursive: true });
+    fs.writeFileSync(path.join(templateDir, 'scripts', 'setup.cjs'), 'console.log("setup");');
+    fs.mkdirSync(path.join(templateDir, 'node_modules'), { recursive: true });
+    fs.writeFileSync(path.join(templateDir, 'node_modules', 'ignored.txt'), 'x');
     mockExecSync = vi.fn().mockReturnValue('');
     manager = new AppInstanceManager(stateDir, instancesDir, { execSync: mockExecSync });
   });
@@ -28,31 +36,19 @@ describe('AppInstanceManager', () => {
   });
 
   it('should create an instance and persist marker/manifest', () => {
-    mockExecSync.mockImplementation((cmd) => {
-      const match = cmd.match(/git clone \"(.+)\" \"(.+)\"/);
-      if (match) {
-        fs.mkdirSync(match[2], { recursive: true });
-        fs.writeFileSync(path.join(match[2], 'package.json'), '{}');
-      }
-      return '';
-    });
-
     const instance = manager.createInstance('personal', {
-      baseRepoDir: '/repo/template',
-      sourceRepoUrl: 'git@github.com:org/planning-game-xp.git',
+      baseRepoDir: templateDir,
     });
 
     expect(instance.name).toBe('personal');
     expect(fs.existsSync(path.join(instance.directory, INSTANCE_MARKER_FILE))).toBe(true);
+    expect(fs.existsSync(path.join(instance.directory, 'package.json'))).toBe(true);
+    expect(fs.existsSync(path.join(instance.directory, 'node_modules'))).toBe(false);
     expect(manager.instanceExists('personal')).toBe(true);
   });
 
-  it('should fallback to base repo path when no origin remote exists', () => {
-    mockExecSync.mockImplementation((cmd) => {
-      if (cmd.includes('git config --get remote.origin.url')) throw new Error('no remote');
-      return '';
-    });
-    expect(manager.resolveSourceRepo('/repo/template')).toBe('/repo/template');
+  it('should resolve source repo to base directory path', () => {
+    expect(manager.resolveSourceRepo(templateDir)).toBe(templateDir);
   });
 
   it('should detect instance directory with marker file', () => {
@@ -63,16 +59,22 @@ describe('AppInstanceManager', () => {
   });
 
   it('should update existing instance with git pull', () => {
+    const instanceDir = path.join(instancesDir, 'personal');
+    fs.mkdirSync(instanceDir, { recursive: true });
+    fs.writeFileSync(path.join(instanceDir, 'package.json'), '{}');
+
     const manifest = manager.loadManifest();
     manifest.instances.personal = {
       name: 'personal',
-      directory: '/tmp/personal',
+      directory: instanceDir,
+      sourceRepo: templateDir,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     manager.saveManifest(manifest);
 
     manager.updateInstance('personal');
-    expect(mockExecSync).toHaveBeenCalledWith('git pull --ff-only', expect.objectContaining({ cwd: '/tmp/personal' }));
+    expect(fs.existsSync(path.join(instanceDir, 'scripts', 'setup.cjs'))).toBe(true);
+    expect(mockExecSync).not.toHaveBeenCalledWith('git pull --ff-only', expect.anything());
   });
 });
