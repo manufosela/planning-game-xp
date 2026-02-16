@@ -1,6 +1,16 @@
 // Safe accessor for window globals (this file is also imported during SSR/build)
 const _win = typeof window !== 'undefined' ? window : {};
 
+function normalizeAllowedEmailDomains(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || '').trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 export const APP_CONSTANTS = {
   // Production app URL - used for notification links, shared URLs, etc.
   // NEVER use window.location.origin for URLs stored in Firebase
@@ -30,7 +40,7 @@ export const APP_CONSTANTS = {
   },
   // Configured via PUBLIC_ALLOWED_EMAIL_DOMAINS env var → window.allowedEmailDomains
   // Comma-separated list of domains (e.g. "example.com,corp.example.com")
-  AUTH_ALLOWED_EMAIL_DOMAINS: (_win.allowedEmailDomains || '').split(',').filter(Boolean),
+  AUTH_ALLOWED_EMAIL_DOMAINS: normalizeAllowedEmailDomains(_win.allowedEmailDomains),
   
   PROJECT_CARD_ELEMENT: {
     'sprints': 'sprint-card',
