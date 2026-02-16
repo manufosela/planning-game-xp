@@ -17,6 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const readline = require('readline');
 const { execSync, spawn } = require('child_process');
 const { AppInstanceManager } = require('./app-instance-manager.cjs');
@@ -49,7 +50,11 @@ const { ensureRequiredFirebaseRuleFiles } = require('./firebase-rules-files-help
 const { ensureFunctionsDependencies, hasBlockingAuditVulnerabilities } = require('./functions-deploy-prep-helper.cjs');
 const { enableRequiredProjectApis } = require('./firebase-api-enabler.cjs');
 const { extractMissingApiFromErrorText } = require('./firebase-api-error-parser.cjs');
-const { getMissingApiFromDeployError, shouldRetryFunctionsDeploy } = require('./deploy-retry-helper.cjs');
+const {
+  getMissingApiFromDeployError,
+  getMissingSecretFromDeployError,
+  shouldRetryFunctionsDeploy,
+} = require('./deploy-retry-helper.cjs');
 const { attemptAiRescue } = require('./ai-rescue-helper.cjs');
 const {
   buildGcloudAdcPrintTokenCommand,
@@ -877,6 +882,60 @@ class SetupWizard {
     this.print('  ✅ functions/.env actualizado');
   }
 
+  getConfiguredSecretValue(secretName) {
+    const fromConfig = this.config.functions?.[secretName];
+    if (fromConfig !== undefined && fromConfig !== null && String(fromConfig).trim() !== '') {
+      return String(fromConfig).trim();
+    }
+
+    const functionsEnvPath = path.join(ROOT_DIR, 'functions', '.env');
+    if (fs.existsSync(functionsEnvPath)) {
+      const envContent = fs.readFileSync(functionsEnvPath, 'utf8');
+      const match = envContent.match(new RegExp(`^${secretName}=(.*)$`, 'm'));
+      if (match?.[1] && String(match[1]).trim() !== '') {
+        return String(match[1]).trim();
+      }
+    }
+
+    if (secretName === 'IA_GLOBAL_ENABLE') return 'false';
+    if (secretName === 'IA_API_KEY') return 'disabled-by-setup';
+    if (secretName === 'CREATE_CARD_API_KEY') return crypto.randomBytes(24).toString('hex');
+    return null;
+  }
+
+  async ensureFunctionSecret(secretName, projectId) {
+    let value = this.getConfiguredSecretValue(secretName);
+    if (!value) {
+      value = await this.question(`  Valor para secreto ${secretName} (vacío para omitir)`);
+    }
+
+    if (!value || String(value).trim() === '') {
+      this.print(`  ⚠️  No se pudo resolver valor para secreto ${secretName}.`);
+      return false;
+    }
+
+    const tmpSecretPath = path.join(os.tmpdir(), `pgxp-secret-${secretName}-${Date.now()}.txt`);
+    fs.writeFileSync(tmpSecretPath, String(value), 'utf8');
+
+    try {
+      const command = this.withFirebaseAccount(
+        `firebase functions:secrets:set ${secretName} --project ${projectId} --data-file "${tmpSecretPath}" --force`
+      );
+      execSync(command, { stdio: 'inherit', cwd: ROOT_DIR, shell: '/bin/bash' });
+      this.print(`  ✅ Secreto ${secretName} configurado automáticamente.`);
+      return true;
+    } catch (secretError) {
+      this.print(`  ⚠️  Error configurando secreto ${secretName}: ${secretError.message}`);
+      return false;
+    } finally {
+      try {
+        fs.unlinkSync(tmpSecretPath);
+      } catch {
+        // ignore cleanup issues
+      }
+    }
+  }
+
   async deploy() {
     this.print('Ahora se desplegará la aplicación a Firebase.\n');
 
@@ -977,7 +1036,7 @@ class SetupWizard {
       if (hasBlockingAuditVulnerabilities(functionsPrep.auditAfter)) {
         this.print('  ⚠️  Siguen vulnerabilidades MODERATE/HIGH/CRITICAL en functions tras audit fix.');
       }
-      const maxFunctionsDeployAttempts = 3;
+      const maxFunctionsDeployAttempts = 6;
       let functionsDeployed = false;
       let lastFunctionsError = null;
 
@@ -1000,6 +1059,19 @@ class SetupWizard {
           const stderr = String(functionsError?.stderr || '');
           const merged = `${stdout}\n${stderr}`.trim();
           if (merged) this.print(merged);
+
+          const missingSecret = getMissingSecretFromDeployError(merged);
+          if (missingSecret) {
+            this.print(`  ⚠️  Intento ${attempt}/${maxFunctionsDeployAttempts}: falta secreto ${missingSecret}. Intentando configurarlo...`);
+            const secretConfigured = await this.ensureFunctionSecret(missingSecret, projectId);
+            if (!secretConfigured) {
+              throw functionsError;
+            }
+            const waitSecretSeconds = 8;
+            this.print(`  ⏳ Esperando ${waitSecretSeconds}s para propagación del secreto antes del reintento...`);
+            await new Promise((resolve) => setTimeout(resolve, waitSecretSeconds * 1000));
+            continue;
+          }
 
           if (!shouldRetryFunctionsDeploy(merged, attempt, maxFunctionsDeployAttempts)) {
             throw functionsError;
