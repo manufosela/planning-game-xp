@@ -46,7 +46,7 @@ const {
 } = require('./firebase-rtdb-target-helper.cjs');
 const { shouldClearInstallState } = require('./setup-flow-helper.cjs');
 const { ensureRequiredFirebaseRuleFiles } = require('./firebase-rules-files-helper.cjs');
-const { ensureFunctionsDependencies } = require('./functions-deploy-prep-helper.cjs');
+const { ensureFunctionsDependencies, hasBlockingAuditVulnerabilities } = require('./functions-deploy-prep-helper.cjs');
 const {
   buildGcloudAdcPrintTokenCommand,
   buildGcloudAdcLoginCommand,
@@ -946,7 +946,29 @@ class SetupWizard {
       if (functionsPrep.installed) {
         this.print('  ✅ Dependencias de functions instaladas automáticamente.');
       }
-      execSync(deployCommands.functions, { stdio: 'inherit', cwd: ROOT_DIR });
+      if (functionsPrep.auditFixApplied) {
+        this.print('  ✅ npm audit fix ejecutado en functions.');
+      }
+      if (hasBlockingAuditVulnerabilities(functionsPrep.auditAfter)) {
+        this.print('  ⚠️  Siguen vulnerabilidades MODERATE/HIGH/CRITICAL en functions tras audit fix.');
+      }
+      try {
+        const functionsOutput = String(execSync(deployCommands.functions, {
+          stdio: 'pipe',
+          cwd: ROOT_DIR,
+          encoding: 'utf8',
+          maxBuffer: 1024 * 1024 * 20,
+        }) || '');
+        if (functionsOutput.trim()) {
+          this.print(functionsOutput.trim());
+        }
+      } catch (functionsError) {
+        const stdout = String(functionsError?.stdout || '');
+        const stderr = String(functionsError?.stderr || '');
+        const merged = `${stdout}\n${stderr}`.trim();
+        if (merged) this.print(merged);
+        throw functionsError;
+      }
 
       this.print('\n  Construyendo aplicación...');
       execSync('npm run build', { stdio: 'inherit', cwd: ROOT_DIR });
@@ -957,6 +979,13 @@ class SetupWizard {
       this.print('\n  ✅ Despliegue completado!');
     } catch (error) {
       this.print(`\n  ❌ Error en el despliegue: ${error.message}`);
+      const errText = String(error?.stderr || '') + '\n' + String(error?.stdout || '') + '\n' + String(error?.message || '');
+      if (errText.includes('firebaseextensions.googleapis.com') && errText.includes('403')) {
+        const projectId = this.config.client['PUBLIC_FIREBASE_PROJECT_ID'];
+        this.print('  ⚠️  La API Firebase Extensions no está habilitada o no ha propagado permisos aún.');
+        this.print(`  Ejecuta: gcloud services enable firebaseextensions.googleapis.com --project ${projectId}`);
+        this.print('  Espera 2-5 minutos y reintenta el deploy.');
+      }
       this.print('  Puedes intentar desplegar manualmente después.');
     }
   }
