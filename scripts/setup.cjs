@@ -67,6 +67,7 @@ const {
 } = require('./gcloud-adc-helper.cjs');
 const { formatMcpInstanceLabel, buildMcpActionOptions } = require('./mcp-setup-helper.cjs');
 const { resolveInputPath, buildDefaultMcpUserIdentity } = require('./setup-input-helper.cjs');
+const { applyInstanceOverlays } = require('./instance-config-overlay.cjs');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const ENV_TEMPLATE = {
@@ -425,38 +426,7 @@ class SetupWizard {
   }
 
   materializeInstanceConfigInTemplate() {
-    const overlays = [
-      { from: this.getActiveInstancePath('.firebaserc'), to: path.join(ROOT_DIR, '.firebaserc') },
-      { from: this.getActiveInstancePath('.env.dev'), to: path.join(ROOT_DIR, '.env.dev') },
-      { from: this.getActiveInstancePath('.env.pre'), to: path.join(ROOT_DIR, '.env.pre') },
-      { from: this.getActiveInstancePath('.env.prod'), to: path.join(ROOT_DIR, '.env.prod') },
-      { from: this.getInstanceFunctionsEnvPath(), to: path.join(ROOT_DIR, 'functions', '.env') },
-      { from: this.getActiveInstancePath('public', 'theme-config.json'), to: path.join(ROOT_DIR, 'public', 'theme-config.json') },
-    ];
-
-    const backups = [];
-    for (const overlay of overlays) {
-      if (!fs.existsSync(overlay.from)) continue;
-      const toExists = fs.existsSync(overlay.to);
-      backups.push({
-        to: overlay.to,
-        existed: toExists,
-        content: toExists ? fs.readFileSync(overlay.to, 'utf8') : null,
-      });
-      fs.mkdirSync(path.dirname(overlay.to), { recursive: true });
-      fs.copyFileSync(overlay.from, overlay.to);
-    }
-
-    return () => {
-      for (let idx = backups.length - 1; idx >= 0; idx--) {
-        const backup = backups[idx];
-        if (backup.existed) {
-          fs.writeFileSync(backup.to, backup.content, 'utf8');
-        } else if (fs.existsSync(backup.to)) {
-          fs.unlinkSync(backup.to);
-        }
-      }
-    };
+    return applyInstanceOverlays(ROOT_DIR, this.getActiveInstanceDir());
   }
 
   async showSetupBriefing() {
