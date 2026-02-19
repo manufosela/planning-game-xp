@@ -900,6 +900,20 @@ return [];
   }
 
   /**
+   * Checks if a developer is an AI agent (e.g., BecarIA).
+   * AI agents are identified by having an @ia.local email domain.
+   * Only AI developers are allowed to be both developer and co-developer on the same card.
+   * @param {string} devIdOrRef - Developer ID, email, or name reference
+   * @returns {boolean}
+   */
+  isAIDeveloper(devIdOrRef) {
+    if (!devIdOrRef) return false;
+    const email = this.resolveDeveloperEmail(devIdOrRef);
+    if (!email) return false;
+    return email.endsWith('@ia.local');
+  }
+
+  /**
    * Verifica si el servicio esta inicializado
    */
   isInitialized() {

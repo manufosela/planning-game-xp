@@ -2815,7 +2815,7 @@ this.isSuperAdmin = false;
             <select class="${this._getFieldClass('coDeveloper')}" .value=${this.coDeveloper || ''} @change=${this._handleCoDeveloperChange}>
               <option value="" ?selected=${!this.coDeveloper}>Sin CoDev</option>
               ${this.getProcessedDeveloperList()
-                .filter(dev => !APP_CONSTANTS.DEVELOPER_UNASSIGNED.ALIASES.includes(dev.value) && !this._isDeveloperSelected(dev.value))
+                .filter(dev => !APP_CONSTANTS.DEVELOPER_UNASSIGNED.ALIASES.includes(dev.value) && (!this._isDeveloperSelected(dev.value) || entityDirectoryService.isAIDeveloper(dev.value)))
                 .map(dev => html`
                   <option value=${dev.value} ?selected=${this._isCoDeveloperSelected(dev.value)}>${dev.display}</option>
                 `)}
