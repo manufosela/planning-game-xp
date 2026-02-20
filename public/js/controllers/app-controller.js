@@ -1134,20 +1134,51 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
     const cardIdToOpen = urlParams.get('cardId');
 
     if (cardIdToOpen && !this.cardAutoOpened) {
+      // 1. Try web component (list/kanban/sprint views)
       const card = document.querySelector(`[card-id="${cardIdToOpen}"]`);
       if (card) {
         import('../utils/common-functions.js').then(({ showExpandedCardInModal }) => {
           showExpandedCardInModal(card);
           this.cardAutoOpened = true;
         });
-      } else {
-        this.cardAutoOpened = true;
-        const notification = document.createElement('slide-notification');
-        notification.message = `Card "${cardIdToOpen}" not found in this project. It may have been deleted or the ID may be incorrect.`;
-        notification.type = 'warning';
-        document.body.append(notification);
+        return;
       }
+
+      // 2. Try table row (table view) — rows have data-card-id and data-firebase-id
+      const tableRow = document.querySelector(`[data-card-id="${cardIdToOpen}"]`);
+      if (tableRow) {
+        const firebaseId = tableRow.dataset.firebaseId;
+        if (firebaseId) {
+          this.cardAutoOpened = true;
+          const cardType = this._getCardTypeFromCardId(cardIdToOpen);
+          if (cardType === 'bug') {
+            this.handleViewBug({ detail: { id: firebaseId, cardId: cardIdToOpen } });
+          } else {
+            this.handleEditTask({ detail: { id: firebaseId, cardId: cardIdToOpen } });
+          }
+          return;
+        }
+      }
+
+      // 3. Not found anywhere
+      this.cardAutoOpened = true;
+      const notification = document.createElement('slide-notification');
+      notification.message = `Card "${cardIdToOpen}" not found in this project. It may have been deleted or the ID may be incorrect.`;
+      notification.type = 'warning';
+      document.body.append(notification);
     }
+  }
+
+  /**
+   * Determines card type from cardId prefix (e.g., PLN-TSK-0181 → task, PLN-BUG-0055 → bug).
+   */
+  _getCardTypeFromCardId(cardId) {
+    if (!cardId) return 'task';
+    const upper = cardId.toUpperCase();
+    if (upper.includes('-BUG-')) return 'bug';
+    if (upper.includes('-PCS-') || upper.includes('-EPC-')) return 'epic';
+    if (upper.includes('-PRP-')) return 'proposal';
+    return 'task';
   }
 
   handleCardsRenderedForFilters(event) {
