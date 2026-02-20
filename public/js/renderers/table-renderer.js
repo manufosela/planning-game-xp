@@ -1112,7 +1112,6 @@ const style = {
     const headerRow = UIUtils.createElement('tr');
     const headers = [
       { key: 'ID', label: 'ID' },
-      { key: 'Notas', label: '📝' },
       { key: 'Título', label: 'Título' },
       { key: 'Estado', label: 'Estado' },
       { key: 'Prioridad', label: 'Prioridad' },
@@ -1189,140 +1188,36 @@ const style = {
       if (relationBadges) idCell.appendChild(relationBadges);
       if (card.cardId) this._makeIdCellCopyable(idCell, card.cardId);
       row.appendChild(idCell);
-      // Notas - support both full notes array and notesCount from optimized views
-      const notesCell = UIUtils.createElement('td', {
-        style: {
-          border: '1px solid var(--border-default, #ddd)',
-          padding: '0.5rem',
-          textAlign: 'center',
-          whiteSpace: 'nowrap'
-        }
-      });
-      const notes = this._getNotesArray(card.notes);
-      // Use notesCount from optimized view as fallback when notes array is not available
-      const notesCount = notes.length > 0 ? notes.length : (card.notesCount || 0);
-      if (notesCount > 0) {
-        const notesWrapper = UIUtils.createElement('div', {
-          style: {
-            position: 'relative',
-            display: 'inline-block'
-          }
-        });
-        const notesIndicator = UIUtils.createElement('span', {
-          style: {
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#6f42c1',
-            color: '#fff',
-            width: '24px',
-            height: '24px',
-            borderRadius: '50%',
-            fontSize: '0.75rem',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-          }
-        }, String(notesCount));
-
-        // Only show popover with details if we have the full notes array
-        if (notes.length > 0) {
-          // Crear popover para mostrar notas completas
-          const popover = UIUtils.createElement('div', {
-            className: 'notes-popover',
-            style: {
-              display: 'none',
-              position: 'absolute',
-              left: '50%',
-              top: '100%',
-              transform: 'translateX(-50%)',
-              marginTop: '8px',
-              background: 'var(--bg-primary, #fff)',
-              border: '1px solid var(--border-default, #ddd)',
-              borderRadius: '8px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              padding: '12px',
-              minWidth: '280px',
-              maxWidth: '400px',
-              maxHeight: '300px',
-              overflowY: 'auto',
-              zIndex: '1000',
-              textAlign: 'left'
-            }
-          });
-
-          // Título del popover
-          const popoverTitle = UIUtils.createElement('div', {
-            style: {
-              fontWeight: 'bold',
-              marginBottom: '8px',
-              paddingBottom: '8px',
-              borderBottom: '1px solid var(--border-subtle, #eee)',
-              color: '#6f42c1'
-            }
-          }, `📝 ${notes.length} nota${notes.length > 1 ? 's' : ''}`);
-          popover.appendChild(popoverTitle);
-
-          // Lista de notas
-          notes.forEach((note, i) => {
-            const noteItem = UIUtils.createElement('div', {
-              style: {
-                marginBottom: '8px',
-                padding: '8px',
-                background: 'var(--bg-secondary, #f8f9fa)',
-                borderRadius: '4px',
-                fontSize: '0.85rem'
-              }
-            });
-            const noteContent = UIUtils.createElement('div', {
-              style: {
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                color: 'var(--text-primary, #333)'
-              }
-            }, note.content || '');
-            noteItem.appendChild(noteContent);
-
-            if (note.author || note.timestamp) {
-              const noteMeta = UIUtils.createElement('div', {
-                style: {
-                  marginTop: '4px',
-                  fontSize: '0.75rem',
-                  color: 'var(--text-muted, #666)'
-                }
-              }, `${note.author || 'Anónimo'}${note.timestamp ? ' · ' + new Date(note.timestamp).toLocaleDateString() : ''}`);
-              noteItem.appendChild(noteMeta);
-            }
-            popover.appendChild(noteItem);
-          });
-
-          notesWrapper.appendChild(popover);
-
-          // Mostrar/ocultar popover en hover
-          let hideTimeout;
-          notesWrapper.addEventListener('mouseenter', () => {
-            clearTimeout(hideTimeout);
-            popover.style.display = 'block';
-          });
-          notesWrapper.addEventListener('mouseleave', () => {
-            hideTimeout = setTimeout(() => {
-              popover.style.display = 'none';
-            }, 200);
-          });
-        } else {
-          // When we only have notesCount (from optimized view), show a simple tooltip
-          notesIndicator.title = `${notesCount} nota${notesCount > 1 ? 's' : ''} - Abre la tarea para ver detalles`;
-        }
-
-        notesWrapper.appendChild(notesIndicator);
-        notesCell.appendChild(notesWrapper);
-      }
-      row.appendChild(notesCell);
-      // Título + badges de bloqueo
+      // Título + notes badge + badges de bloqueo
       const titleCell = UIUtils.createElement('td', { style: { border: '1px solid var(--border-default, #ddd)', padding: '0.5rem', maxWidth: '250px' } });
       const titleWrapper = UIUtils.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '0.35rem', overflow: 'hidden' } });
       const titleText = UIUtils.createElement('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1', minWidth: '0' } }, card.title || '');
       titleText.title = card.title || '';
       titleWrapper.appendChild(titleText);
+
+      // Notes badge next to title
+      const notes = this._getNotesArray(card.notes);
+      const notesCount = notes.length > 0 ? notes.length : (card.notesCount || 0);
+      if (notesCount > 0) {
+        const notesBadge = UIUtils.createElement('span', {
+          style: {
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '2px',
+            background: '#6f42c1',
+            color: '#fff',
+            padding: '0 5px',
+            borderRadius: '10px',
+            fontSize: '0.7rem',
+            fontWeight: 'bold',
+            whiteSpace: 'nowrap',
+            flexShrink: '0',
+            lineHeight: '1.4'
+          }
+        }, `📝${notesCount}`);
+        notesBadge.title = `${notesCount} nota${notesCount > 1 ? 's' : ''}`;
+        titleWrapper.appendChild(notesBadge);
+      }
 
       // Badges de bloqueo (business/dev) - only show if status is "Blocked"
       const isBlockedStatus = (card.status || '').toLowerCase() === 'blocked';

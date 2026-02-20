@@ -113,18 +113,17 @@ export const APP_CONSTANTS = {
   TABLE_COLUMNS: {
     TASKS: {
       ID: 0,
-      NOTES: 1,
-      TITLE: 2,
-      STATUS: 3,
-      PRIORITY: 4,
-      SPRINT: 5,
-      DEVELOPER: 6,
-      VALIDATOR: 7,
-      EPIC: 8,
-      START_DATE: 9,
-      END_DATE: 10,
-      ACTIONS: 11,
-      TOTAL: 12
+      TITLE: 1,
+      STATUS: 2,
+      PRIORITY: 3,
+      SPRINT: 4,
+      DEVELOPER: 5,
+      VALIDATOR: 6,
+      EPIC: 7,
+      START_DATE: 8,
+      END_DATE: 9,
+      ACTIONS: 10,
+      TOTAL: 11
     },
     BUGS: {
       ID: 0,
