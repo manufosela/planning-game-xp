@@ -52,10 +52,12 @@ const INSTANCE_FILES = [
   { src: 'sonar-project.properties', dest: 'sonar-project.properties', required: false, desc: 'SonarQube config' },
   { src: 'functions/.env', dest: 'functions/.env', required: false, desc: 'Cloud Functions env vars' },
   { src: 'theme-config.json', dest: 'public/theme-config.json', required: false, desc: 'Theme configuration (colors, branding)' },
-  { src: 'org-logo.png', dest: 'public/images/org-logo.png', required: false, desc: 'Organization logo for header' },
 ];
 
 const EMULATOR_DATA = { src: 'emulator-data', dest: 'emulator-data' };
+
+const ORG_LOGO_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.svg', '.webp'];
+const ORG_LOGO_DEST = path.join('public', 'images', 'org-logo');
 
 /**
  * Required env vars that must exist in .env.dev for the app to work.
@@ -182,6 +184,29 @@ function checkDevServerConflict(targetInstance) {
   }
 }
 
+/**
+ * Finds an org logo image in the instance directory.
+ * Looks for files matching common logo patterns with supported image extensions.
+ * Returns the filename (not full path) or null.
+ */
+function findOrgLogo(instanceDir) {
+  try {
+    const files = fs.readdirSync(instanceDir);
+    // First try: any file with a supported image extension
+    const imageFiles = files.filter(f => ORG_LOGO_EXTENSIONS.includes(path.extname(f).toLowerCase()));
+    if (imageFiles.length === 0) return null;
+    // Prefer files named org-logo.* or logo.*
+    const preferred = imageFiles.find(f => {
+      const base = path.basename(f, path.extname(f)).toLowerCase();
+      return base === 'org-logo' || base === 'logo';
+    });
+    // Otherwise pick the first image found
+    return preferred || imageFiles[0];
+  } catch {
+    return null;
+  }
+}
+
 // ============================================================================
 // Core: activate an instance (create symlinks)
 // ============================================================================
@@ -210,6 +235,21 @@ function activateInstance(name, { verbose = true } = {}) {
 
     createLink(srcPath, destPath);
     if (verbose) console.log(`  Linked: ${entry.dest}`);
+    linked++;
+  }
+
+  // Symlink org logo: find first image file matching org-logo.* or logo.*
+  const orgLogoFile = findOrgLogo(instanceDir);
+  if (orgLogoFile) {
+    const ext = path.extname(orgLogoFile);
+    const destPath = path.join(ROOT_DIR, ORG_LOGO_DEST + ext);
+    // Remove any previous org-logo.* symlinks with different extensions
+    for (const otherExt of ORG_LOGO_EXTENSIONS) {
+      const otherDest = path.join(ROOT_DIR, ORG_LOGO_DEST + otherExt);
+      try { fs.lstatSync(otherDest); fs.unlinkSync(otherDest); } catch { /* does not exist */ }
+    }
+    createLink(path.join(instanceDir, orgLogoFile), destPath);
+    if (verbose) console.log(`  Linked: public/images/org-logo${ext}`);
     linked++;
   }
 
@@ -567,6 +607,62 @@ function cmdList() {
   console.log('');
 }
 
+/**
+ * verify-deploy: Checks that the active instance matches the one used during build.
+ * Used by deploy scripts instead of 'select' to prevent deploying the wrong build.
+ */
+function cmdVerifyDeploy() {
+  const versionJsonPath = path.join(ROOT_DIR, 'version.json');
+  const distDir = path.join(ROOT_DIR, 'dist');
+
+  // Check dist/ exists
+  if (!fs.existsSync(distDir)) {
+    console.error('\nError: dist/ directory not found. Run `npm run build` first.\n');
+    process.exit(1);
+  }
+
+  // Read build instance from version.json
+  let buildInstance = null;
+  let buildVersion = null;
+  if (fs.existsSync(versionJsonPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(versionJsonPath, 'utf8'));
+      buildInstance = data.instance || null;
+      buildVersion = data.version || null;
+    } catch { /* corrupt file */ }
+  }
+
+  // Read active instance
+  const activeInstance = getLastInstance();
+
+  if (!buildInstance) {
+    console.warn('\nWarning: Build was created before instance tracking was added.');
+    console.warn('Cannot verify which instance was used for this build.');
+    if (activeInstance) {
+      const dir = path.join(INSTANCES_DIR, activeInstance);
+      const projectId = getProjectIdFromFirebaserc(dir);
+      console.warn(`Active instance: ${activeInstance} (${projectId || '?'})`);
+    }
+    console.warn('Proceeding with deploy...\n');
+    return;
+  }
+
+  const buildDir = path.join(INSTANCES_DIR, buildInstance);
+  const buildProjectId = getProjectIdFromFirebaserc(buildDir);
+
+  // Verify active instance matches build
+  if (activeInstance && activeInstance !== buildInstance) {
+    console.error(`\nError: Instance mismatch!`);
+    console.error(`  Built with:    ${buildInstance} (${buildProjectId || '?'})`);
+    console.error(`  Active now:    ${activeInstance}`);
+    console.error(`\nThe dist/ was built for "${buildInstance}" but you switched to "${activeInstance}".`);
+    console.error(`Run 'npm run build' again or switch back with 'npm run instance:use -- ${buildInstance}'.\n`);
+    process.exit(1);
+  }
+
+  console.log(`\nDeploying v${buildVersion || '?'} (instance: ${buildInstance}, project: ${buildProjectId || '?'})\n`);
+}
+
 // ============================================================================
 // .env Template Generator
 // ============================================================================
@@ -632,13 +728,17 @@ switch (command) {
   case 'list':
     cmdList();
     break;
+  case 'verify-deploy':
+    cmdVerifyDeploy();
+    break;
   default:
     console.log(`
 Planning Game XP - Instance Manager
 
 Commands:
-  select          Interactive instance selector (used by dev/build/deploy)
+  select          Interactive instance selector (used by dev/build)
   verify          Check all instances for missing or misconfigured files
+  verify-deploy   Verify dist/ matches active instance (used by deploy)
   use <name>      Activate an instance non-interactively (for CI/scripts)
   create <name>   Create a new instance from templates
   list            List all available instances

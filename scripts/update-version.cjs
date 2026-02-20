@@ -7,6 +7,16 @@ const { execSync } = require('child_process');
 const versionFilePath = path.join(__dirname, '../version.json');
 const publicVersionFilePath = path.join(__dirname, '../public/js/version.js');
 const packageJsonPath = path.join(__dirname, '../package.json');
+const lastInstancePath = path.join(__dirname, '../.last-instance');
+
+function getActiveInstance() {
+  try {
+    if (!fs.existsSync(lastInstancePath)) return '';
+    return fs.readFileSync(lastInstancePath, 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
 
 function getLastCommitMessage() {
   try {
@@ -73,20 +83,23 @@ function incrementVersion(currentVersion, commitMessage) {
 }
 
 function updateVersionFile(newVersion, lastBuildCommit) {
+  const instance = getActiveInstance();
   const versionData = {
     version: newVersion,
     lastUpdated: new Date().toISOString(),
-    lastBuildCommit: lastBuildCommit || ''
+    lastBuildCommit: lastBuildCommit || '',
+    instance: instance || ''
   };
-  
+
   // Update JSON file
   fs.writeFileSync(versionFilePath, JSON.stringify(versionData, null, 2));
-  
+
   // Generate JS file for frontend
   const jsContent = `// Auto-generated version file - Do not edit manually
 export const version = '${newVersion}';
 export const lastUpdated = '${versionData.lastUpdated}';
 export const lastBuildCommit = '${versionData.lastBuildCommit}';
+export const instance = '${versionData.instance}';
 `;
   
   fs.writeFileSync(publicVersionFilePath, jsContent);

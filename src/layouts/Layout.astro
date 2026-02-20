@@ -650,29 +650,43 @@ let user = null;
         const container = document.getElementById('orgBranding');
         if (!container) return;
 
-        // Try org logo image first (symlinked from instance)
-        const img = new Image();
-        img.src = '/images/org-logo.png';
-        img.onload = () => {
-          img.alt = APP_CONSTANTS.ORG_NAME || 'Organization logo';
-          img.className = 'org-logo';
-          container.innerHTML = '';
-          container.append(img);
-          container.classList.remove('hidden');
-        };
-        img.onerror = () => {
-          // No image — fall back to text h1
-          const orgName = APP_CONSTANTS.ORG_NAME;
-          if (orgName) {
-            const heading = document.createElement('h1');
-            heading.className = 'org-name-heading';
-            heading.textContent = orgName;
-            container.innerHTML = '';
-            container.append(heading);
-            container.classList.remove('hidden');
-            container.setAttribute('aria-label', `Organización: ${orgName}`);
+        const orgName = APP_CONSTANTS.ORG_NAME;
+        const imageExtensions = ['.png', '.jpg', '.jpeg', '.svg', '.webp'];
+        const isImagePath = orgName && imageExtensions.some(ext => orgName.toLowerCase().endsWith(ext));
+
+        // Try to load org logo image (symlinked from instance to /images/org-logo.*)
+        // We try common extensions since the instance may have any format
+        const extensionsToTry = isImagePath
+          ? [orgName.substring(orgName.lastIndexOf('.'))]
+          : [...imageExtensions];
+
+        function tryLoadImage(exts, index = 0) {
+          if (index >= exts.length) {
+            // No image found — fall back to text h1 if orgName is plain text
+            if (orgName && !isImagePath) {
+              const heading = document.createElement('h1');
+              heading.className = 'org-name-heading';
+              heading.textContent = orgName;
+              container.innerHTML = '';
+              container.append(heading);
+              container.classList.remove('hidden');
+              container.setAttribute('aria-label', `Organización: ${orgName}`);
+            }
+            return;
           }
-        };
+          const img = new Image();
+          img.src = `/images/org-logo${exts[index]}`;
+          img.onload = () => {
+            img.alt = (isImagePath ? '' : orgName) || 'Organization logo';
+            img.className = 'org-logo';
+            container.innerHTML = '';
+            container.append(img);
+            container.classList.remove('hidden');
+          };
+          img.onerror = () => tryLoadImage(exts, index + 1);
+        }
+
+        tryLoadImage(extensionsToTry);
       }
 
       async function DOMContentLoadedActions() {
