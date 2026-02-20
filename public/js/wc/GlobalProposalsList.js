@@ -5,6 +5,7 @@ import { isCurrentUserSuperAdmin } from '../utils/super-admin-check.js';
 import { modalStackService } from '../services/modal-stack-service.js';
 import { setupAutoCloseOnSave } from '../services/modal-service.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
+import { URLStateManager } from '../utils/url-utils.js';
 import './ProposalCard.js';
 // app-modal se importa globalmente desde main.js (paquete npm @manufosela/app-modal)
 
@@ -48,6 +49,13 @@ export class GlobalProposalsList extends LitElement {
 
   async connectedCallback() {
     super.connectedCallback();
+    this._popStateHandler = (state) => {
+      const validTabs = ['general', 'byProject', 'byTeam'];
+      if (state.tab && validTabs.includes(state.tab)) {
+        this.activeTab = state.tab;
+      }
+    };
+    URLStateManager.onPopState(this._popStateHandler);
     await this._waitForAuthAndLoad();
   }
 
@@ -90,8 +98,17 @@ export class GlobalProposalsList extends LitElement {
   async _initializeData() {
     await this._checkSuperAdmin();
     await entityDirectoryService.init();
+    this._restoreTabFromUrl();
     await this._loadData();
     this._subscribeToChanges();
+  }
+
+  _restoreTabFromUrl() {
+    const urlState = URLStateManager.getState();
+    const validTabs = ['general', 'byProject', 'byTeam'];
+    if (urlState.tab && validTabs.includes(urlState.tab)) {
+      this.activeTab = urlState.tab;
+    }
   }
 
   disconnectedCallback() {
@@ -313,6 +330,7 @@ export class GlobalProposalsList extends LitElement {
 
   _setActiveTab(tab) {
     this.activeTab = tab;
+    URLStateManager.updateState({ tab }, true);
   }
 
   _getProposalsByProject() {

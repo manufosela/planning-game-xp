@@ -172,8 +172,18 @@ describe('URLStateManager', () => {
       expect(state.view).toBeNull();
       expect(state.tab).toBeNull();
       expect(state.sprint).toBeNull();
+      expect(state.developer).toBeNull();
       expect(state.filters).toEqual({});
       expect(state.section).toBeNull();
+    });
+
+    it('should parse developer param from URL', () => {
+      window.history.pushState({}, '', 'http://localhost:3000/wip?tab=backlog&developer=dev_001');
+
+      const state = URLStateManager.getState();
+
+      expect(state.tab).toBe('backlog');
+      expect(state.developer).toBe('dev_001');
     });
   });
 
@@ -232,6 +242,28 @@ describe('URLStateManager', () => {
       expect(calledUrl).toContain('projectId=C4D');
       expect(calledUrl).toContain('view=list');
       expect(calledUrl).toContain('tab=backlog');
+    });
+
+    it('should add developer param to URL', () => {
+      window.history.pushState({}, '', 'http://localhost:3000/wip?tab=backlog');
+      pushStateSpy = vi.spyOn(window.history, 'pushState');
+
+      URLStateManager.updateState({ developer: 'dev_001' });
+
+      const calledUrl = pushStateSpy.mock.calls[0][2];
+      expect(calledUrl).toContain('tab=backlog');
+      expect(calledUrl).toContain('developer=dev_001');
+    });
+
+    it('should remove developer param when set to null', () => {
+      window.history.pushState({}, '', 'http://localhost:3000/wip?tab=wip&developer=dev_001');
+      pushStateSpy = vi.spyOn(window.history, 'pushState');
+
+      URLStateManager.updateState({ developer: null });
+
+      const calledUrl = pushStateSpy.mock.calls[0][2];
+      expect(calledUrl).not.toContain('developer=');
+      expect(calledUrl).toContain('tab=wip');
     });
   });
 

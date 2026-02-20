@@ -108,15 +108,23 @@ import BacklogStyles from '../components/BacklogStyles.astro';
 
     // Update URL with tab state (use pushState for navigation history)
     if (updateUrl) {
-      URLStateManager.updateState({ tab: activeTab });
+      const urlUpdates = { tab: activeTab };
+      // Clear developer from URL when switching away from backlog tab
+      if (activeTab !== 'backlog') {
+        urlUpdates.developer = null;
+      }
+      URLStateManager.updateState(urlUpdates);
     }
   }
 
-  // Restore tab from URL on page load
+  // Restore tab and developer from URL on page load
   function restoreTabFromUrl() {
     const urlState = URLStateManager.getState();
     if (urlState.tab && (urlState.tab === 'wip' || urlState.tab === 'backlog')) {
       updateTabs(urlState.tab, false); // Don't update URL again
+    }
+    if (urlState.developer) {
+      activeBacklogDev = urlState.developer;
     }
   }
 
@@ -124,6 +132,10 @@ import BacklogStyles from '../components/BacklogStyles.astro';
   URLStateManager.onPopState((state) => {
     if (state.tab && (state.tab === 'wip' || state.tab === 'backlog')) {
       updateTabs(state.tab, false);
+    }
+    if (state.tab === 'backlog' && state.developer) {
+      activeBacklogDev = state.developer;
+      renderBacklog();
     }
   });
 
@@ -471,6 +483,7 @@ import BacklogStyles from '../components/BacklogStyles.astro';
     backlogContent.querySelectorAll('.dev-tab').forEach(btn => {
       btn.onclick = () => {
         activeBacklogDev = btn.dataset.dev;
+        URLStateManager.updateState({ developer: activeBacklogDev });
         renderBacklog();
       };
     });

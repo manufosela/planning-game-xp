@@ -33,15 +33,17 @@ export class URLUtils {
  *
  * URL Pattern:
  * /adminproject?projectId=C4D&view=kanban&f=status:In%20Progress;developer:dev_001#tasks
- * /wip?tab=backlog
+ * /wip?tab=backlog&developer=dev_001
  * /sprintview?projectId=C4D&sprint=SPR-001
+ * /proposals?tab=byProject
  */
 export class URLStateManager {
   static PARAMS = {
-    VIEW: 'view',      // table, list, kanban, sprint, gantt
-    TAB: 'tab',        // wip, backlog (for /wip page)
-    SPRINT: 'sprint',  // selected sprint
-    FILTERS: 'f'       // encoded filters
+    VIEW: 'view',           // table, list, kanban, sprint, gantt
+    TAB: 'tab',             // wip, backlog (for /wip page); general, byProject, byTeam (for /proposals)
+    SPRINT: 'sprint',       // selected sprint
+    FILTERS: 'f',           // encoded filters
+    DEVELOPER: 'developer'  // selected developer (for /wip backlog)
   };
 
   /**
@@ -57,6 +59,7 @@ export class URLStateManager {
       view: params.get('view'),
       tab: params.get('tab'),
       sprint: params.get('sprint'),
+      developer: params.get('developer'),
       filters: this._decodeFilters(params.get('f')),
       section: hash || null
     };
