@@ -37,7 +37,6 @@ window.superAdminEmail = superAdminEmail;
 window.appName = "${env.PUBLIC_APP_NAME || 'Planning Game XP'}";
 window.orgName = ${JSON.stringify(env.PUBLIC_ORG_NAME || '')};
 window.appUrl = "${env.PUBLIC_APP_URL || ''}";
-window.brandColor = "${env.PUBLIC_BRAND_COLOR || '#01caca'}";
 window.allowedEmailDomains = "${env.PUBLIC_ALLOWED_EMAIL_DOMAINS || ''}"
   .split(',')
   .map(d => d.trim())

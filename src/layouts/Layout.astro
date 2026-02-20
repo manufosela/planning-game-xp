@@ -45,7 +45,7 @@ let user = null;
     <header>
       <a href="/" class="header-logos">
         <img src="/images/icono_PGame.png" alt="Planning Game" class="planning-game-icon" />
-        <span id="orgNameBadge" class="org-name hidden"></span>
+        <span id="orgBranding" class="org-branding hidden"></span>
       </a>
       <div class="header-title-container">
         <h1>Planning Game</h1>
@@ -647,18 +647,32 @@ let user = null;
       }
 
       function applyOrganizationBranding() {
-        const orgNameBadge = document.getElementById('orgNameBadge');
-        if (!orgNameBadge) return;
-        const orgName = APP_CONSTANTS.ORG_NAME;
-        if (orgName) {
-          orgNameBadge.textContent = orgName;
-          orgNameBadge.classList.remove('hidden');
-          orgNameBadge.setAttribute('aria-label', `Organización: ${orgName}`);
-          return;
-        }
-        orgNameBadge.classList.add('hidden');
-        orgNameBadge.textContent = '';
-        orgNameBadge.removeAttribute('aria-label');
+        const container = document.getElementById('orgBranding');
+        if (!container) return;
+
+        // Try org logo image first (symlinked from instance)
+        const img = new Image();
+        img.src = '/images/org-logo.png';
+        img.onload = () => {
+          img.alt = APP_CONSTANTS.ORG_NAME || 'Organization logo';
+          img.className = 'org-logo';
+          container.innerHTML = '';
+          container.append(img);
+          container.classList.remove('hidden');
+        };
+        img.onerror = () => {
+          // No image — fall back to text h1
+          const orgName = APP_CONSTANTS.ORG_NAME;
+          if (orgName) {
+            const heading = document.createElement('h1');
+            heading.className = 'org-name-heading';
+            heading.textContent = orgName;
+            container.innerHTML = '';
+            container.append(heading);
+            container.classList.remove('hidden');
+            container.setAttribute('aria-label', `Organización: ${orgName}`);
+          }
+        };
       }
 
       async function DOMContentLoadedActions() {
@@ -935,16 +949,30 @@ let user = null;
         width: auto;
       }
 
-      .org-name {
-        font-size: 1rem;
+      .org-branding {
+        display: flex;
+        align-items: center;
+      }
+
+      .org-logo {
+        height: 40px;
+        width: auto;
+        max-width: 180px;
+        object-fit: contain;
+      }
+
+      .org-name-heading {
+        font-size: 1.2rem;
         font-weight: 700;
         letter-spacing: 0.01em;
         color: var(--text-on-primary, #ffffff);
         white-space: nowrap;
+        margin: 0;
+        line-height: 1;
       }
 
       @media (max-width: 768px) {
-        .org-name {
+        .org-branding {
           display: none;
         }
       }

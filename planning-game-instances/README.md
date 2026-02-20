@@ -51,6 +51,8 @@ planning-game-instances/<name>/
   storage.emulator.rules      # Storage rules for emulator (optional)
   serviceAccountKey.json      # Service account key (optional, NEVER commit)
   sonar-project.properties    # SonarQube config override (optional)
+  theme-config.json           # Theme configuration - colors, branding (optional)
+  org-logo.png                # Organization logo for header (optional, PNG)
   functions/
     .env                      # Cloud Functions environment variables
   emulator-data/
@@ -79,9 +81,18 @@ On **Windows**, files are copied instead of symlinked (symlinks require admin pr
 6. (Optional) Export emulator data to `emulator-data/`
 7. Run `npm run instance:use -- my-instance`
 
+## Organization Branding
+
+Each instance can customize the header branding:
+
+- **Logo image**: Place an `org-logo.png` in your instance directory. It will be symlinked to `public/images/org-logo.png` and displayed in the header next to the Planning Game icon.
+- **Text fallback**: If no logo image exists, set `PUBLIC_ORG_NAME` in your `.env.*` files. It will be displayed as a heading in the header.
+- **Theme colors**: Place a `theme-config.json` in your instance directory to override the default theme tokens (colors, fonts, etc.).
+
 ## Notes
 
 - **This directory is gitignored** (except this README) because it contains secrets
 - Each developer should create their own instance configuration locally
 - Use the setup wizard (`npm run setup`) for guided configuration
 - The `.active-instance` file is also gitignored
+- **Dev server limitation**: Only one instance can run on `localhost:4321` at a time. The instance manager will warn if a dev server is already running with a different instance.

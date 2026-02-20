@@ -51,6 +51,8 @@ const INSTANCE_FILES = [
   { src: 'serviceAccountKey.json', dest: 'serviceAccountKey.json', required: false, desc: 'Service account key' },
   { src: 'sonar-project.properties', dest: 'sonar-project.properties', required: false, desc: 'SonarQube config' },
   { src: 'functions/.env', dest: 'functions/.env', required: false, desc: 'Cloud Functions env vars' },
+  { src: 'theme-config.json', dest: 'public/theme-config.json', required: false, desc: 'Theme configuration (colors, branding)' },
+  { src: 'org-logo.png', dest: 'public/images/org-logo.png', required: false, desc: 'Organization logo for header' },
 ];
 
 const EMULATOR_DATA = { src: 'emulator-data', dest: 'emulator-data' };
@@ -159,6 +161,25 @@ function prompt(question) {
       resolve(answer.trim());
     });
   });
+}
+
+/**
+ * Checks if a dev server is running on port 4321 with a different instance.
+ * Returns the conflicting instance name, or null if no conflict.
+ */
+function checkDevServerConflict(targetInstance) {
+  const lastUsed = getLastInstance();
+  if (!lastUsed || lastUsed === targetInstance) return null;
+
+  try {
+    // Check if port 4321 is in use
+    execSync('lsof -ti:4321', { stdio: 'pipe' });
+    // Port is in use — check if it's a different instance
+    return lastUsed;
+  } catch {
+    // Port not in use, no conflict
+    return null;
+  }
 }
 
 // ============================================================================
@@ -307,6 +328,13 @@ async function cmdSelect() {
   // Single instance: auto-select
   if (instances.length === 1) {
     const name = instances[0];
+    const conflict = checkDevServerConflict(name);
+    if (conflict) {
+      console.error(`\nError: Dev server running on port 4321 with instance "${conflict}".`);
+      console.error(`Cannot switch to "${name}" while another instance is serving.`);
+      console.error('Stop the running dev server first, then try again.\n');
+      process.exit(1);
+    }
     const projectId = getProjectIdFromFirebaserc(path.join(INSTANCES_DIR, name));
     console.log(`\nUsing instance: ${name} (${projectId || 'no project ID'})`);
     activateInstance(name, { verbose: false });
@@ -361,6 +389,14 @@ async function cmdSelect() {
       process.exit(1);
     }
     selected = answer;
+  }
+
+  const conflict = checkDevServerConflict(selected);
+  if (conflict) {
+    console.error(`\nError: Dev server running on port 4321 with instance "${conflict}".`);
+    console.error(`Cannot switch to "${selected}" while another instance is serving.`);
+    console.error('Stop the running dev server first, then try again.\n');
+    process.exit(1);
   }
 
   const projectId = getProjectIdFromFirebaserc(path.join(INSTANCES_DIR, selected));

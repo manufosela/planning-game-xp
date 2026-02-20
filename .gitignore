@@ -35,6 +35,9 @@ public/ia-config.js
 public/firebase-messaging-sw.js
 public/js/config/developer-directory.js
 
+# Instance-symlinked files (org branding)
+public/images/org-logo.png
+
 #firebase
 .firebase/
 .firebase/**/*
