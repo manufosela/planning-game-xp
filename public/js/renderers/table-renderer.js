@@ -1580,23 +1580,6 @@ const style = {
         }));
       }
 
-      // Show IA button only if project has IA enabled and task is not done
-      const project = globalThis.projects?.[config.projectId];
-      const projectHasIa = project?.useIa === true || project?.iaEnabled === true;
-      if (projectHasIa && (card.status || '').toLowerCase() !== 'done') {
-        actionsTd.appendChild(iconBtn('🤖', 'Generar enlace IA', () => {
-          container.dispatchEvent(new CustomEvent('generate-ia-link', {
-            detail: {
-              cardId: card.cardId || '',
-              firebaseId,
-              projectId: config.projectId,
-              card
-            },
-            bubbles: true,
-            composed: true
-          }));
-        }));
-      }
 
       row.appendChild(actionsTd);
 

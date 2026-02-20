@@ -459,7 +459,6 @@ export class AppController {
     const tableContainer = document.getElementById('tasksTableView');
     if (tableContainer) {
       tableContainer.addEventListener('edit-task', this.handleEditTask.bind(this));
-      tableContainer.addEventListener('generate-ia-link', this.handleGenerateIaLink.bind(this));
     }
 
     // Evento para ver bug desde la tabla
@@ -868,60 +867,6 @@ return;
   getFirebaseConfig() {
     const config = this.firebaseService.firebaseConfig;
 return config;
-  }
-
-  async handleGenerateIaLink(event) {
-    try {
-      const detail = event.detail || {};
-      const projectId = detail.projectId || this.getCurrentProjectId();
-      const taskId = detail.firebaseId;
-      if (!projectId || !taskId) {
-        this.showNotification('No se pudo generar el enlace (falta projectId o ID de Firebase)', 'error');
-        return;
-      }
-
-      const projectSnap = await get(ref(database, `/projects/${projectId}`));
-      if (!projectSnap.exists() || !projectSnap.val().iaEnabled) {
-        this.showNotification('La IA no está habilitada para este proyecto', 'warning');
-        return;
-      }
-
-      const token = this._generateSecureToken();
-      const now = Date.now();
-      const expiresAt = now + 15 * 60 * 1000; // 15 minutos
-      const createdBy = (auth?.currentUser?.email || '').trim();
-
-      const linkData = {
-        token,
-        projectId,
-        taskId,
-        firebaseId: taskId,
-        cardId: detail.cardId || '',
-        createdBy: createdBy || 'unknown',
-        createdAt: now,
-        expiresAt,
-        used: false
-      };
-
-      await set(ref(database, `/ia/links/${token}`), linkData);
-      const url = this._buildIaLinkUrl(token);
-      await navigator.clipboard.writeText(url);
-      this.showNotification('Enlace IA generado y copiado (1 uso, 15 min)', 'success');
-    } catch (error) {
-this.showNotification('No se pudo generar el enlace IA', 'error');
-    }
-  }
-
-  _buildIaLinkUrl(token) {
-    const region = 'europe-west1';
-    const projectId = firebaseConfig?.projectId || 'planning-gamexp';
-    return `https://${region}-${projectId}.cloudfunctions.net/getIaContext/${token}`;
-  }
-
-  _generateSecureToken() {
-    const bytes = new Uint8Array(24);
-    globalThis.crypto.getRandomValues(bytes);
-    return Array.from(bytes, (b) => ('0' + b.toString(16)).slice(-2)).join('');
   }
 
   async initializeProjectSelector() {

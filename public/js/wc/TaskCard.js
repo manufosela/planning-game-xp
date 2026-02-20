@@ -130,20 +130,7 @@ export class TaskCard extends CommitsDisplayMixin(NotesManagerMixin(BaseCard)) {
           background: rgba(0,0,0,0.05);
         }
 
-        .ia-link-button {
-          background: transparent;
-          border: none;
-          box-shadow: none;
-          color: inherit;
-          font-size: 0.95em;
-          cursor: pointer;
-          padding: 0 0.35em;
-          margin-left: 0.3em;
-          transition: background 0.2s;
-        }
-        .ia-link-button:hover {
-          background: rgba(0,0,0,0.05);
-        }
+
 
         .expanded-footer.ia-footer {
           display: grid;
@@ -1263,13 +1250,6 @@ return { stakeholders: [], developers: [], scoringSystem: '1-5', repositories: [
     return (this.status || '').toLowerCase() === 'blocked';
   }
 
-  /**
-   * Check if project has IA enabled
-   */
-  _projectHasIa() {
-    const project = globalThis.projects?.[this.projectId];
-    return project?.useIa === true || project?.iaEnabled === true;
-  }
 
   /**
    * Genera un color basado en el hash de un string (para badges de repo)
@@ -2587,7 +2567,6 @@ this.isSuperAdmin = false;
           <div class="card-actions">
             ${this.attachment ? html`<span class="attachment-indicator" title="Tiene archivo adjunto">📎</span>` : ''}
             <button class="copy-link-button" title="Copiar enlace" @click=${this.copyCardUrl}>🔗</button>
-            ${this._projectHasIa() ? html`<button class="ia-link-button" title="Generar enlace IA (1 uso, 15 min)" @click=${(e) => { e.stopPropagation(); this._generateIaLink(); }}>🤖</button>` : ''}
             ${this.canMoveToProject ? html`<button class="move-project-button" title="Mover a otro proyecto" @click=${(e) => { e.stopPropagation(); this._handleMoveToProject(e); }}>📦</button>` : ''}
             ${this.canDelete ? html`<button class="delete-button" @click=${this.showDeleteModal}>🗑️</button>` : ''}
           </div>
@@ -3136,9 +3115,6 @@ return html`<div class="no-related-tasks">No hay tareas relacionadas</div>`;
           ` : ''}
           ${this.canDelete ? html`
             <span class="icon-btn" role="button" title="Eliminar" @click=${(e) => { e.stopPropagation(); this.showDeleteModal(); }}>🗑️</span>
-          ` : ''}
-          ${this._projectHasIa() && this._isNotDone() ? html`
-            <span class="icon-btn" role="button" title="Generar enlace IA (1 uso, 15 min)" @click=${(e) => { e.stopPropagation(); this._generateIaLink(); }}>🤖</span>
           ` : ''}
         </div>
       </div>
@@ -3985,59 +3961,6 @@ this.repositoryLabel = newLabel;
       bubbles: true,
       composed: true
     }));
-  }
-
-  async _generateIaLink() {
-    try {
-      const firebaseId = this.firebaseId;
-      if (!this.projectId || !firebaseId) {
-        this._showNotification('Falta projectId o ID de Firebase para generar el enlace IA', 'error');
-        return;
-      }
-
-      const projectSnap = await get(ref(database, `/projects/${this.projectId}`));
-      if (!projectSnap.exists() || !projectSnap.val().iaEnabled) {
-        this._showNotification('La IA no está habilitada para este proyecto', 'warning');
-        return;
-      }
-
-      const token = this._generateSecureToken();
-      const now = Date.now();
-      const expiresAt = now + 15 * 60 * 1000; // 15 minutos
-      const createdBy = this._getCurrentUserEmail().trim();
-
-      const linkData = {
-        token,
-        projectId: this.projectId,
-        taskId: firebaseId,
-        firebaseId,
-        cardId: this.cardId || '',
-        createdBy: createdBy || 'unknown',
-        createdAt: now,
-        expiresAt,
-        used: false
-      };
-
-      await dbSet(ref(database, `/ia/links/${token}`), linkData);
-
-      const url = this._buildIaLinkUrl(token);
-      this._copyTaskUrl(url);
-      this._showNotification('Enlace IA generado y copiado (1 uso, 15 min)', 'success');
-    } catch (error) {
-this._showNotification('No se pudo generar el enlace IA', 'error');
-    }
-  }
-
-  _buildIaLinkUrl(token) {
-    const region = 'europe-west1';
-    const projectId = firebaseConfig?.projectId || 'planning-gamexp';
-    return `https://${region}-${projectId}.cloudfunctions.net/getIaContext/${token}`;
-  }
-
-  _generateSecureToken() {
-    const bytes = new Uint8Array(24);
-    globalThis.crypto.getRandomValues(bytes);
-    return Array.from(bytes, (b) => ('0' + b.toString(16)).slice(-2)).join('');
   }
 
   async _validateDeveloperInProgressLimit() {
@@ -5014,16 +4937,6 @@ this._showNotification(`${developerName} ya tiene una tarea en progreso: ${taskI
         ?selected=${this.sprint === sprint.cardId}
       >${sprint.title}</option>
     `;
-  }
-
-  /**
-   * Copia la URL de la tarea al portapapeles y muestra una notificación.
-   * @param {string} url - URL a copiar
-   */
-  _copyTaskUrl(url) {
-    navigator.clipboard.writeText(url)
-      .then(this._handleClipboardSuccess.bind(this))
-      .catch(this._handleClipboardError.bind(this));
   }
 
   /**

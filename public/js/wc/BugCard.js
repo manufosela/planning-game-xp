@@ -1408,9 +1408,6 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
           ${this.canDelete ? html`
             <span class="icon-btn" role="button" title="Eliminar" @click=${(e) => { e.stopPropagation(); this.showDeleteModal(e); }}>🗑️</span>
           ` : ''}
-          ${this._isNotDone() ? html`
-            <span class="icon-btn" role="button" title="Generar enlace IA (1 uso, 15 min)" @click=${(e) => { e.stopPropagation(); this._generateIaLink(); }}>🤖</span>
-          ` : ''}
         </div>
       </div>
     `;
@@ -2691,87 +2688,6 @@ this.attachment = '';
   // IA Link Generation Methods
   // =====================================================
 
-  /**
-   * Generates a temporary IA link for this bug
-   */
-  async _generateIaLink() {
-    try {
-      const firebaseId = this.firebaseId;
-      if (!this.projectId || !firebaseId) {
-        this._showNotification('Falta projectId o ID de Firebase para generar el enlace IA', 'error');
-        return;
-      }
-
-      const projectSnap = await get(ref(database, `/projects/${this.projectId}`));
-      if (!projectSnap.exists() || !projectSnap.val().iaEnabled) {
-        this._showNotification('La IA no está habilitada para este proyecto', 'warning');
-        return;
-      }
-
-      const token = this._generateSecureToken();
-      const now = Date.now();
-      const expiresAt = now + 15 * 60 * 1000; // 15 minutes
-      const createdBy = (this.userEmail || auth?.currentUser?.email || '').trim();
-
-      const linkData = {
-        token,
-        projectId: this.projectId,
-        bugId: firebaseId,
-        firebaseId,
-        cardId: this.cardId || '',
-        cardType: 'bug',
-        createdBy: createdBy || 'unknown',
-        createdAt: now,
-        expiresAt,
-        used: false
-      };
-
-      await dbSet(ref(database, `/ia/links/${token}`), linkData);
-
-      const url = this._buildIaLinkUrl(token);
-      this._copyToClipboard(url);
-      this._showNotification('Enlace IA generado y copiado (1 uso, 15 min)', 'success');
-    } catch (error) {
-      this._showNotification('No se pudo generar el enlace IA', 'error');
-    }
-  }
-
-  /**
-   * Builds the IA link URL
-   * @param {string} token - The generated token
-   * @returns {string} The full URL
-   */
-  _buildIaLinkUrl(token) {
-    const region = 'europe-west1';
-    const projectId = 'planning-gamexp';
-    return `https://${region}-${projectId}.cloudfunctions.net/getIaContext/${token}`;
-  }
-
-  /**
-   * Generates a secure random token
-   * @returns {string} The generated token
-   */
-  _generateSecureToken() {
-    const bytes = new Uint8Array(24);
-    globalThis.crypto.getRandomValues(bytes);
-    return Array.from(bytes, (b) => ('0' + b.toString(16)).slice(-2)).join('');
-  }
-
-  /**
-   * Copies text to clipboard
-   * @param {string} text - Text to copy
-   */
-  _copyToClipboard(text) {
-    navigator.clipboard.writeText(text).catch(() => {
-      // Fallback for older browsers
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-    });
-  }
 }
 
 customElements.define('bug-card', BugCard);
