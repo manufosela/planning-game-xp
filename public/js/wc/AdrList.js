@@ -151,9 +151,10 @@ export class AdrList extends LitElement {
   async _handleDelete(e) {
     const { adrId, projectId, title } = e.detail;
 
-    // Confirm deletion
-    if (!confirm(`Are you sure you want to delete "${title}"?`)) {
-      return;
+    // Confirm deletion using modal service
+    if (window.modalService?.confirm) {
+      const confirmed = await window.modalService.confirm(`Are you sure you want to delete "${title}"?`);
+      if (!confirmed) return;
     }
 
     try {

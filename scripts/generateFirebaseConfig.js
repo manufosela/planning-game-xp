@@ -21,7 +21,7 @@ export function generateFirebaseConfig(env) {
 // This file is generated automatically by astro.config.mjs
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-import { getDatabase, ref, onValue, push, set, get, update, connectDatabaseEmulator, query, orderByChild, limitToLast, runTransaction as runDbTransaction } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+import { getDatabase, ref, onValue, push, set, get, update, remove, connectDatabaseEmulator, query, orderByChild, limitToLast, runTransaction as runDbTransaction } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
 import { getAuth, OAuthProvider, GoogleAuthProvider, signOut, signInWithPopup, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import { getFirestore, doc, runTransaction, setDoc, getDoc, connectFirestoreEmulator } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
@@ -161,7 +161,7 @@ onAuthStateChanged(auth, (user) => {
   }
 });
 
-export { ref, push, set, update, onValue, signOut, signInWithPopup, signInWithEmailAndPassword, onAuthStateChanged, get, doc, runTransaction, runDbTransaction, setDoc, getDoc, vapidKey, connectDatabaseEmulator, connectStorageEmulator, query, orderByChild, limitToLast, httpsCallable, OAuthProvider, GoogleAuthProvider };
+export { ref, push, set, update, remove, onValue, signOut, signInWithPopup, signInWithEmailAndPassword, onAuthStateChanged, get, doc, runTransaction, runDbTransaction, setDoc, getDoc, vapidKey, connectDatabaseEmulator, connectStorageEmulator, query, orderByChild, limitToLast, httpsCallable, OAuthProvider, GoogleAuthProvider };
 `;
 
   // Escribir los archivos
