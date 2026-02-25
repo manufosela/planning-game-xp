@@ -116,7 +116,7 @@ describe('validateBugFields', () => {
   });
 
   it('should accept valid bug priority', () => {
-    expect(() => validateBugFields({ priority: 'APPLICATION BLOCKER' })).not.toThrow();
+    expect(() => validateBugFields({ priority: 'Application Blocker' })).not.toThrow();
   });
 });
 

@@ -56,13 +56,13 @@ export const APP_CONSTANTS = {
   
   // Task Status Order (logical workflow order)
   // Reopened is a special status for tasks that were validated but need rework
-  TASK_STATUS_ORDER: ['To Do', 'In Progress', 'To Validate', 'Done&Validated', 'Blocked', 'Reopened'],
+  TASK_STATUS_ORDER: ['To Do', 'In Progress', 'Pausado', 'To Validate', 'Done&Validated', 'Blocked', 'Reopened'],
 
   // Bug Status Order (logical workflow order — aligned with shared/constants.js)
   BUG_STATUS_ORDER: ['Created', 'Assigned', 'Fixed', 'Verified', 'Closed'],
 
   // Bug Priority Order (severity order)
-  BUG_PRIORITY_ORDER: ['APPLICATION BLOCKER', 'DEPARTMENT BLOCKER', 'INDIVIDUAL BLOCKER', 'USER EXPERIENCE ISSUE', 'WORKFLOW IMPROVEMENT', 'WORKAROUND AVAILABLE ISSUE'],
+  BUG_PRIORITY_ORDER: ['Application Blocker', 'Department Blocker', 'Individual Blocker', 'User Experience Issue', 'Workflow Improvement', 'Workaround Available Issue'],
 
   // Completed statuses - used to exclude cards from year migration
   // Tasks/bugs with these statuses are considered "finished" and won't be migrated to the next year
@@ -72,6 +72,7 @@ export const APP_CONSTANTS = {
   KANBAN_COLORS: {
     'TO DO': 'linear-gradient(135deg, #6c757d, #495057)',
     'IN PROGRESS': 'linear-gradient(135deg, #ffc107, #fd7e14)',
+    'PAUSADO': 'linear-gradient(135deg, #ff9800, #f57c00)',
     'TO VALIDATE': 'linear-gradient(135deg, #17a2b8, #20c997)',
     'DONE&VALIDATED': 'linear-gradient(135deg, #28a745, #20c997)',
     'BLOCKED': 'linear-gradient(135deg, #dc3545, #c82333)',
@@ -89,12 +90,12 @@ export const APP_CONSTANTS = {
     'Closed': 'linear-gradient(135deg, #14532d, #276749)',
     
     // Bug Priority Colors
-    'APPLICATION BLOCKER': 'linear-gradient(135deg, #dc3545, #c82333)',
-    'DEPARTMENT BLOCKER': 'linear-gradient(135deg, #fd7e14, #e36209)',
-    'INDIVIDUAL BLOCKER': 'linear-gradient(135deg, #ffc107, #e0a800)',
-    'USER EXPERIENCE ISSUE': 'linear-gradient(135deg, #28a745, #218838)',
-    'WORKFLOW IMPROVEMENT': 'linear-gradient(135deg, #17a2b8, #138496)',
-    'WORKAROUND AVAILABLE ISSUE': 'linear-gradient(135deg, #6c757d, #495057)'
+    'Application Blocker': 'linear-gradient(135deg, #dc3545, #c82333)',
+    'Department Blocker': 'linear-gradient(135deg, #fd7e14, #e36209)',
+    'Individual Blocker': 'linear-gradient(135deg, #ffc107, #e0a800)',
+    'User Experience Issue': 'linear-gradient(135deg, #28a745, #218838)',
+    'Workflow Improvement': 'linear-gradient(135deg, #17a2b8, #138496)',
+    'Workaround Available Issue': 'linear-gradient(135deg, #6c757d, #495057)'
   },
   VIEWS: {
     LIST: 'list',

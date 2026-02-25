@@ -19,11 +19,11 @@ const _require = createRequire(__filename);
 const VALID_BUG_STATUSES = ['Created', 'Assigned', 'Fixed', 'Verified', 'Closed'];
 
 const VALID_BUG_PRIORITIES = [
-  'APPLICATION BLOCKER', 'DEPARTMENT BLOCKER', 'INDIVIDUAL BLOCKER',
-  'USER EXPERIENCE ISSUE', 'WORKFLOW IMPROVEMENT', 'WORKAROUND AVAILABLE ISSUE'
+  'Application Blocker', 'Department Blocker', 'Individual Blocker',
+  'User Experience Issue', 'Workflow Improvement', 'Workaround Available Issue'
 ];
 
-const VALID_TASK_STATUSES = ['To Do', 'In Progress', 'To Validate', 'Done&Validated', 'Blocked', 'Reopened'];
+const VALID_TASK_STATUSES = ['To Do', 'In Progress', 'Pausado', 'To Validate', 'Done&Validated', 'Blocked', 'Reopened'];
 const VALID_TASK_PRIORITIES = ['High', 'Medium', 'Low'];
 
 const VALIDATOR_ONLY_STATUSES = ['Done', 'Done&Validated'];

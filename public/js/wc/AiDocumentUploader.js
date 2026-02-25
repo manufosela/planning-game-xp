@@ -1258,7 +1258,7 @@ export class AiDocumentUploader extends LitElement {
             cardData.group = 'bugs';
             cardData.section = 'bugs';
             cardData.status = 'Created';
-            cardData.priority = item.priority || 'USER EXPERIENCE ISSUE';
+            cardData.priority = item.priority || 'User Experience Issue';
             cardData.description = item.description || '';
           } else if (item.type === 'proposal') {
             cardData.cardType = 'proposal-card';
@@ -1954,15 +1954,15 @@ export class AiDocumentUploader extends LitElement {
                   <div class="item-field">
                     <label>Prioridad</label>
                     <select
-                      .value=${item.priority || 'USER EXPERIENCE ISSUE'}
+                      .value=${item.priority || 'User Experience Issue'}
                       @change=${e => this._handleItemChange(item.id, 'priority', e.target.value)}
                     >
-                      <option value="APPLICATION BLOCKER">APPLICATION BLOCKER</option>
-                      <option value="DEPARTMENT BLOCKER">DEPARTMENT BLOCKER</option>
-                      <option value="INDIVIDUAL BLOCKER">INDIVIDUAL BLOCKER</option>
-                      <option value="USER EXPERIENCE ISSUE">USER EXPERIENCE ISSUE</option>
-                      <option value="WORKFLOW IMPROVEMENT">WORKFLOW IMPROVEMENT</option>
-                      <option value="WORKAROUND AVAILABLE ISSUE">WORKAROUND AVAILABLE ISSUE</option>
+                      <option value="Application Blocker">Application Blocker</option>
+                      <option value="Department Blocker">DEPARTMENT BLOCKER</option>
+                      <option value="Individual Blocker">INDIVIDUAL BLOCKER</option>
+                      <option value="User Experience Issue">User Experience Issue</option>
+                      <option value="Workflow Improvement">WORKFLOW IMPROVEMENT</option>
+                      <option value="Workaround Available Issue">WORKAROUND AVAILABLE ISSUE</option>
                     </select>
                   </div>
                 ` : html`

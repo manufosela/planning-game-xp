@@ -37,6 +37,8 @@ import {
   migrateImplementationPlan,
   validateImplementationPlan
 } from '../../shared/validation.js';
+import { getListTexts, getListPairs, resolveValue } from '../services/list-service.js';
+import { getListTexts, getListPairs, resolveValue } from '../services/list-service.js';
 
 // Re-export for use by register-tools.js
 export {
@@ -436,6 +438,22 @@ export async function createCard({ projectId, type, title, description, descript
     }
   }
 
+  // Resolve values dynamically from Firebase RTDB (case-insensitive)
+  if (type === 'bug') {
+    if (status) status = await resolveValue('bugStatus', status);
+    if (priority) priority = await resolveValue('bugPriority', priority);
+  } else if (type === 'task') {
+    if (status) status = await resolveValue('taskStatus', status);
+  }
+
+  // Resolve values dynamically from Firebase RTDB (case-insensitive)
+  if (type === 'bug') {
+    if (status) status = await resolveValue('bugStatus', status);
+    if (priority) priority = await resolveValue('bugPriority', priority);
+  } else if (type === 'task') {
+    if (status) status = await resolveValue('taskStatus', status);
+  }
+
   const initialData = { status, priority };
 
   if (type === 'bug') {
@@ -798,6 +816,22 @@ export async function updateCard({ projectId, type, firebaseId, updates, validat
 
   validateEntityIds(updates);
 
+  // Resolve values dynamically from Firebase RTDB (case-insensitive)
+  if (type === 'bug') {
+    if (updates.status) updates.status = await resolveValue('bugStatus', updates.status);
+    if (updates.priority) updates.priority = await resolveValue('bugPriority', updates.priority);
+  } else if (type === 'task') {
+    if (updates.status) updates.status = await resolveValue('taskStatus', updates.status);
+  }
+
+  // Resolve values dynamically from Firebase RTDB (case-insensitive)
+  if (type === 'bug') {
+    if (updates.status) updates.status = await resolveValue('bugStatus', updates.status);
+    if (updates.priority) updates.priority = await resolveValue('bugPriority', updates.priority);
+  } else if (type === 'task') {
+    if (updates.status) updates.status = await resolveValue('taskStatus', updates.status);
+  }
+
   if (type === 'bug') {
     validateBugFields(updates, true);
     validateBugStatusTransition(currentCard, updates);
@@ -914,12 +948,60 @@ export async function updateCard({ projectId, type, firebaseId, updates, validat
     }
   }
 
+  // startDate is IMMUTABLE: set once on first In Progress, never changed
   // Auto-set startDate when moving task to "In Progress"
   if (type === 'task' && updates.status === 'In Progress') {
     const hasStartDate = updates.startDate || currentCard.startDate;
     if (!hasStartDate) {
       const today = new Date().toISOString().split('T')[0];
       updates.startDate = today;
+    }
+  }
+
+  // Auto-set endDate when moving task to "To Validate"
+  // endDate is always updated on each transition to "To Validate" (reset on reopen)
+  if (type === 'task' && updates.status === 'To Validate') {
+    updates.endDate = new Date().toISOString().split('T')[0];
+  }
+
+  // Auto-manage timeLog for Pausado status transitions
+  if (type === 'task' && updates.status) {
+    const currentStatus = (currentCard.status || '').toLowerCase();
+    const newStatus = updates.status;
+    const timeLog = Array.isArray(currentCard.timeLog) ? [...currentCard.timeLog] : [];
+    const now = new Date().toISOString();
+
+    if (newStatus === 'In Progress' && timeLog.length === 0) {
+      timeLog.push({ action: 'started', timestamp: updates.startDate || currentCard.startDate || now });
+    }
+    if (newStatus === 'Pausado' && currentStatus === 'in progress') {
+      timeLog.push({ action: 'paused', timestamp: now });
+    }
+    if (newStatus === 'In Progress' && currentStatus === 'pausado') {
+      timeLog.push({ action: 'resumed', timestamp: now });
+    }
+    if (newStatus === 'To Validate') {
+      timeLog.push({ action: 'finished', timestamp: now });
+      let totalPaused = 0;
+      let lastPausedAt = null;
+      for (const entry of timeLog) {
+        if (entry.action === 'paused') lastPausedAt = new Date(entry.timestamp).getTime();
+        else if (entry.action === 'resumed' && lastPausedAt) {
+          totalPaused += new Date(entry.timestamp).getTime() - lastPausedAt;
+          lastPausedAt = null;
+        }
+      }
+      const startedEntry = timeLog.find(e => e.action === 'started');
+      const finishedEntry = [...timeLog].reverse().find(e => e.action === 'finished');
+      if (startedEntry && finishedEntry) {
+        updates.totalElapsedTime = new Date(finishedEntry.timestamp).getTime() - new Date(startedEntry.timestamp).getTime();
+        updates.totalPausedTime = totalPaused;
+        updates.effectiveWorkTime = updates.totalElapsedTime - totalPaused;
+      }
+    }
+
+    if (timeLog.length > 0) {
+      updates.timeLog = timeLog;
     }
   }
 
