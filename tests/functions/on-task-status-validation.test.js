@@ -136,42 +136,13 @@ describe('onTaskStatusValidation', () => {
       expect(mockDbSet).not.toHaveBeenCalled();
     });
 
-    it('should allow transition to In Progress with unchanged startDate (immutable)', async () => {
-      const beforeData = {
-        status: 'Blocked',
-        startDate: '2026-01-10'
-      };
-
-      const afterData = {
-        status: 'In Progress',
-        startDate: '2026-01-10', // unchanged -> valid (startDate is immutable)
-        title: 'Test Task',
-        developer: 'dev_001',
-        validator: 'stk_001',
-        epic: 'EPC-001',
-        sprint: 'SPR-001',
-        devPoints: 3,
-        businessPoints: 3,
-        acceptanceCriteria: 'Some criteria',
-        updatedBy: 'user@example.com'
-      };
-
-      const result = await handleTaskStatusValidation(
-        { projectId: 'Test', section: 'TASKS_Test', cardId: 'card1' },
-        beforeData,
-        afterData,
-        { db: mockDb, logger: mockLogger }
-      );
-
-      expect(result).toBeNull();
-    });
-
-    it('should reject transition to In Progress when startDate is missing', async () => {
+    it('should reject transition to In Progress when startDate is not updated', async () => {
       mockDbOnce.mockResolvedValue({ val: () => ({}) });
       mockDbSet.mockResolvedValue();
 
       const beforeData = {
-        status: 'Blocked'
+        status: 'Blocked',
+        startDate: '2026-01-10'
       };
 
       const afterData = {
@@ -198,7 +169,7 @@ describe('onTaskStatusValidation', () => {
       expect(result).toEqual({
         reverted: true,
         error: expect.objectContaining({
-          type: 'missing-start-date'
+          type: 'missing-start-date-update'
         })
       });
     });
@@ -436,6 +407,80 @@ describe('onTaskStatusValidation', () => {
 
       expect(result).toBeNull();
       expect(mockDbOnce).not.toHaveBeenCalled();
+    });
+
+    describe('Pausado status transitions', () => {
+      it('should allow transition to Pausado when startDate exists', async () => {
+        const afterData = {
+          status: 'Pausado',
+          title: 'Test Task',
+          developer: 'dev_001',
+          startDate: '2026-01-25',
+          validator: 'stk_001',
+          updatedBy: 'user@example.com'
+        };
+
+        const result = await handleTaskStatusValidation(
+          { projectId: 'Test', section: 'TASKS_Test', cardId: 'card1' },
+          { status: 'In Progress' },
+          afterData,
+          { db: mockDb, logger: mockLogger }
+        );
+
+        expect(result).toBeNull();
+      });
+
+      it('should reject transition to Pausado when startDate is missing', async () => {
+        mockDbOnce.mockResolvedValue({ val: () => ({}) });
+        mockDbSet.mockResolvedValue();
+
+        const afterData = {
+          status: 'Pausado',
+          title: 'Test Task',
+          developer: 'dev_001',
+          validator: 'stk_001',
+          updatedBy: 'user@example.com'
+        };
+
+        const result = await handleTaskStatusValidation(
+          { projectId: 'Test', section: 'TASKS_Test', cardId: 'card1' },
+          { status: 'In Progress' },
+          afterData,
+          { db: mockDb, logger: mockLogger }
+        );
+
+        expect(result).toEqual({
+          reverted: true,
+          error: expect.objectContaining({
+            type: 'missing-start-date-for-pause'
+          })
+        });
+      });
+
+      it('should allow transition from Pausado to In Progress', async () => {
+        const afterData = {
+          status: 'In Progress',
+          title: 'Test Task',
+          developer: 'dev_001',
+          startDate: '2026-01-25',
+          validator: 'stk_001',
+          epic: 'EPC-001',
+          sprint: 'SPR-001',
+          devPoints: 3,
+          businessPoints: 3,
+          acceptanceCriteria: 'Some criteria',
+          updatedBy: 'user@example.com'
+        };
+
+        const result = await handleTaskStatusValidation(
+          { projectId: 'Test', section: 'TASKS_Test', cardId: 'card1' },
+          { status: 'Pausado' },
+          afterData,
+          { db: mockDb, logger: mockLogger }
+        );
+
+        expect(result).toBeNull();
+      });
     });
   });
 });
