@@ -8,6 +8,7 @@ import { ref, get } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-dat
 import { entityDirectoryService } from '../services/entity-directory-service.js';
 import { modalStackService } from '../services/modal-stack-service.js';
 import { setupAutoCloseOnSave } from '../services/modal-service.js';
+import { resolveStatusColor } from '../utils/color-utils.js';
 import { EPIC_SCHEMA } from '../schemas/card-field-schemas.js';
 
 export class EpicCard extends BaseCard {
@@ -895,14 +896,14 @@ this.canEditPermission = permissions.canEdit || false;
           background-color: #e9ecef;
           color: #333333;
         }
-        .status-todo { background-color: #ec3e95; color: white; padding: 4px 8px; border-radius: 4px; }
-        .status-inprogress { background-color: #ff9800; color: white; padding: 4px 8px; border-radius: 4px; }
-        .status-done { background-color: #2CFF1E; color: black; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
-        .status-blocked { background-color: #ccc; opacity: 0.5; padding: 4px 8px; border-radius: 4px; }
-        .status-inreview { background-color: #ffeb3b; color: black; padding: 4px 8px; border-radius: 4px; }
-        .status-testing { background-color: #2196f3; color: white; padding: 4px 8px; border-radius: 4px; }
-        .status-tovalidate { background-color: #ffeb3b; color: black; padding: 4px 8px; border-radius: 4px; }
-        .status-cancelled { background-color: #d9534f; color: white; padding: 4px 8px; border-radius: 4px; }
+        .status-todo { background-color: var(--status-todo, #449bd3); padding: 4px 8px; border-radius: 4px; }
+        .status-inprogress { background-color: var(--status-in-progress, #cce500); padding: 4px 8px; border-radius: 4px; }
+        .status-done { background-color: var(--status-done, #d4edda); font-weight: bold; padding: 4px 8px; border-radius: 4px; }
+        .status-blocked { background-color: var(--status-blocked, #f8d7da); opacity: 0.5; padding: 4px 8px; border-radius: 4px; }
+        .status-inreview { background-color: var(--status-to-validate, #ff6600); padding: 4px 8px; border-radius: 4px; }
+        .status-testing { background-color: var(--status-in-progress, #cce500); padding: 4px 8px; border-radius: 4px; }
+        .status-tovalidate { background-color: var(--status-to-validate, #ff6600); padding: 4px 8px; border-radius: 4px; }
+        .status-cancelled { background-color: var(--status-blocked, #f8d7da); padding: 4px 8px; border-radius: 4px; }
         .view-task-btn {
           background: #4a9eff;
           color: white;
@@ -1365,17 +1366,7 @@ this.canEditPermission = permissions.canEdit || false;
    * @returns {string} Color hex
    */
   _getTaskColor(status) {
-    const statusColors = {
-      'todo': '#ec3e95',
-      'inprogress': '#ff9800',
-      'inreview': '#ffeb3b',
-      'testing': '#2196f3',
-      'tovalidate': '#ffeb3b',
-      'done': '#2CFF1E',
-      'blocked': '#ccc',
-      'cancelled': '#d9534f'
-    };
-    return statusColors[status?.toLowerCase()] || '#4a9eff';
+    return resolveStatusColor(status || '');
   }
 
   /**

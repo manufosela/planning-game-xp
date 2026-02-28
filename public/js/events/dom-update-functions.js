@@ -6,6 +6,7 @@ import { entityDirectoryService } from '../services/entity-directory-service.js'
 import { APP_CONSTANTS } from '../constants/app-constants.js';
 import { getPriorityDisplay } from '../utils/priority-utils.js';
 import { UIUtils } from '../utils/ui-utils.js';
+import { getStatusColorPair } from '../utils/color-utils.js';
 
 // Column indices from centralized constants
 const TASK_COLS = APP_CONSTANTS.TABLE_COLUMNS.TASKS;
@@ -72,58 +73,8 @@ function _resolveEpicDisplayName(epicValue) {
  * @param {string} type - 'task' o 'bug'
  * @returns {{bg: string, fg: string}}
  */
-function getStatusColor(status, type = 'task') {
-  const value = (status || '').toString();
-  const lower = value.toLowerCase();
-  const upper = value.toUpperCase();
-
-  if (type === 'bug') {
-    // Bug statuses use kanban colors (mixed case keys)
-    const kanbanColors = APP_CONSTANTS?.KANBAN_COLORS || {};
-    const kanbanBg = kanbanColors[value] || kanbanColors[upper];
-    if (kanbanBg) {
-      return { bg: kanbanBg, fg: '#fff' };
-    }
-    const palette = {
-      'created': '#6c757d',
-      'assigned': '#0d6efd',
-      'fixed': '#2ab27b',
-      'verified': '#198754',
-      'closed': '#6c757d'
-    };
-    const bg = palette[lower] || '#adb5bd';
-    return { bg, fg: '#fff' };
-  }
-
-  // Task status: try kanban gradient colors first (same as table-renderer)
-  const kanbanColors = APP_CONSTANTS?.KANBAN_COLORS || {};
-  const kanbanBg = kanbanColors[upper];
-  if (kanbanBg) {
-    return { bg: kanbanBg, fg: '#fff' };
-  }
-
-  const palette = {
-    'backlog': '#6c757d',
-    'todo': '#6c757d',
-    'to do': '#6c757d',
-    'ready': '#20c997',
-    'in progress': '#0d6efd',
-    'doing': '#0d6efd',
-    'pausado': '#ff9800',
-    'blocked': '#d63384',
-    'qa': '#6f42c1',
-    'review': '#6f42c1',
-    'to validate': '#17a2b8',
-    'tovalidate': '#17a2b8',
-    'done': '#2ab27b',
-    'completed': '#2ab27b',
-    'closed': '#2ab27b',
-    'archived': '#adb5bd',
-    'on hold': '#fd7e14'
-  };
-
-  const bg = palette[lower] || '#adb5bd';
-  return { bg, fg: '#fff' };
+function getStatusColor(status) {
+  return getStatusColorPair(status || '');
 }
 
 /**
@@ -404,26 +355,13 @@ export function updateTableRow(row, cardData) {
 
       // Estado - recrear con estilos
       const status = cardData.status || 'Created';
-      const statusColors = {
-        'created': '#6c757d', 'open': '#0d6efd', 'triaged': '#6c757d',
-        'assigned': '#0d6efd', 'in progress': '#0d6efd', 'blocked': '#d63384',
-        'fixed': '#2ab27b', 'in testing': '#6f42c1', 'verified': '#198754',
-        'closed': '#6c757d', 'cerrado': '#6c757d', 'rechazado': '#343a40',
-        'rejected': '#343a40', 'reopened': '#fd7e14'
-      };
-      const statusBg = statusColors[status.toLowerCase()] || '#adb5bd';
-      cells[2].innerHTML = `<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.85rem;font-weight:600;background:${statusBg};color:#fff;text-transform:capitalize;white-space:nowrap;border:1px solid rgba(0,0,0,0.05)">${status}</span>`;
+      const bugStatusColor = getStatusColor(status);
+      cells[2].innerHTML = `<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.85rem;font-weight:600;background:${bugStatusColor.bg};color:${bugStatusColor.fg};text-transform:capitalize;white-space:nowrap;border:1px solid rgba(0,0,0,0.05)">${status}</span>`;
 
       // Prioridad - recrear con estilos
       const priority = cardData.priority || 'Not Evaluated';
-      const priorityColors = {
-        'application blocker': '#dc3545', 'department blocker': '#fd7e14',
-        'individual blocker': '#ffc107', 'user experience issue': '#28a745',
-        'workflow improvement': '#17a2b8', 'workflow improvment': '#17a2b8',
-        'workaround available issue': '#6c757d', 'not evaluated': '#6c757d'
-      };
-      const priorityBg = priorityColors[priority.toLowerCase()] || '#adb5bd';
-      cells[3].innerHTML = `<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.85rem;font-weight:600;background:${priorityBg};color:#fff;text-transform:capitalize;white-space:nowrap;border:1px solid rgba(0,0,0,0.05)">${priority}</span>`;
+      const priorityColor = getStatusColor(priority);
+      cells[3].innerHTML = `<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.85rem;font-weight:600;background:${priorityColor.bg};color:${priorityColor.fg};text-transform:capitalize;white-space:nowrap;border:1px solid rgba(0,0,0,0.05)">${priority}</span>`;
 
       // Developer - resolver ID a nombre usando entityDirectoryService (igual que table-renderer)
       let developerDisplay = cardData.developer || '';

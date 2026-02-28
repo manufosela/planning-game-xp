@@ -254,6 +254,17 @@ describe('ThemeEditor', () => {
       expect(editor._originalConfig.tokens.brand.primary).toBe('#ff0000');
     });
 
+    it('should apply config after successful save', async () => {
+      const editor = new ThemeEditor();
+      await editor._loadConfig();
+      editor._isDirty = true;
+      editor._handleColorChange('brand', 'primary', '#ff0000');
+
+      await editor._handleSave();
+
+      expect(mockApplyConfig).toHaveBeenCalledWith(editor._config);
+    });
+
     it('should show error notification on save failure', async () => {
       mockSaveConfig.mockRejectedValue(new Error('Save failed'));
       const editor = new ThemeEditor();

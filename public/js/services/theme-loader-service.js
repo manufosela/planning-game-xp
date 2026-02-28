@@ -37,6 +37,7 @@
  */
 
 import { ThemeManagerService } from './theme-manager-service.js';
+import { getContrastColor } from '../utils/color-utils.js';
 import { database, ref, get, set, onValue } from '../../firebase-config.js';
 
 const CONFIG_PATH = '/theme-config.json';
@@ -195,9 +196,15 @@ class ThemeLoader {
    */
   applyTokensToRoot(tokens) {
     const root = document.documentElement;
+    const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
 
     for (const [property, value] of Object.entries(tokens)) {
       root.style.setProperty(property, value);
+
+      // Auto-calculate contrast text color for status tokens
+      if (property.startsWith('--status-') && !property.endsWith('-text') && HEX_RE.test(value)) {
+        root.style.setProperty(`${property}-text`, getContrastColor(value));
+      }
     }
   }
 

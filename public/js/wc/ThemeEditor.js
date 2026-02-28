@@ -1,6 +1,7 @@
 import { LitElement, html } from 'https://cdn.jsdelivr.net/npm/lit@3.0.2/+esm';
 import { ThemeEditorStyles } from './theme-editor-styles.js';
 import { ThemeLoaderService } from '../services/theme-loader-service.js';
+import { getContrastColor } from '../utils/color-utils.js';
 
 const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
@@ -134,6 +135,7 @@ export class ThemeEditor extends LitElement {
     this._isSaving = true;
     try {
       await ThemeLoaderService.saveConfig(this._config);
+      ThemeLoaderService.applyConfig(this._config);
       this._originalConfig = structuredClone(this._config);
       this._isDirty = false;
       this._showNotification('Theme saved successfully', 'success');
@@ -344,7 +346,7 @@ export class ThemeEditor extends LitElement {
         <h4>Preview</h4>
         <div class="preview-status-pills">
           ${Object.entries(STATUS_COLOR_LABELS).map(([key, label]) => html`
-            <span class="status-pill" style="background: ${status[key]}">${label}</span>
+            <span class="status-pill" style="background: ${status[key]}; color: ${this._isValidHex(status[key]) ? getContrastColor(status[key]) : '#fff'}">${label}</span>
           `)}
         </div>
       </div>

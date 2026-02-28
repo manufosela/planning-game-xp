@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'https://cdn.jsdelivr.net/npm/lit@3.1.0/+e
 import { stateTransitionService } from '../services/state-transition-service.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
 import { StateHistoryViewerStyles } from './state-history-viewer-styles.js';
+import { resolveStatusColor } from '../utils/color-utils.js';
 
 /**
  * Component for viewing state transition history of a card
@@ -120,15 +121,7 @@ export class StateHistoryViewer extends LitElement {
   }
 
   _getStatusColor(status) {
-    const normalizedStatus = (status || '').toLowerCase();
-    const colors = {
-      'to do': '#6c757d',
-      'in progress': '#007bff',
-      'to validate': '#ffc107',
-      'done&validated': '#28a745',
-      'blocked': '#dc3545'
-    };
-    return colors[normalizedStatus] || '#6c757d';
+    return resolveStatusColor(status || '');
   }
 
   _getMetrics() {

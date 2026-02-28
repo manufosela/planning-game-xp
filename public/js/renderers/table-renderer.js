@@ -5,6 +5,7 @@ import { decodeEmailFromFirebase } from '../utils/email-sanitizer.js';
 import { userDirectoryService } from '../services/user-directory-service.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
 import { getPriorityDisplay } from '../utils/priority-utils.js';
+import { getStatusColorPair } from '../utils/color-utils.js';
 
 /**
  * Renderer para la vista tipo tabla de tareas.
@@ -1110,66 +1111,8 @@ const style = {
     row.appendChild(cell);
   }
 
-  _statusColor(status, type) {
-    const value = (status || '').toString();
-    const lower = value.toLowerCase();
-    const upper = value.toUpperCase();
-
-    if (type === 'bug') {
-      const palette = {
-        'created': '#6c757d',
-        'assigned': '#0d6efd',
-        'fixed': '#2ab27b',
-        'verified': '#198754',
-        'closed': '#6c757d'
-      };
-      const bg = palette[lower] || '#adb5bd';
-      return { bg, fg: '#fff' };
-    }
-
-    if (type === 'proposal') {
-      const palette = {
-        'propuesta': '#6c757d',
-        'en revisión': '#0d6efd',
-        'en revision': '#0d6efd',
-        'aprobada': '#198754',
-        'rechazada': '#dc3545',
-        'en desarrollo': '#fd7e14',
-        'implementada': '#2ab27b',
-        'descartada': '#343a40'
-      };
-      const bg = palette[lower] || '#adb5bd';
-      return { bg, fg: '#fff' };
-    }
-
-    // Task status: try kanban colors first
-    const kanbanColors = APP_CONSTANTS?.KANBAN_COLORS || {};
-    const kanbanBg = kanbanColors[upper];
-    if (kanbanBg) {
-      return { bg: kanbanBg, fg: '#fff' };
-    }
-
-    const palette = {
-      'backlog': '#6c757d',
-      'todo': '#6c757d',
-      'to do': '#6c757d',
-      'ready': '#20c997',
-      'in progress': '#0d6efd',
-      'doing': '#0d6efd',
-      'blocked': '#d63384',
-      'qa': '#6f42c1',
-      'review': '#6f42c1',
-      'to validate': '#17a2b8',
-      'tovalidate': '#17a2b8',
-      'done': '#2ab27b',
-      'completed': '#2ab27b',
-      'closed': '#2ab27b',
-      'archived': '#adb5bd',
-      'on hold': '#fd7e14'
-    };
-
-    const bg = palette[lower] || '#adb5bd';
-    return { bg, fg: '#fff' };
+  _statusColor(status) {
+    return getStatusColorPair(status || '');
   }
 
   _createPriorityTag(priority = 'Sin prioridad') {
@@ -1191,21 +1134,7 @@ const style = {
   }
 
   _priorityColor(priority) {
-    const value = (priority || '').toString().toLowerCase();
-    const palette = {
-      'application blocker': '#dc3545',
-      'department blocker': '#fd7e14',
-      'individual blocker': '#ffc107',
-      'user experience issue': '#28a745',
-      'workflow improvement': '#17a2b8',
-      'workflow improvment': '#17a2b8',
-      'workaround available issue': '#6c757d',
-      'not evaluated': '#6c757d',
-      'no evaluado': '#6c757d'
-    };
-    const bg = palette[value] || '#adb5bd';
-    const fg = '#fff';
-    return { bg, fg };
+    return getStatusColorPair(priority || '');
   }
 
   /**

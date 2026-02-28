@@ -164,12 +164,12 @@ describe('StateHistoryViewer', () => {
       expect(viewer._getUserDisplayName('')).toBe('Sistema');
     });
 
-    it('should get status colors', () => {
-      expect(viewer._getStatusColor('To Do')).toBe('#6c757d');
-      expect(viewer._getStatusColor('In Progress')).toBe('#007bff');
-      expect(viewer._getStatusColor('To Validate')).toBe('#ffc107');
-      expect(viewer._getStatusColor('Done&Validated')).toBe('#28a745');
-      expect(viewer._getStatusColor('Blocked')).toBe('#dc3545');
+    it('should get status colors from theme system', () => {
+      expect(viewer._getStatusColor('To Do')).toBe('#449bd3');
+      expect(viewer._getStatusColor('In Progress')).toBe('#cce500');
+      expect(viewer._getStatusColor('To Validate')).toBe('#ff6600');
+      expect(viewer._getStatusColor('Done&Validated')).toBe('#d4edda');
+      expect(viewer._getStatusColor('Blocked')).toBe('#f8d7da');
       expect(viewer._getStatusColor('Unknown')).toBe('#6c757d');
     });
 

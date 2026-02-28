@@ -1,25 +1,27 @@
-// Este archivo es generado automáticamente por astro.config.mjs
-  export const KANBAN_STATUS_COLORS_CSS = `
-.todo { background: linear-gradient(135deg, #6c757d, #495057); color: #fff; }
-.inprogress { background: linear-gradient(135deg, #ffc107, #fd7e14); color: #fff; }
-.pausado { background: linear-gradient(135deg, #ff9800, #f57c00); color: #fff; }
-.tovalidate { background: linear-gradient(135deg, #17a2b8, #20c997); color: #fff; }
-.donevalidated { background: linear-gradient(135deg, #28a745, #20c997); color: #fff; }
-.blocked { background: linear-gradient(135deg, #dc3545, #c82333); color: #fff; }
-.reopened { background: linear-gradient(135deg, #9c27b0, #7b1fa2); color: #fff; }
-.high { background: linear-gradient(135deg, #dc3545, #c82333); color: #fff; }
-.medium { background: linear-gradient(135deg, #ffc107, #fd7e14); color: #fff; }
-.low { background: linear-gradient(135deg, #28a745, #20c997); color: #fff; }
-.default { background: linear-gradient(135deg, #6c757d, #495057); color: #fff; }
-.created { background: linear-gradient(135deg, #6c757d, #495057); color: #fff; }
-.assigned { background: linear-gradient(135deg, #4a9eff, #007bff); color: #fff; }
-.fixed { background: linear-gradient(135deg, #28a745, #218838); color: #fff; }
-.verified { background: linear-gradient(135deg, #20c997, #198754); color: #fff; }
-.closed { background: linear-gradient(135deg, #14532d, #276749); color: #fff; }
-.applicationblocker { background: linear-gradient(135deg, #dc3545, #c82333); color: #fff; }
-.departmentblocker { background: linear-gradient(135deg, #fd7e14, #e36209); color: #fff; }
-.individualblocker { background: linear-gradient(135deg, #ffc107, #e0a800); color: #fff; }
-.userexperienceissue { background: linear-gradient(135deg, #28a745, #218838); color: #fff; }
-.workflowimprovement { background: linear-gradient(135deg, #17a2b8, #138496); color: #fff; }
-.workaroundavailableissue { background: linear-gradient(135deg, #6c757d, #495057); color: #fff; }
+// Status color classes using CSS variables from the theme system.
+// Colors are set via ThemeLoaderService from /config/theme in RTDB.
+// Fallback values match the defaults in semantic tokens.
+export const KANBAN_STATUS_COLORS_CSS = `
+.todo { background: var(--status-todo, #449bd3); color: var(--status-todo-text, #fff); }
+.inprogress { background: var(--status-in-progress, #cce500); color: var(--status-in-progress-text, #000); }
+.pausado { background: var(--status-in-progress, #cce500); color: var(--status-in-progress-text, #000); }
+.tovalidate { background: var(--status-to-validate, #ff6600); color: var(--status-to-validate-text, #fff); }
+.donevalidated { background: var(--status-done, #d4edda); color: var(--status-done-text, #000); }
+.blocked { background: var(--status-blocked, #f8d7da); color: var(--status-blocked-text, #000); }
+.reopened { background: var(--status-blocked, #f8d7da); color: var(--status-blocked-text, #000); }
+.high { background: #dc3545; color: #fff; }
+.medium { background: #ffc107; color: #000; }
+.low { background: #28a745; color: #fff; }
+.default { background: #6c757d; color: #fff; }
+.created { background: #6c757d; color: #fff; }
+.assigned { background: var(--brand-primary, #4a9eff); color: #fff; }
+.fixed { background: #28a745; color: #fff; }
+.verified { background: #20c997; color: #000; }
+.closed { background: #14532d; color: #fff; }
+.applicationblocker { background: #dc3545; color: #fff; }
+.departmentblocker { background: #fd7e14; color: #fff; }
+.individualblocker { background: #ffc107; color: #000; }
+.userexperienceissue { background: #28a745; color: #fff; }
+.workflowimprovement { background: #17a2b8; color: #fff; }
+.workaroundavailableissue { background: #6c757d; color: #fff; }
 `

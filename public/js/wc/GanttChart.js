@@ -317,7 +317,9 @@ const width = 1000 - margin.left - margin.right;
 
       // Detectar si la tarea está en curso (sin fecha de fin real, solo asignada como hoy)
       const isEnCurso = !task.realEnd && task.plannedEnd === todayStr && !task.isEpic;
-      const barColor = task.isEpic ? '#4a9eff' : (isEnCurso ? '#DF006E' : '#8b5cf6');
+      const brandPrimary = getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() || '#4a9eff';
+      const brandSecondary = getComputedStyle(document.documentElement).getPropertyValue('--brand-secondary').trim() || '#ec3e95';
+      const barColor = task.isEpic ? brandPrimary : (isEnCurso ? brandSecondary : '#8b5cf6');
 
       const barWidth = timeScale(endDate) - timeScale(startDate);
 
