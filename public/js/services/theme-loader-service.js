@@ -198,12 +198,22 @@ class ThemeLoader {
     const root = document.documentElement;
     const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
 
+    // Text color aliases: map design system names to legacy variable names
+    const TEXT_ALIASES = {
+      '--text-on-primary': '--footer-text',
+    };
+
     for (const [property, value] of Object.entries(tokens)) {
       root.style.setProperty(property, value);
 
       // Auto-calculate contrast text color for status tokens
       if (property.startsWith('--status-') && !property.endsWith('-text') && HEX_RE.test(value)) {
         root.style.setProperty(`${property}-text`, getContrastColor(value));
+      }
+
+      // Propagate text color aliases
+      if (TEXT_ALIASES[property]) {
+        root.style.setProperty(TEXT_ALIASES[property], value);
       }
     }
   }

@@ -290,6 +290,64 @@ export const ThemeEditorStyles = css`
     color: #333;
   }
 
+  /* Section hint */
+  .section-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted, #999);
+    margin: -0.5rem 0 1rem 0;
+  }
+
+  /* Auto button */
+  .btn-auto {
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--border-default, #dee2e6);
+    border-radius: 6px;
+    background: var(--bg-secondary, #f8f9fa);
+    color: var(--text-secondary, #555);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+  }
+
+  .btn-auto:hover {
+    background: var(--brand-primary, #4a9eff);
+    color: white;
+    border-color: var(--brand-primary, #4a9eff);
+  }
+
+  /* Text color preview */
+  .text-preview-cards {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .text-preview-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 1rem 2rem;
+    border-radius: 8px;
+    min-width: 120px;
+    border: 2px solid var(--border-default, #dee2e6);
+  }
+
+  .text-preview-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+
+  .text-preview-text {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
   /* Loading state */
   .loading {
     text-align: center;

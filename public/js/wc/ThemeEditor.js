@@ -8,6 +8,7 @@ const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 const DEFAULT_CONFIG = {
   tokens: {
     brand: { primary: '#4a9eff', primaryHover: '#3a8eef', secondary: '#ec3e95', secondaryHover: '#d81b60' },
+    text: { onPrimary: '#ffffff', onSecondary: '#ffffff' },
     status: { todo: '#449bd3', inProgress: '#cce500', toValidate: '#ff6600', done: '#d4edda', blocked: '#f8d7da', expedited: '#ec3e95' }
   },
   branding: { appName: 'Planning Game XP', logo: '/images/icono_PGame.png', primaryColor: '#4a9eff' },
@@ -19,6 +20,11 @@ const BRAND_COLOR_LABELS = {
   primaryHover: 'Primary Hover',
   secondary: 'Secondary',
   secondaryHover: 'Secondary Hover'
+};
+
+const TEXT_COLOR_LABELS = {
+  onPrimary: 'Text on Primary',
+  onSecondary: 'Text on Secondary'
 };
 
 const STATUS_COLOR_LABELS = {
@@ -85,6 +91,7 @@ export class ThemeEditor extends LitElement {
     return {
       tokens: {
         brand: { ...DEFAULT_CONFIG.tokens.brand, ...config.tokens?.brand },
+        text: { ...DEFAULT_CONFIG.tokens.text, ...config.tokens?.text },
         status: { ...DEFAULT_CONFIG.tokens.status, ...config.tokens?.status },
       },
       branding: { ...DEFAULT_CONFIG.branding, ...config.branding },
@@ -103,6 +110,14 @@ export class ThemeEditor extends LitElement {
     if (this._livePreview) {
       const cssVar = `--${ThemeLoaderService.kebabCase(section)}-${ThemeLoaderService.kebabCase(key)}`;
       document.documentElement.style.setProperty(cssVar, value);
+
+      // Also propagate text color aliases for live preview
+      if (section === 'text' && key === 'onPrimary') {
+        document.documentElement.style.setProperty('--text-on-primary', value);
+        document.documentElement.style.setProperty('--footer-text', value);
+      } else if (section === 'text' && key === 'onSecondary') {
+        document.documentElement.style.setProperty('--text-on-secondary', value);
+      }
     }
 
     this.requestUpdate();
@@ -192,9 +207,14 @@ export class ThemeEditor extends LitElement {
   _validateConfig() {
     if (!this._config?.tokens?.brand || !this._config?.tokens?.status) return false;
 
-    const { brand, status } = this._config.tokens;
+    const { brand, text, status } = this._config.tokens;
     for (const color of Object.values(brand)) {
       if (!HEX_COLOR_REGEX.test(color)) return false;
+    }
+    if (text) {
+      for (const color of Object.values(text)) {
+        if (!HEX_COLOR_REGEX.test(color)) return false;
+      }
     }
     for (const color of Object.values(status)) {
       if (!HEX_COLOR_REGEX.test(color)) return false;
@@ -329,7 +349,79 @@ export class ThemeEditor extends LitElement {
           this._renderColorPicker('brand', key, label, brand[key])
         )}
       </div>
+      ${this._renderTextColors()}
     `;
+  }
+
+  _renderTextColors() {
+    const text = this._config?.tokens?.text;
+    if (!text) return '';
+    return html`
+      <h3 class="section-title">Text Colors</h3>
+      <p class="section-hint">Colors for text rendered on top of brand colors. Use "Auto" to calculate contrast automatically.</p>
+      <div class="color-grid">
+        ${Object.entries(TEXT_COLOR_LABELS).map(([key, label]) => html`
+          <div class="color-picker-group">
+            <label>${label}</label>
+            <div class="color-input-wrapper">
+              <input
+                type="color"
+                .value=${this._isValidHex(text[key]) ? text[key] : '#000000'}
+                @input=${(e) => this._handleColorChange('text', key, e.target.value)}
+              />
+              <input
+                type="text"
+                class="hex-input ${this._isValidHex(text[key]) ? '' : 'invalid'}"
+                .value=${text[key]}
+                @input=${(e) => {
+                  const val = e.target.value;
+                  if (this._isValidHex(val)) {
+                    this._handleColorChange('text', key, val);
+                  } else {
+                    this._config.tokens.text[key] = val;
+                    this._isDirty = true;
+                    this.requestUpdate();
+                  }
+                }}
+                placeholder="#000000"
+                maxlength="7"
+              />
+              <div
+                class="color-swatch"
+                style="background: ${this._isValidHex(text[key]) ? text[key] : '#fff'}"
+              ></div>
+              <button
+                class="btn btn-auto"
+                @click=${() => this._autoCalculateTextColor(key)}
+                title="Auto-calculate contrast color"
+              >Auto</button>
+            </div>
+          </div>
+        `)}
+      </div>
+      <div class="preview-section">
+        <h4>Preview</h4>
+        <div class="text-preview-cards">
+          <div class="text-preview-card" style="background: ${this._config.tokens.brand.primary}; color: ${text.onPrimary}">
+            <span class="text-preview-label">Primary</span>
+            <span class="text-preview-text">Sample Text</span>
+          </div>
+          <div class="text-preview-card" style="background: ${this._config.tokens.brand.secondary}; color: ${text.onSecondary}">
+            <span class="text-preview-label">Secondary</span>
+            <span class="text-preview-text">Sample Text</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  _autoCalculateTextColor(key) {
+    const brandKey = key === 'onPrimary' ? 'primary' : 'secondary';
+    const brandColor = this._config?.tokens?.brand?.[brandKey];
+    if (!brandColor || !this._isValidHex(brandColor)) return;
+
+    const contrast = getContrastColor(brandColor);
+    this._handleColorChange('text', key, contrast);
   }
 
   _renderStatusColors() {

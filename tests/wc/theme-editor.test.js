@@ -55,6 +55,10 @@ const SAMPLE_CONFIG = {
       secondary: '#ec3e95',
       secondaryHover: '#d81b60'
     },
+    text: {
+      onPrimary: '#ffffff',
+      onSecondary: '#ffffff'
+    },
     status: {
       todo: '#449bd3',
       inProgress: '#cce500',

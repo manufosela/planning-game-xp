@@ -834,10 +834,11 @@ let user = null;
 
     <style is:global>
       :root {
-        --primary-color: #4a9eff;
-        --secondary-color: #357ae8;
+        /* Legacy aliases — values come from ThemeLoaderService (--brand-*) */
+        --primary-color: var(--brand-primary, #4a9eff);
+        --primary-color-dark: var(--brand-primary-hover, #357ae8);
+        --secondary-color: var(--brand-primary-hover, #357ae8);
         --terciary-color: #f5f7fa;
-        --brand-secondary: #ec3e95;
         --background-color: var(--bg-secondary, #f5f7fa);
 
         /* Aliases: map legacy variable names used by components to design system tokens */
