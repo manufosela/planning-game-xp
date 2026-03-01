@@ -31,6 +31,8 @@ class UserAdminPanel extends LitElement {
       _permissionsUser: { type: Object, state: true },
       _permissionsProject: { type: String, state: true },
       _permissionsData: { type: Object, state: true },
+      _accessRequests: { type: Array, state: true },
+      _loadingRequests: { type: Boolean, state: true },
     };
   }
 
@@ -53,6 +55,8 @@ class UserAdminPanel extends LitElement {
     this._permissionsProject = '';
     this._permissionsData = { view: false, download: false, upload: false, edit: false, approve: false };
     this._projectsWithApps = new Set();
+    this._accessRequests = [];
+    this._loadingRequests = false;
     this._resetForm();
   }
 
@@ -69,6 +73,7 @@ class UserAdminPanel extends LitElement {
       await Promise.all([
         this._loadUsers(),
         this._loadProjects(),
+        this._loadAccessRequests(),
       ]);
     } catch (error) {
       console.error('Error loading user admin data:', error);
@@ -98,6 +103,63 @@ class UserAdminPanel extends LitElement {
     } else {
       this.projects = [];
       this._projectsWithApps = new Set();
+    }
+  }
+
+  async _loadAccessRequests() {
+    this._loadingRequests = true;
+    try {
+      const requestsRef = ref(database, '/accessRequests');
+      const snapshot = await get(requestsRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        this._accessRequests = Object.entries(data)
+          .map(([key, val]) => ({ encodedEmail: key, ...val }))
+          .filter((r) => r.status === 'pending');
+      } else {
+        this._accessRequests = [];
+      }
+    } catch (error) {
+      // If user doesn't have permission (not AppAdmin), silently ignore
+      this._accessRequests = [];
+    } finally {
+      this._loadingRequests = false;
+    }
+  }
+
+  async _approveRequest(request) {
+    const confirmed = await window.modalService.confirm(
+      'Approve access request',
+      `Approve access for "${request.name || request.email}" (${request.email})? This will create a user record and grant them access.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const approveAccessFn = httpsCallable(functions, 'approveAccessRequest');
+      await approveAccessFn({ encodedEmail: request.encodedEmail, action: 'approve' });
+      this._notify(`Access approved for ${request.email}`, 'success');
+      await Promise.all([this._loadAccessRequests(), this._loadUsers()]);
+    } catch (error) {
+      console.error('Error approving access request:', error);
+      this._notify(`Error approving request: ${error.message}`, 'error');
+    }
+  }
+
+  async _rejectRequest(request) {
+    const confirmed = await window.modalService.confirm(
+      'Reject access request',
+      `Reject access for "${request.name || request.email}" (${request.email})?`
+    );
+    if (!confirmed) return;
+
+    try {
+      const approveAccessFn = httpsCallable(functions, 'approveAccessRequest');
+      await approveAccessFn({ encodedEmail: request.encodedEmail, action: 'reject' });
+      this._notify(`Access rejected for ${request.email}`, 'info');
+      await this._loadAccessRequests();
+    } catch (error) {
+      console.error('Error rejecting access request:', error);
+      this._notify(`Error rejecting request: ${error.message}`, 'error');
     }
   }
 
@@ -466,6 +528,57 @@ class UserAdminPanel extends LitElement {
 
   // ==================== RENDER ====================
 
+  _formatTimeAgo(isoDate) {
+    if (!isoDate) return '';
+    const diff = Date.now() - new Date(isoDate).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
+  _getProviderLabel(provider) {
+    switch (provider) {
+      case 'microsoft.com': return 'Microsoft';
+      case 'google.com': return 'Google';
+      case 'github.com': return 'GitHub';
+      default: return provider || 'OAuth';
+    }
+  }
+
+  _renderAccessRequests() {
+    if (this._accessRequests.length === 0) return nothing;
+
+    return html`
+      <div class="access-requests-section">
+        <div class="access-requests-header">
+          <span class="badge-pending">${this._accessRequests.length}</span>
+          <span class="access-requests-title">Pending access requests</span>
+        </div>
+        <div class="access-requests-list">
+          ${this._accessRequests.map((req) => html`
+            <div class="request-card">
+              <div class="request-info">
+                <span class="request-name">${req.name || req.email}</span>
+                <span class="request-email">${req.email}</span>
+                <span class="request-meta">
+                  ${this._getProviderLabel(req.provider)} &middot; ${this._formatTimeAgo(req.requestedAt)}
+                </span>
+              </div>
+              <div class="request-actions">
+                <button class="btn btn-approve btn-sm" @click=${() => this._approveRequest(req)} title="Approve access">Approve</button>
+                <button class="btn btn-reject btn-sm" @click=${() => this._rejectRequest(req)} title="Reject access">Reject</button>
+              </div>
+            </div>
+          `)}
+        </div>
+      </div>
+    `;
+  }
+
   render() {
     if (this.loading) {
       return html`<div class="loading-message">Loading users</div>`;
@@ -475,6 +588,7 @@ class UserAdminPanel extends LitElement {
 
     return html`
       <div class="user-admin-container">
+        ${this._renderAccessRequests()}
         ${this._renderHeader(filteredUsers)}
         ${this._showForm ? this._renderForm() : nothing}
         ${this._renderTable(filteredUsers)}

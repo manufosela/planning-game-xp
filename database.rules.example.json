@@ -2,6 +2,10 @@
   "rules": {
     ".read": "auth != null && auth.token.email.matches(/.*@YOUR_DOMAIN\\.com$/)",
     ".write": "auth != null && auth.token.email.matches(/.*@YOUR_DOMAIN\\.com$/)",
+    "accessRequests": {
+      ".read": "auth != null && auth.token.isAppAdmin === true",
+      ".write": "auth != null && auth.token.isAppAdmin === true"
+    },
     "appConfig": {
       ".read": true
     },

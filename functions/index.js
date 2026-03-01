@@ -1974,6 +1974,16 @@ exports.setEncodedEmailClaim = functions.region('europe-west1').auth.user().onCr
         logger.info(`User ${email} is pre-authorized, setting allowed=true`, { uid: user.uid });
       } else {
         logger.info(`User ${email} is NOT pre-authorized`, { uid: user.uid });
+        // Record access request for admin review
+        await admin.database().ref(`/accessRequests/${encodedEmail}`).set({
+          email,
+          name: user.displayName || '',
+          provider: user.providerData?.[0]?.providerId || 'unknown',
+          uid: user.uid,
+          status: 'pending',
+          requestedAt: new Date().toISOString(),
+        });
+        logger.info(`Access request recorded for ${email}`, { uid: user.uid });
       }
     }
 
@@ -5275,6 +5285,80 @@ exports.updateAppPermissions = onCall({
  * Rebuilds the compact appPerms claim from all project appPermissions.
  * Flags: v=view, d=download, u=upload, e=edit, a=approve
  */
+/**
+ * Callable function to approve or reject an OAuth access request.
+ * Only callable by AppAdmin users.
+ *
+ * @param {string} data.encodedEmail - The encoded email key from /accessRequests/
+ * @param {string} data.action - "approve" or "reject"
+ */
+exports.approveAccessRequest = onCall({
+  region: "europe-west1"
+}, async (request) => {
+  // 1. Verify caller is AppAdmin
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Authentication required.');
+  }
+  const callerClaims = request.auth.token || {};
+  if (callerClaims.isAppAdmin !== true) {
+    throw new HttpsError('permission-denied', 'Only AppAdmin users can manage access requests.');
+  }
+
+  const { encodedEmail, action } = request.data || {};
+  if (!encodedEmail || !['approve', 'reject'].includes(action)) {
+    throw new HttpsError('invalid-argument', 'Missing or invalid encodedEmail / action. Action must be "approve" or "reject".');
+  }
+
+  // 2. Read the access request
+  const requestRef = admin.database().ref(`/accessRequests/${encodedEmail}`);
+  const requestSnap = await requestRef.once('value');
+  if (!requestSnap.exists()) {
+    throw new HttpsError('not-found', 'Access request not found.');
+  }
+  const accessRequest = requestSnap.val();
+
+  if (action === 'approve') {
+    const email = accessRequest.email;
+    const name = accessRequest.name || email;
+
+    // 3a. Create user record in /users/{encodedEmail}
+    await admin.database().ref(`/users/${encodedEmail}`).set({
+      name,
+      email,
+      projects: {},
+    });
+
+    // 3b. Set allowed=true in Custom Claims
+    try {
+      const userRecord = await admin.auth().getUserByEmail(email);
+      const currentClaims = userRecord.customClaims || {};
+      await admin.auth().setCustomUserClaims(userRecord.uid, {
+        ...currentClaims,
+        allowed: true,
+      });
+      logger.info(`Access approved for ${email}`, { uid: userRecord.uid });
+    } catch (error) {
+      if (error.code === 'auth/user-not-found') {
+        logger.warn(`User ${email} not found in Auth during approval. Claim will be set on next login.`);
+      } else {
+        throw error;
+      }
+    }
+
+    // 3c. Remove the access request
+    await requestRef.remove();
+
+    return { success: true, action: 'approved', email };
+  }
+
+  if (action === 'reject') {
+    // 4a. Mark as rejected
+    await requestRef.update({ status: 'rejected', rejectedAt: new Date().toISOString() });
+    logger.info(`Access rejected for ${accessRequest.email}`);
+    return { success: true, action: 'rejected', email: accessRequest.email };
+  }
+});
+
 exports.syncAppPermissionsClaim = onValueWritten({
   ref: "/users/{encodedEmail}/projects",
   region: "europe-west1"
