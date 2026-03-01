@@ -546,6 +546,100 @@ export const UserAdminPanelStyles = css`
     font-size: 0.85rem;
   }
 
+  /* Access Requests Section */
+  .access-requests-section {
+    margin-bottom: 1rem;
+    border: 1px solid var(--color-warning, #d97706);
+    border-radius: 6px;
+    background: var(--color-warning-bg, #fef3c7);
+    overflow: hidden;
+  }
+
+  .access-requests-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--color-warning, #92400e);
+  }
+
+  .access-requests-title {
+    font-size: 0.85rem;
+  }
+
+  .badge-pending {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 0.4rem;
+    border-radius: 9999px;
+    background: var(--color-warning, #d97706);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .access-requests-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--border-color, #e0e0e0);
+  }
+
+  .request-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1rem;
+    background: var(--bg-primary, white);
+    gap: 1rem;
+  }
+
+  .request-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .request-name {
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: var(--text-primary, #333);
+  }
+
+  .request-email {
+    font-size: 0.82rem;
+    color: var(--text-secondary, #666);
+  }
+
+  .request-meta {
+    font-size: 0.78rem;
+    color: var(--text-tertiary, #9ca3af);
+  }
+
+  .request-actions {
+    display: flex;
+    gap: 0.4rem;
+    flex-shrink: 0;
+  }
+
+  .btn-approve {
+    background: var(--color-success, #16a34a);
+    color: white;
+  }
+
+  .btn-reject {
+    background: var(--color-error, #ef4444);
+    color: white;
+  }
+
   /* Responsive */
   @media (max-width: 768px) {
     .user-admin-header {
@@ -573,6 +667,16 @@ export const UserAdminPanelStyles = css`
     .entity-table th,
     .entity-table td {
       padding: 0.4rem 0.5rem;
+    }
+
+    .request-card {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .request-actions {
+      align-self: flex-end;
     }
   }
 `;

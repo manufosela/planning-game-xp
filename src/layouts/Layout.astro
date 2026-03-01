@@ -637,7 +637,7 @@ let user = null;
         document.dispatchEvent(new CustomEvent('user-signed-out'));
       }
 
-      function signedIn(user) {
+      async function signedIn(user) {
         getDomElements();
         theUser = user;
         window.currentUser = user; // Añadir para que lo use NotificationBell
@@ -649,6 +649,18 @@ let user = null;
         hideEmailLoginForm({ resetForm: true, showToggle: false });
         hideEmailRegisterForm({ resetForm: true, showLoginToggle: false });
         logoutButton.classList.remove('hidden');
+
+        // Check if user has allowed=true claim before showing the app
+        try {
+          const tokenResult = await user.getIdTokenResult(true);
+          if (tokenResult.claims.allowed !== true) {
+            showPendingAccessMessage(user);
+            return;
+          }
+        } catch (error) {
+          console.error('[Auth] Error checking access claims:', error);
+        }
+
         mainContainer.classList.remove('hidden');
         if (welcomeMessage) {
           welcomeMessage.classList.add('hidden');
@@ -676,6 +688,53 @@ let user = null;
         if (window.pushNotificationService) {
           window.pushNotificationService.reinitializeForUser(user.email).catch(error => {
           });
+        }
+      }
+
+      function showPendingAccessMessage(user) {
+        if (welcomeMessage) {
+          welcomeMessage.classList.add('hidden');
+        }
+        mainContainer.classList.remove('hidden');
+
+        // Hide the main loader
+        const mainLoader = document.getElementById('mainLoader');
+        if (mainLoader) {
+          mainLoader.classList.add('hidden');
+        }
+
+        // Hide menu nav for unauthorized users
+        const menuNavEl = document.getElementById('menunav');
+        if (menuNavEl) {
+          menuNavEl.classList.add('hidden');
+        }
+
+        mainContainer.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:center;min-height:60vh;padding:2rem;">
+            <div style="text-align:center;max-width:480px;">
+              <div style="font-size:3rem;margin-bottom:1rem;">&#9200;</div>
+              <h2 style="margin:0 0 0.75rem;color:var(--text-primary, #333);font-size:1.3rem;">
+                Tu solicitud de acceso está pendiente
+              </h2>
+              <p style="color:var(--text-secondary, #666);font-size:0.95rem;line-height:1.5;margin:0 0 1.5rem;">
+                Un administrador revisará tu solicitud. Recibirás acceso cuando sea aprobada.
+              </p>
+              <button id="pendingAccessLogout" style="
+                padding:0.5rem 1.5rem;
+                background:var(--brand-primary, #3b82f6);
+                color:white;
+                border:none;
+                border-radius:6px;
+                font-size:0.9rem;
+                cursor:pointer;
+              ">Cerrar sesión</button>
+            </div>
+          </div>
+        `;
+
+        const logoutBtn = document.getElementById('pendingAccessLogout');
+        if (logoutBtn) {
+          logoutBtn.addEventListener('click', () => signOut(auth));
         }
       }
 
