@@ -28,6 +28,7 @@ import { versionCheckService } from './services/version-check-service.js';
 // Importar servicios de theming
 import { ThemeLoaderService } from './services/theme-loader-service.js';
 import { ThemeManagerService } from './services/theme-manager-service.js';
+import { demoModeService } from './services/demo-mode-service.js';
 
 // Importar versión actual
 import { version as APP_VERSION } from './version.js';
@@ -41,6 +42,7 @@ async function initializeServices() {
   // Load theme from RTDB (blocking script in <head> already applied cached tokens)
   await ThemeLoaderService.loadAndApply();
   ThemeManagerService.init();
+  demoModeService.init();
 
   // Initialize core services (once)
   FirebaseService.init();
