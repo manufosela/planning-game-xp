@@ -315,3 +315,62 @@ describe('generateNextId', () => {
     expect(result).toBe('stk_010');
   });
 });
+
+// ==================== DEMO_MODE claim logic tests ====================
+
+describe('DEMO_MODE claim logic', () => {
+  function encodeEmailForFirebase(email) {
+    if (!email) return '';
+    return email.replace(/@/g, '|').replace(/\./g, '!').replace(/#/g, '-');
+  }
+
+  function buildClaimsForDemo(email, currentClaims = {}) {
+    const encodedEmail = encodeEmailForFirebase(email.toLowerCase());
+    return {
+      ...currentClaims,
+      encodedEmail,
+      allowed: true,
+      role: 'demo',
+    };
+  }
+
+  function buildClaimsForProduction(email, currentClaims = {}, isAllowed = false) {
+    const encodedEmail = encodeEmailForFirebase(email.toLowerCase());
+    const newClaims = { ...currentClaims, encodedEmail };
+    if (isAllowed) newClaims.allowed = true;
+    return newClaims;
+  }
+
+  it('should set allowed=true and role=demo in demo mode', () => {
+    const claims = buildClaimsForDemo('user@example.com');
+    expect(claims.allowed).toBe(true);
+    expect(claims.role).toBe('demo');
+    expect(claims.encodedEmail).toBe('user|example!com');
+  });
+
+  it('should auto-allow any email in demo mode', () => {
+    const claims = buildClaimsForDemo('random@unknown-domain.org');
+    expect(claims.allowed).toBe(true);
+    expect(claims.role).toBe('demo');
+  });
+
+  it('should preserve existing claims in demo mode', () => {
+    const existing = { someCustom: 'value' };
+    const claims = buildClaimsForDemo('user@test.com', existing);
+    expect(claims.someCustom).toBe('value');
+    expect(claims.allowed).toBe(true);
+    expect(claims.role).toBe('demo');
+  });
+
+  it('should NOT set role=demo in production mode', () => {
+    const claims = buildClaimsForProduction('user@geniova.com', {}, true);
+    expect(claims.allowed).toBe(true);
+    expect(claims.role).toBeUndefined();
+  });
+
+  it('should NOT set allowed in production mode when not pre-authorized', () => {
+    const claims = buildClaimsForProduction('user@unknown.com', {}, false);
+    expect(claims.allowed).toBeUndefined();
+    expect(claims.role).toBeUndefined();
+  });
+});

@@ -1577,11 +1577,15 @@ exports.requestEmailAccess = functions.region('europe-west1').https.onCall(async
   };
 });
 
+// Demo mode: when DEMO_MODE=true, all new users are auto-allowed with role=demo
+const DEMO_MODE = (process.env.DEMO_MODE || '').toString().trim().toLowerCase() === 'true';
+
 /**
  * Auto-provisions new users on Firebase Auth account creation.
  * - Sets `encodedEmail` custom claim (for security rules)
  * - Checks /data/allowedUsers and sets `allowed: true` if pre-authorized
  * - Gmail normalization: treats jorge.casar@gmail.com = jorgecasar@gmail.com
+ * - In DEMO_MODE: auto-allows all users with role=demo claim
  */
 exports.setEncodedEmailClaim = functions.region('europe-west1').auth.user().onCreate(async (user) => {
   if (!user.email) return null;
@@ -1593,33 +1597,45 @@ exports.setEncodedEmailClaim = functions.region('europe-west1').auth.user().onCr
     const existingUserRecord = await admin.auth().getUser(user.uid);
     const currentClaims = existingUserRecord.customClaims || {};
 
-    // Check if user is pre-authorized in /data/allowedUsers
-    const isAllowed = await isEmailPreAuthorized(email);
-
     const newClaims = {
       ...currentClaims,
       encodedEmail,
     };
 
-    if (isAllowed) {
+    if (DEMO_MODE) {
+      // Demo instance: auto-allow all users with demo role
       newClaims.allowed = true;
-      logger.info(`User ${email} is pre-authorized, setting allowed=true`, { uid: user.uid });
+      newClaims.role = 'demo';
+      logger.info(`DEMO MODE: auto-allowing user ${email} with role=demo`, { uid: user.uid });
     } else {
-      logger.info(`User ${email} is NOT pre-authorized`, { uid: user.uid });
+      // Production: check if user is pre-authorized in /data/allowedUsers
+      const isAllowed = await isEmailPreAuthorized(email);
+      if (isAllowed) {
+        newClaims.allowed = true;
+        logger.info(`User ${email} is pre-authorized, setting allowed=true`, { uid: user.uid });
+      } else {
+        logger.info(`User ${email} is NOT pre-authorized`, { uid: user.uid });
+      }
     }
 
     await admin.auth().setCustomUserClaims(user.uid, newClaims);
-    logger.info(`Custom claims set for user ${user.uid}`, { encodedEmail, allowed: isAllowed });
+    logger.info(`Custom claims set for user ${user.uid}`, {
+      encodedEmail,
+      allowed: newClaims.allowed || false,
+      role: newClaims.role || 'standard',
+      demoMode: DEMO_MODE,
+    });
 
     // Log the claim setting
     await admin.database().ref(`/userClaimsLog/${user.uid}`).set({
       email,
       encodedEmail,
-      allowed: isAllowed,
+      allowed: newClaims.allowed || false,
+      role: newClaims.role || 'standard',
       timestamp: Date.now(),
     });
 
-    return { success: true, email, allowed: isAllowed };
+    return { success: true, email, allowed: newClaims.allowed || false };
   } catch (error) {
     logger.error(`Failed to provision user ${user.uid}`, error);
     return null;
