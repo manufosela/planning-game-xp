@@ -574,9 +574,12 @@ this.canEditPermission = permissions.canEdit || false;
    */
   _handleSave() {
     // Demo mode: block saves
+    // Always hide overlay on early returns — child classes may have shown it
+    // before calling super._handleSave()
     if (demoModeService.isDemo()) {
       demoModeService.showFeatureDisabled('editing');
       this.isSaving = false;
+      this._hideSavingOverlay();
       return;
     }
 
@@ -590,6 +593,7 @@ this.canEditPermission = permissions.canEdit || false;
         isSaving: this.isSaving
       });
       this._showNotification('No se puede guardar: datos inválidos o sin permisos', 'error');
+      this._hideSavingOverlay();
       return;
     }
 
@@ -619,6 +623,7 @@ this.canEditPermission = permissions.canEdit || false;
         'Error: Esta tarjeta no tiene firebaseId. Contacta al administrador para migrar los datos.',
         'error'
       );
+      this._hideSavingOverlay();
       return;
     }
 

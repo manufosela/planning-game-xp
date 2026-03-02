@@ -18,6 +18,7 @@ import { entityDirectoryService } from '../services/entity-directory-service.js'
 import { openScenarioModal } from '../utils/scenario-modal.js';
 import { BUG_SCHEMA } from '../schemas/card-field-schemas.js';
 import { generateTimestamp, extractDateTimeLocal } from '../utils/timestamp-utils.js';
+import { demoModeService } from '../services/demo-mode-service.js';
 import './FirebaseStorageUploader.js';
 
 export class BugCard extends AiUsageDisplayMixin(CommitsDisplayMixin(NotesManagerMixin(BaseCard))) {
@@ -1559,30 +1560,43 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
    */
   _saveNotesOnly() {
     if (!this.canSave) {
-return;
+      return;
     }
-// Activar estado de guardado y overlay del padre
+    // Demo mode: block saves
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('editing');
+      return;
+    }
+    // Activar estado de guardado y overlay del padre
     this.isSaving = true;
     this._showSavingOverlay();
 
-    const cardProps = this.getWCProps();
-    // NO poner expanded = false para no cerrar el modal
+    try {
+      const cardProps = this.getWCProps();
+      // NO poner expanded = false para no cerrar el modal
 
-    this.dispatchEvent(new CustomEvent('save-card', {
-      detail: { cardData: cardProps },
-      bubbles: true,
-      composed: true
-    }));
+      this.dispatchEvent(new CustomEvent('save-card', {
+        detail: { cardData: cardProps },
+        bubbles: true,
+        composed: true
+      }));
 
-    // Actualizar archivos originales después de guardar
-    this.originalFiles = {
-      cinemaFile: this.cinemaFile || '',
-      exportedFile: this.exportedFile || '',
-      importedFile: this.importedFile || ''
-    };
+      // Actualizar archivos originales después de guardar
+      this.originalFiles = {
+        cinemaFile: this.cinemaFile || '',
+        exportedFile: this.exportedFile || '',
+        importedFile: this.importedFile || ''
+      };
 
-    // NO poner this.expanded = false para no cerrar el modal
-}
+      // NO poner this.expanded = false para no cerrar el modal
+    } catch (error) {
+      console.error('[BugCard] _saveNotesOnly error:', error);
+      this._showNotification('Error saving notes', 'error');
+    } finally {
+      this._hideSavingOverlay();
+      this.isSaving = false;
+    }
+  }
 
   /**
    * Get selected year from localStorage or YearSelector, fallback to current year
@@ -2155,6 +2169,12 @@ this.attachment = '';
       return;
     }
 
+    // Demo mode: block saves
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('editing');
+      return;
+    }
+
     // If IA is not enabled, or already has acceptance criteria, save normally
     const hasAcceptanceCriteria = (this.acceptanceCriteria && this.acceptanceCriteria.trim().length > 0) ||
       (Array.isArray(this.acceptanceCriteriaStructured) && this.acceptanceCriteriaStructured.length > 0 &&
@@ -2348,26 +2368,34 @@ this.attachment = '';
     this.isSaving = true;
     this._showSavingOverlay();
 
-    const cardProps = this.getWCProps();
-    cardProps.expanded = false;
+    try {
+      const cardProps = this.getWCProps();
+      cardProps.expanded = false;
 
-    this.dispatchEvent(new CustomEvent('save-card', {
-      detail: { cardData: cardProps },
-      bubbles: true,
-      composed: true
-    }));
+      this.dispatchEvent(new CustomEvent('save-card', {
+        detail: { cardData: cardProps },
+        bubbles: true,
+        composed: true
+      }));
 
-    // Update original files after save
-    this.originalFiles = {
-      cinemaFile: this.cinemaFile || '',
-      exportedFile: this.exportedFile || '',
-      importedFile: this.importedFile || ''
-    };
+      // Update original files after save
+      this.originalFiles = {
+        cinemaFile: this.cinemaFile || '',
+        exportedFile: this.exportedFile || '',
+        importedFile: this.importedFile || ''
+      };
 
-    // Delay collapse to allow modal to close first
-    setTimeout(() => {
-      this.expanded = false;
-    }, 100);
+      // Delay collapse to allow modal to close first
+      setTimeout(() => {
+        this.expanded = false;
+      }, 100);
+    } catch (error) {
+      console.error('[BugCard] _proceedWithSave error:', error);
+      this._showNotification('Error saving card', 'error');
+    } finally {
+      this._hideSavingOverlay();
+      this.isSaving = false;
+    }
   }
 
   // =====================================================

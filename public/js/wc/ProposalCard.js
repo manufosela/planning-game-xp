@@ -10,6 +10,7 @@ import { isCurrentUserSuperAdmin } from '../utils/super-admin-check.js';
 import { APP_CONSTANTS } from '../constants/app-constants.js';
 import { openScenarioModal } from '../utils/scenario-modal.js';
 import { PROPOSAL_SCHEMA } from '../schemas/card-field-schemas.js';
+import { demoModeService } from '../services/demo-mode-service.js';
 
 export class ProposalCard extends BaseCard {
   static get properties() {
@@ -719,48 +720,62 @@ const developerValue = developerOptions.find(opt => opt.value === this.developer
       return;
     }
 
+    // Demo mode: block saves
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('editing');
+      return;
+    }
+
     // Activar estado de guardado y overlay del padre
     this.isSaving = true;
     this._showSavingOverlay();
 
-    // Si es una nueva propuesta (sin createdBy), asignar el usuario actual como creador
-    if (!this.createdBy && this.userEmail) {
-      this.createdBy = this.userEmail;
-}
-
-    this._updateCardHistory();
-    const cardProps = this.getWCProps();
-    cardProps.expanded = false;
-    cardProps.registerDate = this.getFormatedDate(new Date());
-    document.dispatchEvent(new CustomEvent('save-card', {
-      detail: {
-        cardData: cardProps
+    try {
+      // Si es una nueva propuesta (sin createdBy), asignar el usuario actual como creador
+      if (!this.createdBy && this.userEmail) {
+        this.createdBy = this.userEmail;
       }
-    }));
 
-    // Actualizar la tarjeta compacta original que está fuera del modal
-    this._updateOriginalCard(cardProps);
+      this._updateCardHistory();
+      const cardProps = this.getWCProps();
+      cardProps.expanded = false;
+      cardProps.registerDate = this.getFormatedDate(new Date());
+      document.dispatchEvent(new CustomEvent('save-card', {
+        detail: {
+          cardData: cardProps
+        }
+      }));
 
-    // Marcar como guardado para que hasChanges() devuelva false
-    this.markAsSaved();
+      // Actualizar la tarjeta compacta original que está fuera del modal
+      this._updateOriginalCard(cardProps);
 
-    // Emitir evento de guardado exitoso para que AppModal cierre automáticamente
-    document.dispatchEvent(new CustomEvent('card-save-success', {
-      detail: {
-        cardId: this.id || this.cardId,
-        sourceElement: this,
-        isNewCard: this.cardId?.includes('temp_') || !this.id
-      },
-      bubbles: true,
-      composed: true
-    }));
+      // Marcar como guardado para que hasChanges() devuelva false
+      this.markAsSaved();
 
-    // También disparar desde el elemento para compatibilidad con showExpandedCardInModal
-    this.dispatchEvent(new CustomEvent('card-save-success', {
-      detail: { cardId: this.id || this.cardId },
-      bubbles: true,
-      composed: true
-    }));
+      // Emitir evento de guardado exitoso para que AppModal cierre automáticamente
+      document.dispatchEvent(new CustomEvent('card-save-success', {
+        detail: {
+          cardId: this.id || this.cardId,
+          sourceElement: this,
+          isNewCard: this.cardId?.includes('temp_') || !this.id
+        },
+        bubbles: true,
+        composed: true
+      }));
+
+      // También disparar desde el elemento para compatibilidad con showExpandedCardInModal
+      this.dispatchEvent(new CustomEvent('card-save-success', {
+        detail: { cardId: this.id || this.cardId },
+        bubbles: true,
+        composed: true
+      }));
+    } catch (error) {
+      console.error('[ProposalCard] _handleSave error:', error);
+      this._showNotification('Error saving card', 'error');
+    } finally {
+      this._hideSavingOverlay();
+      this.isSaving = false;
+    }
   }
 
   /**

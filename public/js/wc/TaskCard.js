@@ -21,6 +21,7 @@ import { getPriorityDisplay } from '../utils/priority-utils.js';
 import { stateTransitionService } from '../services/state-transition-service.js';
 import { TASK_SCHEMA } from '../schemas/card-field-schemas.js';
 import { generateTimestamp, extractDateTimeLocal } from '../utils/timestamp-utils.js';
+import { demoModeService } from '../services/demo-mode-service.js';
 import './FirebaseStorageUploader.js';
 import 'https://cdn.jsdelivr.net/npm/@manufosela/loading-layer@2.0.1/+esm';
 
@@ -1538,6 +1539,12 @@ if (this.projectRepositories.length < 2) return '';
         isSaving: this.isSaving
       });
       this._showNotification('No se puede guardar: datos inválidos o sin permisos', 'error');
+      return;
+    }
+
+    // Demo mode: block saves early (before IA generation)
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('editing');
       return;
     }
 

@@ -4,6 +4,7 @@ import { FirebaseService } from '../services/firebase-service.js';
 import { QACardStyles } from './qa-card-styles.js';
 import { permissionService } from '../services/permission-service.js';
 import { QA_SCHEMA } from '../schemas/card-field-schemas.js';
+import { demoModeService } from '../services/demo-mode-service.js';
 
 /**
  * Componente para tarjetas de QA/Test.
@@ -541,25 +542,39 @@ return true; // Por seguridad, asumimos que está en uso si hay error
       return;
     }
 
+    // Demo mode: block saves
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('editing');
+      return;
+    }
+
     // Activar estado de guardado y overlay del padre
     this.isSaving = true;
     this._showSavingOverlay();
 
-    const cardProps = this.getWCProps();
-    cardProps.expanded = false;
-    cardProps.suiteId = this.suiteId || '';
-    document.dispatchEvent(new CustomEvent('save-card', {
-      detail: {
-        cardData: cardProps
-      }
-    }));
-    this.expanded = false;
-    setTimeout(() => {
-      document.dispatchEvent(new CustomEvent('close-modal', { bubbles: true, composed: true, detail: { contentElementId: this.id, contentElementType: 'qa-card' } }));
-    }, 100);
+    try {
+      const cardProps = this.getWCProps();
+      cardProps.expanded = false;
+      cardProps.suiteId = this.suiteId || '';
+      document.dispatchEvent(new CustomEvent('save-card', {
+        detail: {
+          cardData: cardProps
+        }
+      }));
+      this.expanded = false;
+      setTimeout(() => {
+        document.dispatchEvent(new CustomEvent('close-modal', { bubbles: true, composed: true, detail: { contentElementId: this.id, contentElementType: 'qa-card' } }));
+      }, 100);
 
-    // Actualizar la tarjeta compacta original que está fuera del modal
-    this._updateOriginalCard(cardProps);
+      // Actualizar la tarjeta compacta original que está fuera del modal
+      this._updateOriginalCard(cardProps);
+    } catch (error) {
+      console.error('[QACard] _handleSave error:', error);
+      this._showNotification('Error saving card', 'error');
+    } finally {
+      this._hideSavingOverlay();
+      this.isSaving = false;
+    }
   }
 
   /**
