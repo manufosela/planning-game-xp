@@ -63,6 +63,25 @@ fi
 # ── Generate changelog (once, after version bump) ──
 log "Generating changelog..."
 npm run generate-changelog --prefix "$ROOT_DIR" 2>&1 || echo "  ⚠️  Changelog generation failed"
+
+# ── Commit & push version files BEFORE building ──
+log "Committing version files..."
+npm run postbuild:version --prefix "$ROOT_DIR" 2>&1 || echo "  ⚠️  Version commit skipped"
+
+# ── Update lastBuildCommit to match actual HEAD (post version commit) ──
+NEW_HEAD=$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo "")
+if [ -n "$NEW_HEAD" ] && [ -f "$ROOT_DIR/version.json" ]; then
+  node -e "
+    const fs = require('fs');
+    const vPath = '$ROOT_DIR/version.json';
+    const v = JSON.parse(fs.readFileSync(vPath, 'utf8'));
+    v.lastBuildCommit = '$NEW_HEAD';
+    fs.writeFileSync(vPath, JSON.stringify(v, null, 2));
+    const jsPath = '$ROOT_DIR/public/js/version.js';
+    const js = fs.readFileSync(jsPath, 'utf8');
+    fs.writeFileSync(jsPath, js.replace(/lastBuildCommit = '[^']*'/, \"lastBuildCommit = '\" + '$NEW_HEAD' + \"'\"));
+  " 2>/dev/null && log "lastBuildCommit synced to ${NEW_HEAD:0:7}"
+fi
 echo ""
 
 for INSTANCE in $INSTANCES; do
@@ -155,9 +174,4 @@ fi
 
 echo "  All $TOTAL instances built successfully."
 echo "  Run 'npm run deploy:all' to deploy all builds."
-echo ""
-
-# ── Post-build version commit (once, after all builds) ──
-log "Running post-build version commit..."
-npm run postbuild:version --prefix "$ROOT_DIR" 2>&1 || echo "  ⚠️  Post-build version commit skipped (no changes or error)"
 echo ""
