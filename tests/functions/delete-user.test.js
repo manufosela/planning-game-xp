@@ -81,6 +81,7 @@ describe('deleteUser Cloud Function logic', () => {
     const deletePaths = {};
     deletePaths[`/users/${encodedEmail}`] = null;
     deletePaths[`/data/appAdmins/${encodedEmail}`] = null;
+    deletePaths[`/data/projectsByUser/${encodedEmail}`] = null;
 
     const projectIds = Object.keys(userData.projects);
     for (const pid of projectIds) {
@@ -88,9 +89,10 @@ describe('deleteUser Cloud Function logic', () => {
       deletePaths[`/data/betaUsers/${pid}/${encodedEmail}`] = null;
     }
 
-    expect(Object.keys(deletePaths)).toHaveLength(6);
+    expect(Object.keys(deletePaths)).toHaveLength(7);
     expect(deletePaths['/users/test|example!com']).toBeNull();
     expect(deletePaths['/data/appAdmins/test|example!com']).toBeNull();
+    expect(deletePaths['/data/projectsByUser/test|example!com']).toBeNull();
     expect(deletePaths['/data/appUploaders/Cinema4D/test|example!com']).toBeNull();
     expect(deletePaths['/data/appUploaders/NTR/test|example!com']).toBeNull();
     expect(deletePaths['/data/betaUsers/Cinema4D/test|example!com']).toBeNull();

@@ -12,6 +12,34 @@ const { hasActiveProject } = require('../shared/card-utils.cjs');
 const { generateNextId } = require('../shared/auth-utils.cjs');
 
 /**
+ * Syncs /data/projectsByUser/{encodedEmail} with the user's active projects from /users/.
+ * This keeps the legacy path (read by the client) in sync with the canonical path.
+ *
+ * @param {object} db - Firebase RTDB reference
+ * @param {string} encodedEmail - Encoded user email
+ * @returns {Promise<void>}
+ */
+async function syncProjectsByUser(db, encodedEmail) {
+  const projectsSnap = await db.ref(`/users/${encodedEmail}/projects`).once('value');
+  const projects = projectsSnap.val();
+
+  if (!projects || typeof projects !== 'object') {
+    await db.ref(`/data/projectsByUser/${encodedEmail}`).remove();
+    return;
+  }
+
+  const activeProjectIds = Object.entries(projects)
+    .filter(([, p]) => p.developer === true || p.stakeholder === true)
+    .map(([id]) => id);
+
+  if (activeProjectIds.length === 0) {
+    await db.ref(`/data/projectsByUser/${encodedEmail}`).remove();
+  } else {
+    await db.ref(`/data/projectsByUser/${encodedEmail}`).set(activeProjectIds.join(','));
+  }
+}
+
+/**
  * Handle the listUsers callable function.
  * Returns all users from /users/ enriched with Auth status.
  *
@@ -145,6 +173,9 @@ async function handleCreateOrUpdateUser(request, deps) {
 
   await db.ref().update(updates);
 
+  // Sync /data/projectsByUser/ so the client can read the project list
+  await syncProjectsByUser(db, encodedEmail);
+
   logger.info(`User created/updated: ${normalizedEmail}`, {
     changedBy: callerEmail,
     projectId,
@@ -207,6 +238,9 @@ async function handleRemoveUserFromProject(request, deps) {
 
   // Remove project assignment
   await db.ref(`/users/${encodedEmail}/projects/${projectId}`).remove();
+
+  // Sync /data/projectsByUser/ so the client can read the updated project list
+  await syncProjectsByUser(db, encodedEmail);
 
   logger.info(`Removed ${normalizedEmail} from project ${projectId}`, {
     removedBy: request.auth.token.email
@@ -287,6 +321,7 @@ async function handleDeleteUser(request, deps) {
   const deletePaths = {};
   deletePaths[`/users/${encodedEmail}`] = null;
   deletePaths[`/data/appAdmins/${encodedEmail}`] = null;
+  deletePaths[`/data/projectsByUser/${encodedEmail}`] = null;
 
   for (const pid of projectIds) {
     deletePaths[`/data/appUploaders/${pid}/${encodedEmail}`] = null;
@@ -330,4 +365,5 @@ module.exports = {
   handleCreateOrUpdateUser,
   handleRemoveUserFromProject,
   handleDeleteUser,
+  syncProjectsByUser,
 };
