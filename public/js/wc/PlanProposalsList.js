@@ -7,6 +7,7 @@
 import { LitElement, html, nothing } from 'https://cdn.jsdelivr.net/npm/lit@3.0.2/+esm';
 import { PlanProposalsListStyles } from './plan-proposals-list-styles.js';
 import { planProposalService, PROPOSAL_STATUSES } from '../services/plan-proposal-service.js';
+import { demoModeService } from '../services/demo-mode-service.js';
 
 export class PlanProposalsList extends LitElement {
   static get properties() {
@@ -104,6 +105,7 @@ export class PlanProposalsList extends LitElement {
 
   async _handleSubmit(e) {
     e.preventDefault();
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('proposal editing'); return; }
     const form = e.target;
     const title = form.querySelector('#proposalTitle').value.trim();
     const description = form.querySelector('#proposalDescription').value.trim();
@@ -142,6 +144,7 @@ export class PlanProposalsList extends LitElement {
   }
 
   async _handleDelete(proposal) {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('proposal deletion'); return; }
     if (window.modalService?.confirm) {
       const confirmed = await window.modalService.confirm(`Are you sure you want to delete "${proposal.title}"?`);
       if (!confirmed) return;

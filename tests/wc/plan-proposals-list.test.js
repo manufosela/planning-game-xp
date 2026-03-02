@@ -37,6 +37,14 @@ vi.mock('../../public/js/services/plan-proposal-service.js', () => ({
   PROPOSAL_STATUSES: ['pending', 'planned', 'rejected']
 }));
 
+vi.mock('../../public/js/services/demo-mode-service.js', () => ({
+  demoModeService: {
+    isDemo: vi.fn(() => false),
+    showFeatureDisabled: vi.fn(),
+    showLimitReached: vi.fn()
+  }
+}));
+
 const { PlanProposalsList } = await import('../../public/js/wc/PlanProposalsList.js');
 
 describe('PlanProposalsList', () => {

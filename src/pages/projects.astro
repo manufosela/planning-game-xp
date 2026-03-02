@@ -634,6 +634,12 @@ import Layout from '../layouts/Layout.astro';
   };
 
   window.showAddProjectModal = () => {
+    // Demo mode: block project creation
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('project creation');
+      return;
+    }
+
     const projectForm = document.createElement('project-form');
 
     showModal({
@@ -669,6 +675,12 @@ import Layout from '../layouts/Layout.astro';
   };
 
   window.showEditProjectModal = async (projectName) => {
+    // Demo mode: block project editing
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('project editing');
+      return;
+    }
+
     try {
       // Load project data
       const projectRef = ref(database, `/projects/${projectName}`);
@@ -788,14 +800,10 @@ import Layout from '../layouts/Layout.astro';
   };
 
   async function createProject(projectForm) {
-    // Demo mode: enforce project count limit
-    if (demoModeService.isDemo() && demoModeService.maxProjects > 0) {
-      const projectsSnap = await get(ref(database, '/projects'));
-      const currentCount = projectsSnap.exists() ? Object.keys(projectsSnap.val()).length : 0;
-      if (currentCount >= demoModeService.maxProjects) {
-        demoModeService.showLimitReached('projects');
-        return;
-      }
+    // Demo mode: block project creation entirely
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('project creation');
+      return;
     }
 
     const formData = projectForm.getFormData();
@@ -845,6 +853,12 @@ import Layout from '../layouts/Layout.astro';
   }
 
   async function updateProject(projectForm, originalProjectName) {
+    // Demo mode: block project editing
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('project editing');
+      return;
+    }
+
     const formData = projectForm.getFormData();
     const normalizedDevelopers = normalizeDevelopersForForm(formData.developers);
     const developersWithIa = [...normalizedDevelopers];
@@ -934,6 +948,10 @@ import Layout from '../layouts/Layout.astro';
   }
 
   async function archiveProject(projectName, archived) {
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('project archiving');
+      return;
+    }
     try {
       showLoader(archived ? `Archivando proyecto ${projectName}...` : `Desarchivando proyecto ${projectName}...`);
 
@@ -976,6 +994,10 @@ import Layout from '../layouts/Layout.astro';
   }
 
   async function deleteProject(projectName) {
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('project deletion');
+      return;
+    }
     try {
 
       showLoader(`Eliminando proyecto ${projectName}...`);

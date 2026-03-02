@@ -6,6 +6,7 @@
 import { LitElement, html, nothing } from 'https://cdn.jsdelivr.net/npm/lit@3.0.2/+esm';
 import { DevPlansListStyles } from './dev-plans-list-styles.js';
 import { planService } from '../services/plan-service.js';
+import { demoModeService } from '../services/demo-mode-service.js';
 
 export class DevPlansList extends LitElement {
   static get properties() {
@@ -333,6 +334,7 @@ export class DevPlansList extends LitElement {
   }
 
   async _handleAIGenerate() {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('plan creation'); return; }
     const context = this.aiContext.trim();
     if (context.length < 10) {
       this.creatorError = 'Please provide at least 10 characters of context.';
@@ -547,6 +549,7 @@ export class DevPlansList extends LitElement {
 
   async _handleFormSubmit(e) {
     e.preventDefault();
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('plan editing'); return; }
     const formData = this._collectFormData();
     if (!formData.title) {
       this.formError = 'Title is required.';
@@ -587,6 +590,7 @@ export class DevPlansList extends LitElement {
   }
 
   async _handleRegenAI() {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('plan editing'); return; }
     const extraContext = this.shadowRoot.querySelector('#planExtraContext')?.value.trim();
     if (!extraContext || extraContext.length < 10) return;
 
@@ -629,6 +633,7 @@ export class DevPlansList extends LitElement {
   // ── Actions ──
 
   async _handleAccept(plan) {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('plan editing'); return; }
     try {
       await planService.accept(this.projectId, plan._id);
       plan.status = 'accepted';
@@ -642,6 +647,7 @@ export class DevPlansList extends LitElement {
   }
 
   async _handleDelete(plan) {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('plan deletion'); return; }
     if (window.modalService?.confirm) {
       const confirmed = await window.modalService.confirm(`Are you sure you want to delete "${plan.title}"?`);
       if (!confirmed) return;
@@ -657,6 +663,7 @@ export class DevPlansList extends LitElement {
   }
 
   async _handleGenerate(plan) {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('task generation'); return; }
     const totalTasks = (plan.phases || []).reduce((sum, p) => sum + (p.tasks || []).length, 0);
     if (totalTasks === 0) {
       if (window.modalService) {
@@ -701,6 +708,7 @@ export class DevPlansList extends LitElement {
   }
 
   async _handleRegenerate(plan) {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('task generation'); return; }
     const prevCount = (plan.generatedTasks || []).length;
     const totalTasks = (plan.phases || []).reduce((sum, p) => sum + (p.tasks || []).length, 0);
 

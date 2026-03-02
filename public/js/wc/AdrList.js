@@ -5,6 +5,7 @@
 import { LitElement, html } from 'https://cdn.jsdelivr.net/npm/lit@3.0.2/+esm';
 import { AdrListStyles } from './adr-list-styles.js';
 import { adrService, ADR_STATUSES } from '../services/adr-service.js';
+import { demoModeService } from '../services/demo-mode-service.js';
 import './AdrCard.js';
 
 export class AdrList extends LitElement {
@@ -93,6 +94,7 @@ export class AdrList extends LitElement {
    * Create new ADR
    */
   async _createNew() {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('ADR creation'); return; }
     try {
       const newAdr = await adrService.saveAdr(this.projectId, {
         title: 'New Architecture Decision',
@@ -120,6 +122,7 @@ export class AdrList extends LitElement {
    * Handle save event from card
    */
   async _handleSave(e) {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('ADR editing'); return; }
     const { adrId, projectId, title, context, decision, consequences, status } = e.detail;
 
     try {
@@ -149,6 +152,7 @@ export class AdrList extends LitElement {
    * Handle delete event from card
    */
   async _handleDelete(e) {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('ADR deletion'); return; }
     const { adrId, projectId, title } = e.detail;
 
     // Confirm deletion using modal service

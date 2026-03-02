@@ -5,6 +5,7 @@
 import { LitElement, html } from 'https://cdn.jsdelivr.net/npm/lit@3.0.2/+esm';
 import { GlobalConfigListStyles } from './global-config-list-styles.js';
 import { globalConfigService, CONFIG_TYPES, CONFIG_CATEGORIES } from '../services/global-config-service.js';
+import { demoModeService } from '../services/demo-mode-service.js';
 import './GlobalConfigCard.js';
 
 export class GlobalConfigList extends LitElement {
@@ -130,6 +131,7 @@ export class GlobalConfigList extends LitElement {
    * Create new config
    */
   async _createNew() {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('config creation'); return; }
     const singularType = this.activeType.slice(0, -1);
     try {
       const newConfig = await globalConfigService.saveConfig(this.activeType, {
@@ -156,6 +158,7 @@ export class GlobalConfigList extends LitElement {
    * Handle save event from card
    */
   async _handleSave(e) {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('config editing'); return; }
     const { configId, configType, name, description, content, category } = e.detail;
 
     try {
@@ -183,6 +186,7 @@ export class GlobalConfigList extends LitElement {
    * Handle delete event from card
    */
   async _handleDelete(e) {
+    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('config deletion'); return; }
     const { configId, configType, name } = e.detail;
 
     if (!confirm(`Are you sure you want to delete "${name}"?`)) {
