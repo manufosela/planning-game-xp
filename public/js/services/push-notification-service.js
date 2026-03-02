@@ -22,8 +22,12 @@ class PushNotificationService {
 
     async initializeMessaging() {
         try {
+            // Skip push notifications in demo mode
+            const { demoModeService } = await import('./demo-mode-service.js');
+            if (demoModeService.isDemo()) return;
+
             this.messaging = getMessaging(app);
-            
+
             // Solicitar permisos de notificación
             const permission = await Notification.requestPermission();
             if (permission === 'granted') {

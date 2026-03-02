@@ -59,6 +59,14 @@ vi.mock('../../public/js/services/entity-directory-service.js', () => ({
   }
 }));
 
+vi.mock('../../public/js/services/demo-mode-service.js', () => ({
+  demoModeService: {
+    isDemo: vi.fn(() => false),
+    showFeatureDisabled: vi.fn(),
+    showLimitReached: vi.fn()
+  }
+}));
+
 import { BaseCard } from '../../public/js/wc/base-card.js';
 
 describe('Pipeline Badges (_renderPipelineBadges)', () => {

@@ -222,6 +222,14 @@ uploader.requestUpdate();
       return;
     }
 
+    // Skip Storage access in demo mode (no Storage configured)
+    const { demoModeService } = await import('../services/demo-mode-service.js');
+    if (demoModeService.isDemo()) {
+      this.files = [];
+      this.loading = false;
+      return;
+    }
+
     // Verify user is authenticated before accessing Storage
     const { auth } = await import('../../firebase-config.js');
     if (!auth.currentUser) {

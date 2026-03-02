@@ -43,6 +43,7 @@ import { entityDirectoryService } from '../services/entity-directory-service.js'
 import { AppEventBus, AppEvents } from '../services/app-event-bus.js';
 import { database, auth, firebaseConfig, ref, set, get } from '../../firebase-config.js';
 import { modalService } from '../services/modal-service.js';
+import { demoModeService } from '../services/demo-mode-service.js';
 
 export class AppController {
   constructor() {
@@ -270,7 +271,8 @@ export class AppController {
 
       // Sincronizar contadores en segundo plano (no bloquea la carga)
       // Esto previene cardIds duplicados cuando los contadores se desfasan
-      if (this.projectId) {
+      // Skip in demo mode: Firestore is not enabled
+      if (this.projectId && !demoModeService.isDemo()) {
         FirebaseService.syncProjectCounters(this.projectId).then(result => {
           if (result.synced > 0) {
             console.log(`[AppController] Contadores sincronizados para ${this.projectId}:`, result);

@@ -2,6 +2,7 @@ import { LitElement, html } from 'https://cdn.jsdelivr.net/npm/lit@3.1.0/+esm';
 import { format, parse, isValid } from 'https://cdn.jsdelivr.net/npm/date-fns@3.6.0/+esm';
 import { ServiceCommunicator } from '../utils/service-communicator.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
+import { demoModeService } from '../services/demo-mode-service.js';
 
 /**
  * Clase base para todos los componentes de tarjetas (Cards)
@@ -572,6 +573,13 @@ this.canEditPermission = permissions.canEdit || false;
    * Override en clases hijas para lógica específica
    */
   _handleSave() {
+    // Demo mode: block saves
+    if (demoModeService.isDemo()) {
+      demoModeService.showFeatureDisabled('editing');
+      this.isSaving = false;
+      return;
+    }
+
     if (!this.canSave) {
       console.warn('[BaseCard] Cannot save: canSave=false', {
         canEdit: this.canEdit,
@@ -618,55 +626,62 @@ this.canEditPermission = permissions.canEdit || false;
     this.isSaving = true;
     this._showSavingOverlay();
 
-    const cardProps = this.getWCProps();
-    cardProps.expanded = false;
-    // Stamp the current user so Cloud Functions know who made the change
-    cardProps.updatedBy = document.body?.dataset?.userEmail || '';
+    try {
+      const cardProps = this.getWCProps();
+      cardProps.expanded = false;
+      // Stamp the current user so Cloud Functions know who made the change
+      cardProps.updatedBy = document.body?.dataset?.userEmail || '';
 
-    document.dispatchEvent(new CustomEvent('save-card', {
-      detail: {
-        cardData: cardProps
-      }
-    }));
+      document.dispatchEvent(new CustomEvent('save-card', {
+        detail: {
+          cardData: cardProps
+        }
+      }));
 
-    // Actualizar la tarjeta compacta original que está fuera del modal
-    this._updateOriginalCard(cardProps);
+      // Actualizar la tarjeta compacta original que está fuera del modal
+      this._updateOriginalCard(cardProps);
 
-    // Marcar como guardado para que hasChanges() devuelva false
-    this.markAsSaved();
+      // Marcar como guardado para que hasChanges() devuelva false
+      this.markAsSaved();
 
-    // Emitir evento genérico de que la card se guardó exitosamente
-    document.dispatchEvent(new CustomEvent('card-saved-successfully', {
-      bubbles: true,
-      composed: true,
-      detail: {
-        tagName: this.tagName.toLowerCase(),
-        cardId: this.cardId,
-        elementId: this.id,
-        cardData: this.getCardData()
-      }
-    }));
+      // Emitir evento genérico de que la card se guardó exitosamente
+      document.dispatchEvent(new CustomEvent('card-saved-successfully', {
+        bubbles: true,
+        composed: true,
+        detail: {
+          tagName: this.tagName.toLowerCase(),
+          cardId: this.cardId,
+          elementId: this.id,
+          cardData: this.getCardData()
+        }
+      }));
 
-    // NUEVO: También emitir el evento local para cerrar modales
-    
-    // Disparar el evento desde document para asegurar que AppModal lo reciba
-    document.dispatchEvent(new CustomEvent('card-save-success', {
-      detail: { 
-        cardId: this.id || this.cardId,
-        sourceElement: this,
-        isNewCard: this.cardId?.includes('temp_') || !this.id
-      },
-      bubbles: true,
-      composed: true
-    }));
-    
-    // También disparar desde el elemento por compatibilidad
-    this.dispatchEvent(new CustomEvent('card-save-success', {
-      detail: { cardId: this.id || this.cardId },
-      bubbles: true,
-      composed: true
-    }));
+      // NUEVO: También emitir el evento local para cerrar modales
 
+      // Disparar el evento desde document para asegurar que AppModal lo reciba
+      document.dispatchEvent(new CustomEvent('card-save-success', {
+        detail: {
+          cardId: this.id || this.cardId,
+          sourceElement: this,
+          isNewCard: this.cardId?.includes('temp_') || !this.id
+        },
+        bubbles: true,
+        composed: true
+      }));
+
+      // También disparar desde el elemento por compatibilidad
+      this.dispatchEvent(new CustomEvent('card-save-success', {
+        detail: { cardId: this.id || this.cardId },
+        bubbles: true,
+        composed: true
+      }));
+    } catch (error) {
+      console.error('[BaseCard] _handleSave error:', error);
+      this._showNotification('Error saving card', 'error');
+    } finally {
+      this._hideSavingOverlay();
+      this.isSaving = false;
+    }
   }
 
   _updateOriginalCard(savedData) {

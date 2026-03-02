@@ -467,14 +467,19 @@ const developerEntries = Array.isArray(projectDevelopers)
       let developerId = null;
 
       if (typeof entry === 'string') {
-        developerId = entityDirectoryService.resolveDeveloperId(entry);
+        // Accept dev_XXX IDs directly without resolution
+        developerId = entry.startsWith('dev_') ? entry : entityDirectoryService.resolveDeveloperId(entry);
         if (!developerId) {
           console.warn('[BaseFilters] Could not resolve developer reference:', entry);
           return;
         }
       } else if (typeof entry === 'object') {
-        // For objects, id must be present or resolvable
-        developerId = entry.id ? entityDirectoryService.resolveDeveloperId(entry.id) : null;
+        // For objects, accept dev_XXX IDs directly or resolve
+        if (entry.id?.startsWith('dev_')) {
+          developerId = entry.id;
+        } else {
+          developerId = entry.id ? entityDirectoryService.resolveDeveloperId(entry.id) : null;
+        }
         if (!developerId && entry.email) {
           developerId = entityDirectoryService.resolveDeveloperId(entry.email);
         }
@@ -533,14 +538,19 @@ const stakeholderEntries = Array.isArray(projectStakeholders)
       let stakeholderId = null;
 
       if (typeof entry === 'string') {
-        stakeholderId = entityDirectoryService.resolveStakeholderId(entry);
+        // Accept stk_XXX IDs directly without resolution
+        stakeholderId = entry.startsWith('stk_') ? entry : entityDirectoryService.resolveStakeholderId(entry);
         if (!stakeholderId) {
           console.warn('[BaseFilters] Could not resolve stakeholder reference:', entry);
           return;
         }
       } else if (typeof entry === 'object') {
-        // For objects, id must be present or resolvable
-        stakeholderId = entry.id ? entityDirectoryService.resolveStakeholderId(entry.id) : null;
+        // For objects, accept stk_XXX IDs directly or resolve
+        if (entry.id?.startsWith('stk_')) {
+          stakeholderId = entry.id;
+        } else {
+          stakeholderId = entry.id ? entityDirectoryService.resolveStakeholderId(entry.id) : null;
+        }
         if (!stakeholderId && entry.email) {
           stakeholderId = entityDirectoryService.resolveStakeholderId(entry.email);
         }
