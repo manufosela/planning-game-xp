@@ -8,6 +8,7 @@
 import { LitElement, html, nothing } from 'https://cdn.jsdelivr.net/npm/lit@3.0.2/+esm';
 import { EntityDirectoryManagerStyles } from './entity-directory-manager-styles.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
+import { modalService } from '../services/modal-service.js';
 
 class EntityDirectoryManager extends LitElement {
   static get properties() {
@@ -141,7 +142,7 @@ class EntityDirectoryManager extends LitElement {
   }
 
   async _deleteDeveloper(dev) {
-    const confirmed = await window.modalService.confirm(
+    const confirmed = await modalService.confirm(
       `Delete developer "${dev.name}" (${dev.id})?`,
       'This action cannot be undone. The developer will be removed from the global directory.'
     );
@@ -215,7 +216,7 @@ class EntityDirectoryManager extends LitElement {
   }
 
   async _deleteStakeholder(stk) {
-    const confirmed = await window.modalService.confirm(
+    const confirmed = await modalService.confirm(
       `Delete stakeholder "${stk.name}" (${stk.id})?`,
       'This action cannot be undone. The stakeholder will be removed from the global directory.'
     );

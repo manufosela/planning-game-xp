@@ -10,6 +10,7 @@ import { LitElement, html, nothing } from 'https://cdn.jsdelivr.net/npm/lit@3.0.
 import { UserAdminPanelStyles } from './user-admin-panel-styles.js';
 import { functions, database, ref, get, query, orderByChild, limitToLast, httpsCallable } from '/firebase-config.js';
 import { encodeEmailForFirebase } from '/js/utils/email-sanitizer.js';
+import { modalService } from '../services/modal-service.js';
 import './MultiSelect.js';
 
 class UserAdminPanel extends LitElement {
@@ -478,7 +479,7 @@ class UserAdminPanel extends LitElement {
   // ==================== USER OPERATIONS ====================
 
   async _deleteUser(user) {
-    const confirmed = await window.modalService.confirm(
+    const confirmed = await modalService.confirm(
       'Delete user',
       `Are you sure you want to delete "${user.name}" (${user.email})? This will remove all project assignments and revoke permissions.`
     );
@@ -497,7 +498,7 @@ class UserAdminPanel extends LitElement {
   }
 
   async _removeProject(user, projectId) {
-    const confirmed = await window.modalService.confirm(
+    const confirmed = await modalService.confirm(
       'Remove project assignment',
       `Remove "${projectId}" from user "${user.name}" (${user.email})?`
     );
