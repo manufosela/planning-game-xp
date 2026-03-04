@@ -59,6 +59,10 @@ export class CleanCardDetail extends LitElement {
     this._loading = false;
     this._reopenMode = false;
     this._reopenReason = '';
+    // Internal state for reopen (set from outside, not reactive)
+    this._currentReopenCount = 0;
+    this._currentReopenCycles = [];
+    this._currentNotesRaw = '';
   }
 
   _getStatusClass() {
@@ -285,10 +289,33 @@ export class CleanCardDetail extends LitElement {
       const firebaseService = FirebaseService.getInstance();
 
       const section = this._getSection().toUpperCase();
+      const reason = this._reopenReason.trim();
+
+      // Follow TaskCard reopen pattern: reopenCount, reopenCycles, note
+      const newReopenCount = (this._currentReopenCount || 0) + 1;
+      const reopenCycles = Array.isArray(this._currentReopenCycles) ? [...this._currentReopenCycles] : [];
+      reopenCycles.push({
+        cycle: newReopenCount,
+        reopenedAt: new Date().toISOString(),
+        reopenedBy: this.userEmail,
+        previousStatus: this.status,
+        reason
+      });
+
+      // Build reopen note with reason (prepend to existing notes string)
+      const reopenTag = `[REOPEN #${newReopenCount}]`;
+      const dateStr = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const reopenNote = `${reopenTag} Solicitud de cambios (${dateStr}): ${reason}`;
+      const currentNotes = this._currentNotesRaw || '';
+      const updatedNotes = currentNotes ? `${reopenNote}\n\n${currentNotes}` : reopenNote;
+
       const updateData = {
         status: 'Reopened',
-        reopenReason: this._reopenReason.trim(),
-        reopenedAt: new Date().toISOString(),
+        reopenCount: newReopenCount,
+        reopenCycles,
+        notes: updatedNotes,
+        endDate: '',
+        validatedAt: '',
         updatedBy: this.userEmail
       };
 

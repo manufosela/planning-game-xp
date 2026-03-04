@@ -44,6 +44,9 @@ describe('CleanCardDetail web component', () => {
     expect(el._loading).toBe(false);
     expect(el._reopenMode).toBe(false);
     expect(el._reopenReason).toBe('');
+    expect(el._currentReopenCount).toBe(0);
+    expect(el._currentReopenCycles).toEqual([]);
+    expect(el._currentNotesRaw).toBe('');
   });
 
   it('should have expected Lit properties defined', async () => {

@@ -290,6 +290,12 @@ import Layout from '../layouts/Layout.astro';
         userEmail: currentUserEmail
       });
 
+      // Internal state for reopen logic (follows TaskCard pattern)
+      detailEl._currentReopenCount = cardData.reopenCount || 0;
+      detailEl._currentReopenCycles = cardData.reopenCycles || [];
+      // Notes can be string or array — store raw for reopen note prepending
+      detailEl._currentNotesRaw = typeof cardData.notes === 'string' ? cardData.notes : '';
+
       // Open in modal
       const modal = document.createElement('app-modal');
       modal._programmaticMode = true;
