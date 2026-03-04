@@ -6,7 +6,7 @@ export const CleanCardItemStyles = css`
   }
 
   .card-item {
-    background: var(--surface-primary, #fff);
+    background: var(--bg-primary, #fff);
     border-radius: 12px;
     padding: 14px 16px;
     margin-bottom: 10px;
@@ -52,7 +52,7 @@ export const CleanCardItemStyles = css`
 
   .card-id {
     font-size: 11px;
-    color: var(--text-tertiary, #94a3b8);
+    color: var(--text-muted, #94a3b8);
     margin-left: auto;
   }
 
