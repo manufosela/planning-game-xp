@@ -49,7 +49,7 @@ export class CleanCardItem extends LitElement {
   }
 
   _getPriorityClass() {
-    const p = (this.priority || '').toLowerCase();
+    const p = String(this.priority || '').toLowerCase();
     if (p.includes('high') || p.includes('blocker') || p === 'application blocker' || p === 'department blocker') return 'high';
     if (p.includes('medium') || p.includes('individual') || p.includes('experience')) return 'medium';
     if (p.includes('low') || p.includes('improvement') || p.includes('workaround')) return 'low';

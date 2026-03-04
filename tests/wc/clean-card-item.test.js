@@ -123,6 +123,11 @@ describe('CleanCardItem web component', () => {
       el.priority = '';
       expect(el._getPriorityClass()).toBe('');
     });
+
+    it('should handle numeric priority without throwing', () => {
+      el.priority = 11;
+      expect(el._getPriorityClass()).toBe('');
+    });
   });
 
   describe('_getSection', () => {

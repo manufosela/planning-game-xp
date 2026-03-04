@@ -44,7 +44,7 @@ import Layout from '../layouts/Layout.astro';
 </Layout>
 
 <script type="module">
-  import { database, ref, onValue, get, off } from '/firebase-config.js';
+  import { database, ref, onValue, get } from '/firebase-config.js';
   import { normalizeEmail as normalizeEmailSafe } from '/js/utils/super-admin-check.js';
   import { entityDirectoryService } from '/js/services/entity-directory-service.js';
   import { FirebaseService } from '/js/services/firebase-service.js';
@@ -148,7 +148,7 @@ import Layout from '../layouts/Layout.astro';
     sections.forEach(section => {
       const path = `/cards/${currentProject}/${section.toUpperCase()}_${currentProject}`;
       const cardsRef = ref(database, path);
-      const handler = onValue(cardsRef, (snapshot) => {
+      const unsubscribe = onValue(cardsRef, (snapshot) => {
         // Remove old cards of this section
         allCards = allCards.filter(c => c._section !== section);
         if (snapshot.exists()) {
@@ -166,8 +166,7 @@ import Layout from '../layouts/Layout.astro';
         }
         renderCards();
       });
-      // Store ref for cleanup
-      activeListeners.push(() => off(cardsRef, 'value', handler));
+      activeListeners.push(unsubscribe);
     });
   }
 
