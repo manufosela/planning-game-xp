@@ -250,7 +250,6 @@ export class CleanCardDetail extends LitElement {
     this._loading = true;
     try {
       const { FirebaseService } = await import('../services/firebase-service.js');
-      const firebaseService = FirebaseService.getInstance();
 
       const section = this._getSection().toUpperCase();
       const updateData = {
@@ -259,7 +258,7 @@ export class CleanCardDetail extends LitElement {
         updatedBy: this.userEmail
       };
 
-      await firebaseService.updateCard(this.projectId, section, this.firebaseId, updateData);
+      await FirebaseService.updateCard(this.projectId, section, this.firebaseId, updateData);
 
       document.dispatchEvent(new CustomEvent('show-slide-notification', {
         detail: { options: { message: `${this.cardId} validada correctamente`, type: 'success' } }
@@ -286,7 +285,6 @@ export class CleanCardDetail extends LitElement {
     this._loading = true;
     try {
       const { FirebaseService } = await import('../services/firebase-service.js');
-      const firebaseService = FirebaseService.getInstance();
 
       const section = this._getSection().toUpperCase();
       const reason = this._reopenReason.trim();
@@ -319,7 +317,7 @@ export class CleanCardDetail extends LitElement {
         updatedBy: this.userEmail
       };
 
-      await firebaseService.updateCard(this.projectId, section, this.firebaseId, updateData);
+      await FirebaseService.updateCard(this.projectId, section, this.firebaseId, updateData);
 
       document.dispatchEvent(new CustomEvent('show-slide-notification', {
         detail: { options: { message: `${this.cardId} devuelta para cambios`, type: 'info' } }
