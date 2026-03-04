@@ -237,18 +237,7 @@ import Layout from '../layouts/Layout.astro';
 
   async function openCardInModal(section, projectId, firebaseId, cardId) {
     try {
-      const cardImport = section.includes('proposal')
-        ? import('/js/wc/ProposalCard.js')
-        : (section.includes('bug')
-          ? import('/js/wc/BugCard.js')
-          : import('/js/wc/TaskCard.js'));
-
-      await Promise.all([
-        import('/js/wc/ColorTabs.js'),
-        import('/js/wc/card-history-viewer.js'),
-        import('/js/wc/FirebaseStorageUploader.js'),
-        cardImport
-      ]);
+      await import('/js/wc/CleanCardDetail.js');
 
       // Load card data
       const path = `/cards/${projectId}/${section.toUpperCase()}_${projectId}`;
@@ -257,10 +246,10 @@ import Layout from '../layouts/Layout.astro';
 
       let cardData = cards[firebaseId];
       if (!cardData) {
-        // Try finding by cardId
         for (const [fbId, c] of Object.entries(cards)) {
           if (c && (c.cardId === cardId || c.id === cardId)) {
             cardData = { ...c, firebaseId: fbId };
+            firebaseId = fbId;
             break;
           }
         }
@@ -275,39 +264,46 @@ import Layout from '../layouts/Layout.astro';
         return;
       }
 
-      const tagName = section.includes('proposal') ? 'proposal-card'
-        : (section.includes('bug') ? 'bug-card' : 'task-card');
-      const cardElement = document.createElement(tagName);
+      // Create CleanCardDetail component
+      const detailEl = document.createElement('clean-card-detail');
+      const devId = cardData.developer || '';
+      const valId = cardData.validator || '';
 
-      // Load supporting data
-      const cardTypeForStatus = section.includes('bug') ? 'bug-card' : 'task-card';
-      const [statusList, projectSprintList] = await Promise.all([
-        FirebaseService.getStatusList(cardTypeForStatus),
-        FirebaseService.getSprintList(projectId)
-      ]);
-
-      const developersList = entityDirectoryService.getActiveDevelopers().map(dev => ({
-        id: dev.id, email: dev.email, name: dev.name
-      }));
-
-      const statusArray = Array.isArray(statusList) ? statusList : Object.keys(statusList || {});
-
-      const { expanded: _, isEditable: __, isSaving: ___, ...cleanData } = cardData;
-      Object.assign(cardElement, cleanData, {
-        projectId,
-        cardType: section,
+      Object.assign(detailEl, {
         cardId: cardData.cardId || firebaseId,
-        userEmail: currentUserEmail,
-        expanded: true,
-        statusList: statusArray,
-        developerList: developersList,
-        developers: developersList,
-        globalSprintList: projectSprintList,
-        _skipClone: true
+        firebaseId,
+        cardType: section,
+        projectId,
+        title: cardData.title || '',
+        status: cardData.status || '',
+        description: cardData.description || '',
+        descriptionStructured: cardData.descriptionStructured || [],
+        acceptanceCriteriaStructured: cardData.acceptanceCriteriaStructured || [],
+        developerName: devId ? entityDirectoryService.getDeveloperDisplayName(devId) || devId : '',
+        validatorName: valId ? entityDirectoryService.getStakeholderDisplayName(valId) || valId : '',
+        createdBy: cardData.createdBy || '',
+        endDate: cardData.endDate || '',
+        startDate: cardData.startDate || '',
+        devPoints: cardData.devPoints || 0,
+        businessPoints: cardData.businessPoints || 0,
+        notes: cardData.notes || [],
+        userEmail: currentUserEmail
       });
 
-      const { showExpandedCardInModal } = await import('/js/utils/common-functions.js');
-      showExpandedCardInModal(cardElement);
+      // Open in modal
+      const modal = document.createElement('app-modal');
+      modal._programmaticMode = true;
+      modal.modalId = `clean-detail-${cardId}-${Date.now()}`;
+      modal.showHeader = false;
+      modal.maxWidth = '680px';
+      modal.maxHeight = '90dvh';
+      modal.append(detailEl);
+
+      // Close modal on validate/reopen
+      detailEl.addEventListener('card-validated', () => modal.remove());
+      detailEl.addEventListener('card-reopened', () => modal.remove());
+
+      document.body.append(modal);
     } catch (error) {
       console.error('Error opening card:', error);
       document.dispatchEvent(new CustomEvent('show-slide-notification', {
