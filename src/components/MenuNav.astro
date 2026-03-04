@@ -8,6 +8,7 @@ const { currentPath = Astro.url.pathname } = Astro.props;
 const navItems = [
   { href: "/projects", label: "Projects", requiresAuth: true },
   { href: "/adminproject/", label: "Admin Project", requiresAuth: true },
+  { href: "/cleanview/", label: "Clean View", requiresAuth: true, requiresStakeholderOnly: true },
   { href: "/dashboard/", label: "Dashboard", requiresAuth: true },
   { href: "/proposals/", label: "Proposals", requiresAuth: true },
   { href: "/wip/", label: "WIP", requiresAuth: true },
@@ -46,7 +47,8 @@ function isActiveLink(href: string, currentPath: string): boolean {
       data-href={item.href}
       data-requires-auth={item.requiresAuth}
       data-requires-super-admin={item.requiresSuperAdmin || false}
-      style={item.requiresSuperAdmin ? 'display: none;' : ''}
+      data-requires-stakeholder-only={item.requiresStakeholderOnly || false}
+      style={item.requiresSuperAdmin || item.requiresStakeholderOnly ? 'display: none;' : ''}
     >
       {item.label}
     </a>
@@ -115,6 +117,7 @@ function isActiveLink(href: string, currentPath: string): boolean {
       document.addEventListener('user-authenticated', (event) => {
         this.updateAuthLinks(true);
         setTimeout(() => this.updateSuperAdminLinks(), 100);
+        setTimeout(() => this.updateStakeholderOnlyLinks(), 200);
       });
       document.addEventListener('user-signed-out', () => {
         this.updateAuthLinks(false);
@@ -124,10 +127,11 @@ function isActiveLink(href: string, currentPath: string): boolean {
       // Initial auth state check (hide by default)
       this.updateAuthLinks(false);
 
-      // Hide super admin links by default
+      // Hide super admin and stakeholder-only links by default
       this.navLinks.forEach(link => {
         const requiresSuperAdmin = link.getAttribute('data-requires-super-admin') === 'true';
-        if (requiresSuperAdmin) {
+        const requiresStakeholderOnly = link.getAttribute('data-requires-stakeholder-only') === 'true';
+        if (requiresSuperAdmin || requiresStakeholderOnly) {
           link.style.display = 'none';
         }
       });
@@ -142,16 +146,17 @@ function isActiveLink(href: string, currentPath: string): boolean {
       // Show/hide links based on path (original logic - without super admin logic)
       // Root "/" and "/projects" show the same limited set of links
       if (currentPath === '/' || currentPath === '/projects' || currentPath === '/projects/') {
-        const rootVisibleLinks = new Set(['/projects', '/dashboard/', '/proposals/', '/wip/', '/doc/']);
+        const rootVisibleLinks = new Set(['/projects', '/dashboard/', '/proposals/', '/wip/', '/cleanview/', '/doc/']);
         // Note: Development link visibility is handled by updateSuperAdminLinks
 
         this.navLinks.forEach(link => {
           const href = link.getAttribute('href');
           const requiresSuperAdmin = link.getAttribute('data-requires-super-admin') === 'true';
+          const requiresStakeholderOnly = link.getAttribute('data-requires-stakeholder-only') === 'true';
           const isDocLink = link.classList.contains('doc-link');
 
-          // Skip super admin links - they're handled separately
-          if (requiresSuperAdmin) return;
+          // Skip super admin and stakeholder-only links - they're handled separately
+          if (requiresSuperAdmin || requiresStakeholderOnly) return;
 
           // Doc link is always visible
           if (isDocLink) {
@@ -164,8 +169,9 @@ function isActiveLink(href: string, currentPath: string): boolean {
       } else {
         this.navLinks.forEach(link => {
           const requiresSuperAdmin = link.getAttribute('data-requires-super-admin') === 'true';
-          // Skip super admin links - they're handled separately
-          if (!requiresSuperAdmin) {
+          const requiresStakeholderOnly = link.getAttribute('data-requires-stakeholder-only') === 'true';
+          // Skip super admin and stakeholder-only links - they're handled separately
+          if (!requiresSuperAdmin && !requiresStakeholderOnly) {
             link.classList.remove('hidden');
           }
         });
@@ -234,6 +240,36 @@ function isActiveLink(href: string, currentPath: string): boolean {
       // Reset indicators position after visibility change
       if (this.activeElement) {
         this.moveIndicators(this.activeElement);
+      }
+    }
+
+    async updateStakeholderOnlyLinks() {
+      const currentUserEmail = normalizeEmail(document.body.dataset.userEmail);
+      if (!currentUserEmail) return;
+
+      try {
+        const { entityDirectoryService } = await import(
+          /* @vite-ignore */ `${window.location.origin}/js/services/entity-directory-service.js`
+        );
+        await entityDirectoryService.init();
+
+        const devId = entityDirectoryService.resolveDeveloperId(currentUserEmail);
+        const stkId = entityDirectoryService.resolveStakeholderId(currentUserEmail);
+        const isStakeholderOnly = stkId && !devId;
+
+        this.navLinks.forEach(link => {
+          const requiresStakeholderOnly = link.getAttribute('data-requires-stakeholder-only') === 'true';
+          if (requiresStakeholderOnly) {
+            link.style.display = isStakeholderOnly ? '' : 'none';
+          }
+          // Hide Admin Project for stakeholder-only users
+          const href = link.getAttribute('href');
+          if (href === '/adminproject/' && isStakeholderOnly) {
+            link.style.display = 'none';
+          }
+        });
+      } catch (error) {
+        // On error, keep default visibility (cleanview hidden)
       }
     }
 
