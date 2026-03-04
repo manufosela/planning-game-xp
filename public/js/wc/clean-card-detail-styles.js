@@ -98,7 +98,42 @@ export const CleanCardDetailStyles = css`
     margin-bottom: 0;
   }
 
-  /* Acceptance criteria */
+  /* Acceptance criteria - collapsible */
+  .criteria-details {
+    margin-bottom: 20px;
+  }
+
+  .criteria-details summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .criteria-details summary::before {
+    content: '▶';
+    font-size: 10px;
+    color: var(--text-muted, #94a3b8);
+    transition: transform 0.2s;
+  }
+
+  .criteria-details[open] summary::before {
+    transform: rotate(90deg);
+  }
+
+  .criteria-details summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .clickable {
+    cursor: pointer;
+  }
+
+  .criteria-list {
+    margin-top: 10px;
+  }
+
   .criteria-item {
     background: var(--bg-secondary, #f1f5f9);
     border-radius: 10px;

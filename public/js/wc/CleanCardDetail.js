@@ -148,28 +148,30 @@ export class CleanCardDetail extends LitElement {
     if (criteria.length === 0) return nothing;
 
     return html`
-      <div class="section">
-        <div class="section-title">Criterios de aceptación</div>
-        ${criteria.map(ac => html`
-          <div class="criteria-item">
-            ${ac.given ? html`
-              <div class="criteria-label">Given</div>
-              <div class="criteria-text">${ac.given}</div>
-            ` : nothing}
-            ${ac.when ? html`
-              <div class="criteria-label">When</div>
-              <div class="criteria-text">${ac.when}</div>
-            ` : nothing}
-            ${ac.then ? html`
-              <div class="criteria-label">Then</div>
-              <div class="criteria-text">${ac.then}</div>
-            ` : nothing}
-            ${ac.raw && !ac.given && !ac.when && !ac.then ? html`
-              <div class="criteria-text">${ac.raw}</div>
-            ` : nothing}
-          </div>
-        `)}
-      </div>
+      <details class="criteria-details">
+        <summary class="section-title clickable">Criterios de aceptación (${criteria.length})</summary>
+        <div class="criteria-list">
+          ${criteria.map(ac => html`
+            <div class="criteria-item">
+              ${ac.given ? html`
+                <div class="criteria-label">Given</div>
+                <div class="criteria-text">${ac.given}</div>
+              ` : nothing}
+              ${ac.when ? html`
+                <div class="criteria-label">When</div>
+                <div class="criteria-text">${ac.when}</div>
+              ` : nothing}
+              ${ac.then ? html`
+                <div class="criteria-label">Then</div>
+                <div class="criteria-text">${ac.then}</div>
+              ` : nothing}
+              ${ac.raw && !ac.given && !ac.when && !ac.then ? html`
+                <div class="criteria-text">${ac.raw}</div>
+              ` : nothing}
+            </div>
+          `)}
+        </div>
+      </details>
     `;
   }
 
