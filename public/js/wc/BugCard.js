@@ -545,7 +545,7 @@ document.dispatchEvent(new CustomEvent('request-bugcard-data', {
       ]);
 
       // Convert to the format expected by the component
-      const normalizedList = developers.map(dev => ({
+      let normalizedList = developers.map(dev => ({
         id: dev.id,
         name: dev.name,
         email: dev.email
@@ -558,6 +558,14 @@ document.dispatchEvent(new CustomEvent('request-bugcard-data', {
         const repoUrl = projectData.repoUrl;
         if (Array.isArray(repoUrl) && repoUrl.length > 1) {
           repositories = repoUrl; // [{url, label}, ...]
+        }
+
+        // If entityDirectoryService returned empty, read from project node directly
+        // This handles cases where /users/ entries lack projects/{projectId} assignments
+        if (normalizedList.length === 0 && Array.isArray(projectData.developers)) {
+          normalizedList = projectData.developers
+            .filter(d => d && (d.id || d.name || d.email))
+            .map(d => ({ id: d.id || '', name: d.name || '', email: d.email || '' }));
         }
       }
       this.projectRepositories = repositories;

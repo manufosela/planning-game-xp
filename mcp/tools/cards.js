@@ -1284,7 +1284,20 @@ export async function getTransitionRules({ type = 'task' }) {
           type: 'bug',
           validStatuses: VALID_BUG_STATUSES,
           validPriorities: VALID_BUG_PRIORITIES,
-          note: 'Bugs follow a simpler workflow: Created → Assigned → Fixed → Verified → Closed'
+          note: 'Bugs follow a simpler workflow: Created → Assigned → Fixed → Verified → Closed',
+          requiredFieldsForFixed: ['commits', 'pipelineStatus.prCreated'],
+          requiredFieldsForClosed: ['commits', 'rootCause', 'resolution'],
+          fieldDescriptions: {
+            commits: 'Array of commits [{hash, message, date, author}]',
+            pipelineStatus: 'Pipeline tracking object with prCreated: {prUrl, prNumber, date}',
+            rootCause: 'Why the bug occurred',
+            resolution: 'How the bug was fixed'
+          },
+          exampleFixedUpdate: {
+            status: 'Fixed',
+            commits: [{ hash: 'abc1234', message: 'fix: resolve issue', date: '2024-01-20T10:00:00Z', author: 'dev@example.com' }],
+            pipelineStatus: { prCreated: { prUrl: 'https://github.com/org/repo/pull/42', prNumber: 42, date: '2024-01-20T10:30:00Z' } }
+          }
         }, null, 2)
       }]
     };

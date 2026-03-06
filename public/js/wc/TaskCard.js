@@ -1135,13 +1135,13 @@ this.stakeholders = [];
       ]);
 
       // Convert to expected format
-      const developers = projectDevelopers.map(dev => ({
+      let developers = projectDevelopers.map(dev => ({
         id: dev.id,
         name: dev.name,
         email: dev.email
       }));
 
-      const stakeholders = projectStakeholders.map(stk => ({
+      let stakeholders = projectStakeholders.map(stk => ({
         id: stk.id,
         name: stk.name,
         email: stk.email
@@ -1159,7 +1159,19 @@ this.stakeholders = [];
         if (Array.isArray(repoUrl) && repoUrl.length > 1) {
           repositories = repoUrl; // [{url, label}, ...]
         }
-        // Si es string o array de 1 elemento, no mostrar selector
+
+        // If entityDirectoryService returned empty, read from project node directly
+        // This handles cases where /users/ entries lack projects/{projectId} assignments
+        if (developers.length === 0 && Array.isArray(projectData.developers)) {
+          developers = projectData.developers
+            .filter(d => d && (d.id || d.name || d.email))
+            .map(d => ({ id: d.id || '', name: d.name || '', email: d.email || '' }));
+        }
+        if (stakeholders.length === 0 && Array.isArray(projectData.stakeholders)) {
+          stakeholders = projectData.stakeholders
+            .filter(s => s && (s.id || s.name || s.email))
+            .map(s => ({ id: s.id || '', name: s.name || '', email: s.email || '' }));
+        }
       }
 
       const result = {

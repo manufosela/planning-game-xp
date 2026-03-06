@@ -40,7 +40,8 @@ const {
   VALIDATOR_ONLY_STATUSES,
   validateBugStatusTransition,
   getSessionTasksWithoutPlan,
-  resetSessionTaskCounter
+  resetSessionTaskCounter,
+  getTransitionRules
 } = await import('../tools/cards.js');
 
 const { invalidateCache } = await import('../services/list-service.js');
@@ -835,7 +836,8 @@ describe('cards.js', () => {
         firebaseId: 'task1',
         updates: {
           status: 'To Validate',
-          commits: [{ hash: 'abc123', message: 'Fix bug', date: '2024-01-01', author: 'dev@test.com' }]
+          commits: [{ hash: 'abc123', message: 'Fix bug', date: '2024-01-01', author: 'dev@test.com' }],
+          pipelineStatus: { prCreated: { prUrl: 'https://github.com/org/repo/pull/1', prNumber: 1, date: '2024-01-01T10:00:00Z' } }
         }
       });
 
@@ -927,9 +929,37 @@ describe('cards.js', () => {
       expect(() => validateBugStatusTransition(currentBug, updates)).not.toThrow();
     });
 
-    it('should pass for non-Closed status transitions', () => {
+    it('should pass for non-Fixed/Closed status transitions', () => {
       const currentBug = { status: 'Created' };
       const updates = { status: 'Assigned' };
+      expect(() => validateBugStatusTransition(currentBug, updates)).not.toThrow();
+    });
+
+    it('should throw when fixing bug without commits', () => {
+      const currentBug = { status: 'Assigned' };
+      const updates = {
+        status: 'Fixed',
+        pipelineStatus: { prCreated: { prUrl: 'https://github.com/org/repo/pull/1', prNumber: 1, date: '2024-01-20T10:00:00Z' } }
+      };
+      expect(() => validateBugStatusTransition(currentBug, updates)).toThrow(/commits/);
+    });
+
+    it('should throw when fixing bug without pipelineStatus', () => {
+      const currentBug = { status: 'Assigned' };
+      const updates = {
+        status: 'Fixed',
+        commits: [{ hash: 'abc123', message: 'fix: bug', date: '2024-01-20T10:00:00Z', author: 'dev' }]
+      };
+      expect(() => validateBugStatusTransition(currentBug, updates)).toThrow(/pipelineStatus/);
+    });
+
+    it('should pass when fixing bug with all required fields', () => {
+      const currentBug = { status: 'Assigned' };
+      const updates = {
+        status: 'Fixed',
+        commits: [{ hash: 'abc123', message: 'fix: bug', date: '2024-01-20T10:00:00Z', author: 'dev' }],
+        pipelineStatus: { prCreated: { prUrl: 'https://github.com/org/repo/pull/1', prNumber: 1, date: '2024-01-20T10:00:00Z' } }
+      };
       expect(() => validateBugStatusTransition(currentBug, updates)).not.toThrow();
     });
 
@@ -1453,6 +1483,821 @@ describe('cards.js', () => {
 
       resetSessionTaskCounter();
       expect(getSessionTasksWithoutPlan('TestProject')).toBe(0);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // PARANOID STATUS TRANSITION TESTS
+  // ══════════════════════════════════════════════════════════════
+
+  describe('Task: To Do → In Progress (paranoid field validation)', () => {
+    const fullTaskInTodo = {
+      cardId: 'TP-TSK-0001',
+      title: 'Test Task',
+      status: 'To Do',
+      developer: 'dev_001',
+      validator: 'stk_001',
+      epic: 'TP-EPC-0001',
+      sprint: 'TP-SPR-0001',
+      devPoints: 2,
+      businessPoints: 3,
+      acceptanceCriteria: 'Should work correctly'
+    };
+
+    beforeEach(() => {
+      setMockRtdbData('/projects/TestProject/abbreviation', 'TP');
+      setMockRtdbData('/projects/TestProject/scoringSystem', '1-5');
+      setMockRtdbData('/cards/TestProject/SPRINTS_TestProject', {
+        'sprint1': { cardId: 'TP-SPR-0001', title: 'Sprint 1', status: 'Active' }
+      });
+    });
+
+    it('should throw when developer is missing', async () => {
+      const task = { ...fullTaskInTodo };
+      delete task.developer;
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'In Progress' }
+      })).rejects.toThrow(/missing required fields/);
+    });
+
+    it('should throw when validator is missing', async () => {
+      const task = { ...fullTaskInTodo };
+      delete task.validator;
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'In Progress' }
+      })).rejects.toThrow(/missing required fields/);
+    });
+
+    it('should throw when epic is missing', async () => {
+      const task = { ...fullTaskInTodo };
+      delete task.epic;
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'In Progress' }
+      })).rejects.toThrow(/missing required fields/);
+    });
+
+    it('should throw when sprint is missing and no active sprint exists', async () => {
+      const task = { ...fullTaskInTodo };
+      delete task.sprint;
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+      // Remove sprints so auto-assign also fails
+      setMockRtdbData('/cards/TestProject/SPRINTS_TestProject', {});
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'In Progress' }
+      })).rejects.toThrow(/missing required fields/);
+    });
+
+    it('should throw when devPoints is missing', async () => {
+      const task = { ...fullTaskInTodo };
+      delete task.devPoints;
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'In Progress' }
+      })).rejects.toThrow(/missing required fields/);
+    });
+
+    it('should throw when businessPoints is missing', async () => {
+      const task = { ...fullTaskInTodo };
+      delete task.businessPoints;
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'In Progress' }
+      })).rejects.toThrow(/missing required fields/);
+    });
+
+    it('should throw when acceptanceCriteria is missing', async () => {
+      const task = { ...fullTaskInTodo };
+      delete task.acceptanceCriteria;
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'In Progress' }
+      })).rejects.toThrow(/missing required fields/);
+    });
+
+    it('should succeed when all required fields are present', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: { ...fullTaskInTodo } });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'In Progress' }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.status).toBe('In Progress');
+    });
+
+    it('should succeed with acceptanceCriteriaStructured instead of plain', async () => {
+      const task = { ...fullTaskInTodo };
+      delete task.acceptanceCriteria;
+      task.acceptanceCriteriaStructured = [
+        { given: 'A user is logged in', when: 'They click save', then: 'Data is persisted' }
+      ];
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'In Progress' }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.status).toBe('In Progress');
+    });
+
+    it('should throw when sprint in update does not exist in Firebase', async () => {
+      const task = { ...fullTaskInTodo };
+      delete task.sprint;
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'In Progress', sprint: 'TP-SPR-9999' }
+      })).rejects.toThrow(/not found/);
+    });
+  });
+
+  describe('Task: In Progress → To Validate (paranoid pipeline validation)', () => {
+    const validCommit = { hash: 'abc1234', message: 'feat: implement feature', date: '2024-01-20T10:00:00Z', author: 'dev@test.com' };
+    const validPipelineStatus = {
+      prCreated: { prUrl: 'https://github.com/org/repo/pull/42', prNumber: 42, date: '2024-01-20T10:30:00Z' }
+    };
+
+    const fullTaskInProgress = {
+      cardId: 'TP-TSK-0001',
+      title: 'Test Task',
+      status: 'In Progress',
+      developer: 'dev_001',
+      validator: 'stk_001',
+      epic: 'TP-EPC-0001',
+      sprint: 'TP-SPR-0001',
+      devPoints: 2,
+      businessPoints: 3,
+      acceptanceCriteria: 'Should work correctly',
+      startDate: '2024-01-01'
+    };
+
+    beforeEach(() => {
+      setMockRtdbData('/projects/TestProject/abbreviation', 'TP');
+      setMockRtdbData('/projects/TestProject/scoringSystem', '1-5');
+      setMockRtdbData('/cards/TestProject/SPRINTS_TestProject', {
+        'sprint1': { cardId: 'TP-SPR-0001', title: 'Sprint 1', status: 'Active' }
+      });
+    });
+
+    it('should throw when commits are missing', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: { ...fullTaskInProgress } });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'To Validate', pipelineStatus: validPipelineStatus }
+      })).rejects.toThrow(/commits/i);
+    });
+
+    it('should throw when pipelineStatus is missing', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: { ...fullTaskInProgress } });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'To Validate', commits: [validCommit] }
+      })).rejects.toThrow(/pipelineStatus/i);
+    });
+
+    it('should throw when pipelineStatus has no prCreated', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: { ...fullTaskInProgress } });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'To Validate', commits: [validCommit], pipelineStatus: {} }
+      })).rejects.toThrow(/pipelineStatus/i);
+    });
+
+    it('should throw when pipelineStatus.prCreated is missing prUrl', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: { ...fullTaskInProgress } });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: {
+          status: 'To Validate',
+          commits: [validCommit],
+          pipelineStatus: { prCreated: { prNumber: 42, date: '2024-01-20T10:30:00Z' } }
+        }
+      })).rejects.toThrow(/pipelineStatus/i);
+    });
+
+    it('should throw when pipelineStatus.prCreated is missing prNumber', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: { ...fullTaskInProgress } });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: {
+          status: 'To Validate',
+          commits: [validCommit],
+          pipelineStatus: { prCreated: { prUrl: 'https://github.com/org/repo/pull/42', date: '2024-01-20T10:30:00Z' } }
+        }
+      })).rejects.toThrow(/pipelineStatus/i);
+    });
+
+    it('should succeed with all required fields in updates', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: { ...fullTaskInProgress } });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'To Validate', commits: [validCommit], pipelineStatus: validPipelineStatus }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.status).toBe('To Validate');
+      expect(response.card.endDate).toBeDefined();
+    });
+
+    it('should succeed when startDate and commits are already on currentCard, only pipelineStatus in updates', async () => {
+      const task = {
+        ...fullTaskInProgress,
+        commits: [validCommit]
+      };
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'To Validate', pipelineStatus: validPipelineStatus }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.status).toBe('To Validate');
+    });
+
+    it('should succeed when pipelineStatus is already on currentCard, commits in updates', async () => {
+      const task = {
+        ...fullTaskInProgress,
+        pipelineStatus: validPipelineStatus
+      };
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'To Validate', commits: [validCommit] }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.status).toBe('To Validate');
+    });
+
+    it('should throw when startDate is missing from both card and updates', async () => {
+      const task = { ...fullTaskInProgress };
+      delete task.startDate;
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: task });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'To Validate', commits: [validCommit], pipelineStatus: validPipelineStatus }
+      })).rejects.toThrow(/startDate/i);
+    });
+  });
+
+  describe('Task: MCP restrictions', () => {
+    beforeEach(() => {
+      setMockRtdbData('/projects/TestProject/abbreviation', 'TP');
+      setMockRtdbData('/projects/TestProject/scoringSystem', '1-5');
+      setMockRtdbData('/cards/TestProject/SPRINTS_TestProject', {
+        'sprint1': { cardId: 'TP-SPR-0001', title: 'Sprint 1', status: 'Active' }
+      });
+    });
+
+    it('should throw when setting status to Done&Validated with specific message', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: {
+          cardId: 'TP-TSK-0001', title: 'Test Task', status: 'In Progress',
+          developer: 'dev_001', validator: 'stk_001'
+        }
+      });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'Done&Validated' }
+      })).rejects.toThrow(/MCP cannot change task status to "Done&Validated"/);
+    });
+
+    it('should succeed when setting status to Blocked with required block info', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: {
+          cardId: 'TP-TSK-0001', title: 'Test Task', status: 'In Progress',
+          developer: 'dev_001', validator: 'stk_001', epic: 'TP-EPC-0001',
+          sprint: 'TP-SPR-0001', devPoints: 2, businessPoints: 3,
+          acceptanceCriteria: 'Should work', startDate: '2024-01-01'
+        }
+      });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: {
+          status: 'Blocked',
+          blockedByDevelopment: true,
+          bbdWhy: 'Dependency not ready',
+          bbdWho: 'External team'
+        }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.status).toBe('Blocked');
+    });
+
+    it('should throw when setting Blocked without specifying block reason', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: {
+          cardId: 'TP-TSK-0001', title: 'Test Task', status: 'In Progress',
+          developer: 'dev_001', validator: 'stk_001', epic: 'TP-EPC-0001',
+          sprint: 'TP-SPR-0001', devPoints: 2, businessPoints: 3,
+          acceptanceCriteria: 'Should work', startDate: '2024-01-01'
+        }
+      });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'Blocked' }
+      })).rejects.toThrow(/blockedByBusiness.*blockedByDevelopment|must specify/i);
+    });
+  });
+
+  describe('Bug: Assigned → Fixed (paranoid pipeline validation)', () => {
+    const validCommit = { hash: 'def5678', message: 'fix: resolve issue', date: '2024-02-01T10:00:00Z', author: 'dev@test.com' };
+    const validPipelineStatus = {
+      prCreated: { prUrl: 'https://github.com/org/repo/pull/99', prNumber: 99, date: '2024-02-01T10:30:00Z' }
+    };
+
+    beforeEach(() => {
+      setMockRtdbData('/projects/TestProject/abbreviation', 'TP');
+    });
+
+    it('should throw when commits are missing', async () => {
+      setMockRtdbData('/cards/TestProject/BUGS_TestProject', {
+        bug1: { cardId: 'TP-BUG-0001', title: 'Test Bug', status: 'Assigned', developer: 'dev_001' }
+      });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
+        updates: { status: 'Fixed', pipelineStatus: validPipelineStatus }
+      })).rejects.toThrow(/commits/i);
+    });
+
+    it('should throw when pipelineStatus is missing', async () => {
+      setMockRtdbData('/cards/TestProject/BUGS_TestProject', {
+        bug1: { cardId: 'TP-BUG-0001', title: 'Test Bug', status: 'Assigned', developer: 'dev_001' }
+      });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
+        updates: { status: 'Fixed', commits: [validCommit] }
+      })).rejects.toThrow(/pipelineStatus/i);
+    });
+
+    it('should throw when pipelineStatus.prCreated is missing prUrl', async () => {
+      setMockRtdbData('/cards/TestProject/BUGS_TestProject', {
+        bug1: { cardId: 'TP-BUG-0001', title: 'Test Bug', status: 'Assigned', developer: 'dev_001' }
+      });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
+        updates: {
+          status: 'Fixed',
+          commits: [validCommit],
+          pipelineStatus: { prCreated: { prNumber: 99, date: '2024-02-01T10:30:00Z' } }
+        }
+      })).rejects.toThrow(/pipelineStatus/i);
+    });
+
+    it('should succeed with commits and pipelineStatus present', async () => {
+      setMockRtdbData('/cards/TestProject/BUGS_TestProject', {
+        bug1: { cardId: 'TP-BUG-0001', title: 'Test Bug', status: 'Assigned', developer: 'dev_001' }
+      });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
+        updates: { status: 'Fixed', commits: [validCommit], pipelineStatus: validPipelineStatus }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.status).toBe('Fixed');
+    });
+
+    it('should succeed without rootCause/resolution for Fixed status (not required)', async () => {
+      setMockRtdbData('/cards/TestProject/BUGS_TestProject', {
+        bug1: { cardId: 'TP-BUG-0001', title: 'Test Bug', status: 'Assigned', developer: 'dev_001' }
+      });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
+        updates: { status: 'Fixed', commits: [validCommit], pipelineStatus: validPipelineStatus }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.status).toBe('Fixed');
+      // rootCause and resolution are only required for Closed, not Fixed
+      expect(response.card.rootCause).toBeUndefined();
+      expect(response.card.resolution).toBeUndefined();
+    });
+  });
+
+  describe('Bug: Fixed → Closed (paranoid field validation)', () => {
+    const validCommit = { hash: 'def5678', message: 'fix: resolve issue', date: '2024-02-01T10:00:00Z', author: 'dev@test.com' };
+
+    const fixedBug = {
+      cardId: 'TP-BUG-0001',
+      title: 'Test Bug',
+      status: 'Fixed',
+      developer: 'dev_001',
+      commits: [validCommit]
+    };
+
+    beforeEach(() => {
+      setMockRtdbData('/projects/TestProject/abbreviation', 'TP');
+    });
+
+    it('should throw when rootCause is missing', async () => {
+      setMockRtdbData('/cards/TestProject/BUGS_TestProject', { bug1: { ...fixedBug } });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
+        updates: { status: 'Closed', resolution: 'Fixed the query' }
+      })).rejects.toThrow(/rootCause/i);
+    });
+
+    it('should throw when resolution is missing', async () => {
+      setMockRtdbData('/cards/TestProject/BUGS_TestProject', { bug1: { ...fixedBug } });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
+        updates: { status: 'Closed', rootCause: 'Bad SQL query' }
+      })).rejects.toThrow(/resolution/i);
+    });
+
+    it('should succeed when all required fields are present', async () => {
+      setMockRtdbData('/cards/TestProject/BUGS_TestProject', { bug1: { ...fixedBug } });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
+        updates: {
+          status: 'Closed',
+          rootCause: 'Bad SQL query',
+          resolution: 'Fixed the query with parameterized version'
+        }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.status).toBe('Closed');
+      expect(response.card.rootCause).toBe('Bad SQL query');
+      expect(response.card.resolution).toBe('Fixed the query with parameterized version');
+    });
+
+    it('should succeed when commits are already on the currentCard (not in updates)', async () => {
+      setMockRtdbData('/cards/TestProject/BUGS_TestProject', { bug1: { ...fixedBug } });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
+        updates: {
+          status: 'Closed',
+          rootCause: 'Bad SQL query',
+          resolution: 'Fixed the query'
+        }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.status).toBe('Closed');
+    });
+  });
+
+  describe('getTransitionRules integration', () => {
+    it('should return task rules with pipelineStatus.prCreated in requiredFieldsForToValidate', async () => {
+      const result = await getTransitionRules({ type: 'task' });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.type).toBe('task');
+      expect(response.requiredFieldsForToValidate).toContain('pipelineStatus.prCreated');
+    });
+
+    it('should return task rules with exampleValidUpdate containing pipelineStatus', async () => {
+      const result = await getTransitionRules({ type: 'task' });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.exampleValidUpdate).toBeDefined();
+      expect(response.exampleValidUpdate.pipelineStatus).toBeDefined();
+      expect(response.exampleValidUpdate.pipelineStatus.prCreated).toBeDefined();
+      expect(response.exampleValidUpdate.pipelineStatus.prCreated.prUrl).toBeDefined();
+      expect(response.exampleValidUpdate.pipelineStatus.prCreated.prNumber).toBeDefined();
+    });
+
+    it('should return bug rules with pipelineStatus.prCreated in requiredFieldsForFixed', async () => {
+      const result = await getTransitionRules({ type: 'bug' });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.type).toBe('bug');
+      expect(response.requiredFieldsForFixed).toContain('pipelineStatus.prCreated');
+    });
+
+    it('should return bug rules with rootCause and resolution in requiredFieldsForClosed', async () => {
+      const result = await getTransitionRules({ type: 'bug' });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.requiredFieldsForClosed).toContain('rootCause');
+      expect(response.requiredFieldsForClosed).toContain('resolution');
+      expect(response.requiredFieldsForClosed).toContain('commits');
+    });
+
+    it('should return bug rules with exampleFixedUpdate', async () => {
+      const result = await getTransitionRules({ type: 'bug' });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.exampleFixedUpdate).toBeDefined();
+      expect(response.exampleFixedUpdate.status).toBe('Fixed');
+      expect(response.exampleFixedUpdate.commits).toBeDefined();
+      expect(response.exampleFixedUpdate.pipelineStatus).toBeDefined();
+    });
+
+    it('should return bug rules with fieldDescriptions for pipelineStatus', async () => {
+      const result = await getTransitionRules({ type: 'bug' });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.fieldDescriptions).toBeDefined();
+      expect(response.fieldDescriptions.pipelineStatus).toBeDefined();
+    });
+
+    it('should return task rules with validStatuses and mcpRestrictedStatuses', async () => {
+      const result = await getTransitionRules({ type: 'task' });
+      const response = JSON.parse(result.content[0].text);
+
+      expect(response.validStatuses).toBeDefined();
+      expect(response.validStatuses.length).toBeGreaterThan(0);
+      expect(response.mcpRestrictedStatuses).toBeDefined();
+      expect(response.mcpRestrictedStatuses).toContain('Done&Validated');
+    });
+
+    it('should throw for unknown card type', async () => {
+      await expect(getTransitionRules({ type: 'unknown' })).rejects.toThrow(/Unknown card type/);
+    });
+  });
+
+  describe('validateOnly mode for status transitions', () => {
+    const validCommit = { hash: 'abc1234', message: 'feat: implement feature', date: '2024-01-20T10:00:00Z', author: 'dev@test.com' };
+    const validPipelineStatus = {
+      prCreated: { prUrl: 'https://github.com/org/repo/pull/42', prNumber: 42, date: '2024-01-20T10:30:00Z' }
+    };
+
+    const fullTaskInProgress = {
+      cardId: 'TP-TSK-0001',
+      title: 'Test Task',
+      status: 'In Progress',
+      developer: 'dev_001',
+      validator: 'stk_001',
+      epic: 'TP-EPC-0001',
+      sprint: 'TP-SPR-0001',
+      devPoints: 2,
+      businessPoints: 3,
+      acceptanceCriteria: 'Should work',
+      startDate: '2024-01-01'
+    };
+
+    beforeEach(() => {
+      setMockRtdbData('/projects/TestProject/abbreviation', 'TP');
+      setMockRtdbData('/projects/TestProject/scoringSystem', '1-5');
+    });
+
+    it('should return valid:false with missing pipelineStatus for To Validate', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: { ...fullTaskInProgress } });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'To Validate', commits: [validCommit] },
+        validateOnly: true
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.validateOnly).toBe(true);
+      expect(response.valid).toBe(false);
+      expect(response.missingFields).toContain('pipelineStatus');
+    });
+
+    it('should return valid:true when all fields are present for To Validate', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: { ...fullTaskInProgress } });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'To Validate', commits: [validCommit], pipelineStatus: validPipelineStatus },
+        validateOnly: true
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.validateOnly).toBe(true);
+      expect(response.valid).toBe(true);
+    });
+
+    it('should return valid:false with missing commits for To Validate', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: { ...fullTaskInProgress } });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'To Validate', pipelineStatus: validPipelineStatus },
+        validateOnly: true
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.validateOnly).toBe(true);
+      expect(response.valid).toBe(false);
+      expect(response.missingFields).toContain('commits');
+    });
+
+    it('should not apply changes when validateOnly is true', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', { task1: { ...fullTaskInProgress } });
+
+      await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'To Validate', commits: [validCommit], pipelineStatus: validPipelineStatus },
+        validateOnly: true
+      });
+
+      // Card should still be In Progress (validateOnly does not write)
+      const db = (await import('./__mocks__/firebase.js')).getDatabase();
+      const snap = await db.ref('/cards/TestProject/TASKS_TestProject/task1').once('value');
+      expect(snap.val().status).toBe('In Progress');
+    });
+
+    it('should report MCP-restricted status as error in validateOnly mode', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: { cardId: 'TP-TSK-0001', title: 'Test Task', status: 'To Validate' }
+      });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { status: 'Done&Validated' },
+        validateOnly: true
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.valid).toBe(false);
+      expect(response.statusTransitionValidation.errors.some(
+        e => e.code === 'VALIDATOR_ONLY_STATUS'
+      )).toBe(true);
+    });
+  });
+
+  describe('Commits field in updateCard', () => {
+    const commit1 = { hash: 'aaa111', message: 'feat: first commit', date: '2024-01-10T10:00:00Z', author: 'dev@test.com' };
+    const commit2 = { hash: 'bbb222', message: 'feat: second commit', date: '2024-01-11T10:00:00Z', author: 'dev@test.com' };
+    const commit3 = { hash: 'ccc333', message: 'fix: third commit', date: '2024-01-12T10:00:00Z', author: 'dev@test.com' };
+
+    beforeEach(() => {
+      setMockRtdbData('/projects/TestProject/abbreviation', 'TP');
+      setMockRtdbData('/projects/TestProject/scoringSystem', '1-5');
+      setMockRtdbData('/cards/TestProject/SPRINTS_TestProject', {
+        'sprint1': { cardId: 'TP-SPR-0001', title: 'Sprint 1', status: 'Active' }
+      });
+    });
+
+    it('should append new commits to existing ones', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: {
+          cardId: 'TP-TSK-0001', title: 'Test Task', status: 'In Progress',
+          developer: 'dev_001', validator: 'stk_001', epic: 'TP-EPC-0001',
+          sprint: 'TP-SPR-0001', devPoints: 2, businessPoints: 3,
+          acceptanceCriteria: 'Should work', startDate: '2024-01-01',
+          commits: [commit1]
+        }
+      });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { commits: [commit2, commit3] }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.commits).toHaveLength(3);
+      expect(response.card.commits[0].hash).toBe('aaa111');
+      expect(response.card.commits[1].hash).toBe('bbb222');
+      expect(response.card.commits[2].hash).toBe('ccc333');
+    });
+
+    it('should deduplicate commits with the same hash', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: {
+          cardId: 'TP-TSK-0001', title: 'Test Task', status: 'In Progress',
+          developer: 'dev_001', validator: 'stk_001', epic: 'TP-EPC-0001',
+          sprint: 'TP-SPR-0001', devPoints: 2, businessPoints: 3,
+          acceptanceCriteria: 'Should work', startDate: '2024-01-01',
+          commits: [commit1]
+        }
+      });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { commits: [commit1, commit2] }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      // commit1 already exists, so only commit2 should be added
+      expect(response.card.commits).toHaveLength(2);
+      expect(response.card.commits[0].hash).toBe('aaa111');
+      expect(response.card.commits[1].hash).toBe('bbb222');
+    });
+
+    it('should throw for invalid commit format (missing hash)', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: {
+          cardId: 'TP-TSK-0001', title: 'Test Task', status: 'In Progress',
+          developer: 'dev_001'
+        }
+      });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { commits: [{ message: 'no hash', date: '2024-01-01', author: 'dev' }] }
+      })).rejects.toThrow(/hash/i);
+    });
+
+    it('should throw for invalid commit format (missing message)', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: {
+          cardId: 'TP-TSK-0001', title: 'Test Task', status: 'In Progress',
+          developer: 'dev_001'
+        }
+      });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { commits: [{ hash: 'abc123', date: '2024-01-01', author: 'dev' }] }
+      })).rejects.toThrow(/message/i);
+    });
+
+    it('should throw for invalid commit format (missing date)', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: {
+          cardId: 'TP-TSK-0001', title: 'Test Task', status: 'In Progress',
+          developer: 'dev_001'
+        }
+      });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { commits: [{ hash: 'abc123', message: 'test', author: 'dev' }] }
+      })).rejects.toThrow(/date/i);
+    });
+
+    it('should throw for invalid commit format (missing author)', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: {
+          cardId: 'TP-TSK-0001', title: 'Test Task', status: 'In Progress',
+          developer: 'dev_001'
+        }
+      });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { commits: [{ hash: 'abc123', message: 'test', date: '2024-01-01' }] }
+      })).rejects.toThrow(/author/i);
+    });
+
+    it('should throw when commits is not an array', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: {
+          cardId: 'TP-TSK-0001', title: 'Test Task', status: 'In Progress',
+          developer: 'dev_001'
+        }
+      });
+
+      await expect(updateCard({
+        projectId: 'TestProject', type: 'task', firebaseId: 'task1',
+        updates: { commits: 'not an array' }
+      })).rejects.toThrow(/array/i);
+    });
+
+    it('should work for bug commits too', async () => {
+      setMockRtdbData('/cards/TestProject/BUGS_TestProject', {
+        bug1: {
+          cardId: 'TP-BUG-0001', title: 'Test Bug', status: 'Assigned',
+          developer: 'dev_001', commits: [commit1]
+        }
+      });
+
+      const result = await updateCard({
+        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
+        updates: { commits: [commit2] }
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.card.commits).toHaveLength(2);
     });
   });
 });
