@@ -120,6 +120,7 @@ let user = null;
       </div>
       <div class="user-info">
         <theme-toggle></theme-toggle>
+        <quick-access-icons id="quickAccessIcons" class="hidden"></quick-access-icons>
         <notification-bell id="notificationBell" class="hidden"></notification-bell>
         <span id="user-status">Cargando...</span>
         <div class="auth-actions">
@@ -649,6 +650,10 @@ let user = null;
         if (notificationBell) {
           notificationBell.classList.add('hidden');
         }
+        const quickAccessIcons = document.getElementById('quickAccessIcons');
+        if (quickAccessIcons) {
+          quickAccessIcons.classList.add('hidden');
+        }
 
         // Notify menu about user sign out
         document.dispatchEvent(new CustomEvent('user-signed-out'));
@@ -693,10 +698,14 @@ let user = null;
         }
         document.body.dataset.userEmail = user.email || '';
 
-        // Show notification bell
+        // Show notification bell and quick access icons
         const notificationBell = document.getElementById('notificationBell');
         if (notificationBell) {
           notificationBell.classList.remove('hidden');
+        }
+        const quickAccessIcons = document.getElementById('quickAccessIcons');
+        if (quickAccessIcons) {
+          quickAccessIcons.classList.remove('hidden');
         }
 
         // Notify notification bell about user authentication
@@ -932,7 +941,11 @@ let user = null;
       // Run on every page load (initial + View Transition navigations)
       document.addEventListener('astro:page-load', () => {
         DOMContentLoadedActions();
-        setTimeout(initSystemRequirementsChecker, 100);
+        if (typeof requestIdleCallback === 'function') {
+          requestIdleCallback(initSystemRequirementsChecker);
+        } else {
+          setTimeout(initSystemRequirementsChecker, 100);
+        }
       });
     </script>
 

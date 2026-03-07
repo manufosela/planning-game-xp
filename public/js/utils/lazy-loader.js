@@ -14,6 +14,7 @@ export class LazyLoader {
 
     // Core components - local
     'notification-bell': '/js/wc/NotificationBell.js',
+    'quick-access-icons': '/js/wc/QuickAccessIcons.js',
 
     // Card components - load on demand
     'task-card': '/js/wc/TaskCard.js',
