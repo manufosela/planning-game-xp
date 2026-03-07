@@ -1,20 +1,2596 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { appShellRoutes, resolveAppShellPartial } from '../lib/app-shell-routes.js';
-
-const shellRoute = Astro.url.pathname;
-const shellPartial = resolveAppShellPartial(shellRoute);
 ---
 
-<Layout
-  title="Task"
-  shellRoute={shellRoute}
-  shellPartial={shellPartial}
-  shellRoutes={appShellRoutes}
->
-  <noscript>
-    <div style="padding: 1.5rem;">
-      Esta pagina necesita JavaScript para cargar el contenido.
+<Layout title="Task">
+  <Fragment slot="subnav">
+    <div class="header-controls">
+        <project-selector id="projectSelector"></project-selector>
+        <button id="editProjectBtn" class="edit-project-btn" title="Editar proyecto" style="display:none;">✏️</button>
+        <a href="/cleanview/" class="cleanview-link" data-astro-reload title="Vista simplificada para stakeholders">📋 Clean View</a>
+        <year-selector id="yearSelector"></year-selector>
+        <div class="tabs header-tabs">
+          <button id="sprintsTab" data-section="sprints" class="tablinks">Sprints</button>
+          <button id="epicsTab" data-section="epics" class="tablinks">Epics</button>
+          <button id="tasksTab" data-section="tasks" class="tablinks">Tasks</button>
+          <button id="bugsTab" data-section="bugs" class="tablinks">Bugs</button>
+          <button id="proposalsTab" data-section="proposals" class="tablinks">Proposals</button>
+          <button id="qaTab" data-section="qa" class="tablinks">QA</button>
+          <button id="adrsTab" data-section="adrs" class="tablinks">ADRs</button>
+          <button id="devPlansTab" data-section="devPlans" class="tablinks">Dev Plans</button>
+          <button id="usersTab" data-section="users" class="tablinks" style="display:none;">Users</button>
+          <button id="appTab" data-section="app" class="tablinks app-tab" style="display:none;">App</button>
+          <button id="trashTab" data-section="trash" class="tablinks trash-tab" style="display:none;">🗑️</button>
+        </div>
+      </div>
+  </Fragment>
+
+  <!-- Message when no project is selected -->
+    <div id="noProjectMessage" class="no-project-message" style="display: none;">
+      <div class="no-project-content">
+        <h2>👆 Selecciona un proyecto</h2>
+        <p>Usa el selector de arriba para elegir un proyecto y ver sus tareas, bugs y sprints.</p>
+      </div>
     </div>
-  </noscript>
+  
+    <div id="sprintsTabContent" class="tabcontent">
+      <section class="subheader">
+        <h3>Sprints</h3>
+        <div class="view-buttons">
+          <button id="showSprintCardsBtn" class="view-button active">Cards View</button>
+          <button id="showSprintChartBtn" class="view-button">📈 Evolución puntos</button>
+          <button id="addSprintCard" class="add-button">+ New Sprint</button>
+        </div>
+      </section>
+      <div id="sprintChartContainer" style="display:none; margin-bottom: 1rem;">
+        <sprint-points-chart id="sprintPointsChart"></sprint-points-chart>
+      </div>
+      <section class="cards-container" id="sprintsCardsList"></section>
+    </div>
+    <div id="epicsTabContent" class="tabcontent">
+      <section class="subheader">
+        <h3>Epics Cards</h3>
+        <div class="view-buttons">
+          <button id="epicsListBtn" class="view-button active">Cards List</button>
+          <button id="epicsGanttBtn" class="view-button">Gantt Diagram</button>
+          <button id="addEpicCard" class="add-button">+ New Epic</button>
+        </div>
+      </section>
+      <section class="cards-container" id="epicsCardsList"></section>
+      <div id="epicsGanttView" style="display:none;">
+        <gantt-chart id="epicsGanttChart"></gantt-chart>
+      </div>
+    </div>
+    <div id="tasksTabContent" class="tabcontent">
+      <section class="subheader">
+        <h3>Tasks Cards
+          <button id="taskGuideBtn" class="help-button" title="Guía de Tasks">?</button>
+          <button id="repoLinkBtn" class="help-button doc-button" title="Repositorio del proyecto" style="display:none;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+          </button>
+          <button id="projectDescBtn" class="help-button doc-button" title="Documentación del proyecto" style="display:none;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M1 2.5A1.5 1.5 0 012.5 1h3.879a1.5 1.5 0 011.06.44l1.122 1.12A1.5 1.5 0 009.62 3H13.5A1.5 1.5 0 0115 4.5v9a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 13.5v-11zM2.5 2a.5.5 0 00-.5.5v11a.5.5 0 00.5.5h11a.5.5 0 00.5-.5v-9a.5.5 0 00-.5-.5H9.62a.5.5 0 01-.354-.147l-1.122-1.12A.5.5 0 007.793 2H2.5z"/>
+            </svg>
+          </button>
+        </h3>
+        <card-search id="tasksSearch" section="tasks" placeholder="Buscar por ID o titulo..."></card-search>
+        <div class="view-buttons">
+          <button id="tableViewBtn" class="view-button active">Table View</button>
+          <button id="listViewBtn" class="view-button">Cards View</button>
+          <button id="kanbanViewBtn" class="view-button">Kanban View</button>
+          <button id="sprintViewBtn" class="view-button">Sprint View</button>
+          <button id="importTasksBtn" class="import-backlog-btn" style="display: none;">
+            Importar de <span id="importTasksYear"></span> (<span id="importTasksCount">0</span>)
+          </button>
+          <button id="addTaskCard" class="add-button">+ New Task</button>
+        </div>
+      </section>
+      <section class="filters-section">
+        <div id="tasksFilters" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;"></div>
+      </section>
+      <section class="cards-container list-view" id="tasksCardsList" style="display:none"></section>
+      <section class="table-view" id="tasksTableView"></section>
+      <section class="kanban-view" id="tasksKanbanView" style="display: none !important; visibility: hidden !important; opacity: 0 !important; position: absolute !important; left: -9999px !important;">
+        <div class="kanban-columns" id="kanbanColumns"></div>
+      </section>
+      <section class="sprint-view" id="tasksSprintView" style="display: none !important; visibility: hidden !important; opacity: 0 !important; position: absolute !important; left: -9999px !important;">
+        <div class="sprint-view-container">
+          <div class="sprint-column backlog-column">
+            <h4>Backlog</h4>
+            <button id="importBacklogBtn" class="import-backlog-btn" style="display: none;">
+              Importar de <span id="importBacklogYear"></span> (<span id="importBacklogCount">0</span>)
+            </button>
+            <div id="backlog-cards" class="sprint-cards"></div>
+          </div>
+          <div class="sprint-columns-scroll">
+            <div class="sprint-columns" id="sprintColumns"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div id="bugsTabContent" class="tabcontent">
+      <section class="subheader">
+        <h3>Bugs Cards</h3>
+        <card-search id="bugsSearch" section="bugs" placeholder="Buscar por ID o titulo..."></card-search>
+        <div class="view-buttons">
+          <button id="bugsTableViewBtn" class="view-button active">Table View</button>
+          <button id="bugsListViewBtn" class="view-button">Cards View</button>
+          <button id="bugsStatusKanbanBtn" class="view-button">Status Kanban</button>
+          <button id="bugsPriorityKanbanBtn" class="view-button">Priority Kanban</button>
+          <button id="importBugsBtn" class="import-backlog-btn" style="display: none;">
+            Importar de <span id="importBugsYear"></span> (<span id="importBugsCount">0</span>)
+          </button>
+          <button id="addBugCard" class="add-button">+ New Bug</button>
+        </div>
+      </section>
+      <section class="filters-section">
+        <div id="bugsFilters" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;"></div>
+      </section>
+      <div id="bugsCardsList" class="cards-container" style="display:none">
+        <div id="bugsFilters" style="width: 100%; margin-bottom: 1rem;"></div>
+        <div class="cards-list"></div>
+      </div>
+      <section class="table-view" id="bugsTableView"></section>
+      <section class="kanban-view" id="bugsStatusKanbanView" style="display: none !important; visibility: hidden !important; opacity: 0 !important; position: absolute !important; left: -9999px !important;">
+        <div class="kanban-columns" id="bugsStatusKanbanColumns"></div>
+      </section>
+      <section class="kanban-view" id="bugsPriorityKanbanView" style="display: none !important; visibility: hidden !important; opacity: 0 !important; position: absolute !important; left: -9999px !important;">
+        <div class="kanban-columns" id="bugsPriorityKanbanColumns"></div>
+      </section>
+    </div>
+    <div id="proposalsTabContent" class="tabcontent">
+      <section class="subheader">
+        <h3>Proposals</h3>
+        <div class="view-buttons">
+          <button id="proposalsTableViewBtn" class="view-button active">Table View</button>
+          <button id="proposalsListViewBtn" class="view-button">Cards View</button>
+          <button id="importProposalsBtn" class="import-backlog-btn" style="display: none;">
+            Importar de <span id="importProposalsYear"></span> (<span id="importProposalsCount">0</span>)
+          </button>
+          <button id="addProposalCard" class="add-button">+ New Proposal</button>
+        </div>
+      </section>
+      <section class="cards-container" id="proposalsCardsList" style="display:none"></section>
+      <section class="table-view" id="proposalsTableView"></section>
+    </div>
+    <div id="qaTabContent" class="tabcontent">
+      <section class="subheader">
+        <h3>QA Cards</h3>
+        <button id="addQACard" class="add-button">+ New QA</button>
+      </section>
+      <section class="cards-container" id="qaCardsList"></section>
+    </div>
+    <div id="adrsTabContent" class="tabcontent">
+      <adr-list id="adrList"></adr-list>
+    </div>
+    <div id="devPlansTabContent" class="tabcontent">
+      <dev-plans-section id="devPlansSection"></dev-plans-section>
+    </div>
+    <div id="usersTabContent" class="tabcontent">
+      <entity-directory-manager id="entityDirectoryManager"></entity-directory-manager>
+    </div>
+    <div id="appTabContent" class="tabcontent">
+      <section class="subheader">
+        <h3>Aplicaciones del Proyecto</h3>
+      </section>
+      <app-manager id="appManager"></app-manager>
+    </div>
+    <div id="trashTabContent" class="tabcontent">
+      <section class="subheader">
+        <h3>Trash</h3>
+        <p class="subheader-hint">Cards eliminadas del proyecto. Solo visible para administradores.</p>
+      </section>
+      <section id="trashCardsList" class="trash-list">
+        <p class="loading-message">Cargando...</p>
+      </section>
+    </div>
+  
+  <style is:global>
+    .no-project-message {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 50vh;
+      text-align: center;
+    }
+    .no-project-content {
+      background: var(--bg-secondary);
+      padding: 3rem;
+      border-radius: 12px;
+      box-shadow: var(--shadow-md);
+    }
+    .no-project-content h2 {
+      margin: 0 0 1rem 0;
+      color: var(--text-primary);
+    }
+    .no-project-content p {
+      margin: 0;
+      color: var(--text-muted);
+    }
+    /* Hide tabs and content when no project */
+    body.no-project-selected .header-tabs,
+    body.no-project-selected .tabcontent,
+    body.no-project-selected #yearSelector {
+      display: none !important;
+    }
+  
+    .cleanview-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+      color: var(--brand-primary, #6366f1);
+      background: var(--bg-secondary, #f1f5f9);
+      border: 1px solid var(--border-default, #e2e8f0);
+      transition: background 0.2s, border-color 0.2s;
+      white-space: nowrap;
+    }
+  
+    .cleanview-link:hover {
+      background: var(--brand-primary, #6366f1);
+      color: var(--text-on-primary, #fff);
+      border-color: var(--brand-primary, #6366f1);
+    }
+  
+    .trash-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .trash-table th,
+    .trash-table td {
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border-default);
+      text-align: left;
+    }
+    .trash-table th {
+      background: var(--bg-secondary);
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .trash-table tr:hover {
+      background: var(--bg-tertiary);
+    }
+    .moved-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      background: var(--brand-primary);
+      color: var(--text-inverse);
+      margin-left: 0.25rem;
+    }
+    .empty-message,
+    .loading-message,
+    .error-message {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-muted);
+    }
+    .error-message {
+      color: var(--color-error);
+    }
+    .btn-restore {
+      padding: 0.25rem 0.6rem;
+      font-size: 0.8rem;
+      border: 1px solid var(--color-success);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--color-success);
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .btn-restore:hover {
+      background: var(--color-success);
+      color: var(--text-inverse);
+    }
+    .btn-restore:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
+  
+  <script>
+    // CRÍTICO: Establecer projectId ANTES de cualquier otra cosa
+    // Este script es síncrono y se ejecuta inmediatamente
+    (function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const projectId = urlParams.get('projectId') || '';
+  
+      // Establecer en todas las ubicaciones posibles
+      window.currentProjectId = projectId;
+      window.initialProjectId = projectId;
+      document.body.dataset.projectId = projectId;
+  
+      // Add class to body for CSS-based hiding when no project
+      if (!projectId) {
+        document.body.classList.add('no-project-selected');
+      }
+    })();
+  </script>
+  
+  <script>
+    // Show "select project" message when DOM is ready
+    document.addEventListener('astro:page-load', () => {
+      if (!window.currentProjectId) {
+        const noProjectMsg = document.getElementById('noProjectMessage');
+        if (noProjectMsg) {
+          noProjectMsg.style.display = 'flex';
+        }
+      }
+    });
+  
+    // Navigate to selected project when changed from the selector
+    document.addEventListener('project-changed', (e) => {
+      const projectId = e.detail?.projectId;
+      if (projectId) {
+        const url = new URL(window.location);
+        url.searchParams.set('projectId', projectId);
+        if (window.appShellRouter?.navigate) {
+          window.appShellRouter.navigate(url.toString());
+        } else {
+          window.location.href = url.toString();
+        }
+      }
+    });
+  </script>
+  
+  <script>
+    // Variables globales para permisos
+    let isResponsable = false;
+    let currentUserRole = { isResponsable: false };
+    let isYearReadOnly = false; // Para años anteriores en modo solo lectura
+  
+    // All tabs visible for authenticated users. Users/trash only for SuperAdmin, app only if projectHasApps.
+    const ALL_TABS = ['sprints', 'epics', 'tasks', 'bugs', 'proposals', 'qa', 'adrs', 'devPlans'];
+    const ADMIN_ONLY_TABS = ['users', 'trash'];
+    let projectHasApps = false; // Controls App tab visibility
+  
+    // Show/hide tabs based on user role
+    window.updateTabVisibility = function() {
+      const allTabButtons = document.querySelectorAll('.tablinks');
+      allTabButtons.forEach(tab => {
+        const section = tab.dataset.section;
+        // tasksGenerator visibility is managed by app-controller.js - don't override
+        if (section === 'tasksGenerator') return;
+        // Users and trash: SuperAdmin only (managed by app-controller.js)
+        if (section === 'users' || section === 'trash') return;
+        // App tab only visible if project has allowExecutables
+        if (section === 'app') {
+          tab.style.display = projectHasApps ? '' : 'none';
+        } else {
+          tab.style.display = ALL_TABS.includes(section) ? '' : 'none';
+        }
+      });
+  
+      // Controlar visibilidad de botones de creación/edición
+      toggleEditButtons();
+  
+      // Notificar a todos los componentes sobre el cambio de permisos
+      window.notifyPermissionsUpdate();
+    };
+  
+    // Show/hide edit buttons based on user role and year
+    function toggleEditButtons() {
+      if (isYearReadOnly) {
+        // Year is read-only: hide all edit buttons
+        const editButtons = document.querySelectorAll('.add-button, .add-plan-button, .edit-button, .delete-button');
+        editButtons.forEach(btn => { btn.style.display = 'none'; });
+        return;
+      }
+  
+      const editButtons = document.querySelectorAll('.add-button, .add-plan-button, .edit-button, .delete-button');
+      editButtons.forEach(btn => {
+        // Proposals and QA: always visible for all authenticated users
+        if (btn.id === 'addProposalCard' || btn.id === 'addQACard') {
+          btn.style.display = '';
+        // Tasks and Bugs: visible for all authenticated users (developers can create)
+        } else if (btn.id === 'addTaskCard' || btn.id === 'addBugCard') {
+          btn.style.display = '';
+        // Epics, Sprints, delete buttons: admin only
+        } else if (btn.id === 'addEpicCard' || btn.id === 'addSprintCard') {
+          btn.style.display = isResponsable ? '' : 'none';
+        } else {
+          // Other edit/delete buttons: admin only
+          btn.style.display = isResponsable ? '' : 'none';
+        }
+      });
+    }
+  
+    // Set user role and update UI accordingly
+    window.setUserRole = function(userRole) {
+      isResponsable = userRole.isResponsable || false;
+      currentUserRole = userRole;
+      window.currentUserRole = userRole;
+  
+      // Update tab visibility and buttons based on new role
+      window.updateTabVisibility();
+    };
+  
+    // Notify all components about permission changes
+    window.notifyPermissionsUpdate = function() {
+      const permissionsEvent = new CustomEvent('permissions-updated', {
+        detail: {
+          canEdit: true, // All authenticated users can edit (specific permissions checked per card type)
+          userRole: currentUserRole,
+          isResponsable
+        },
+        bubbles: true
+      });
+  
+      document.dispatchEvent(permissionsEvent);
+    };
+  
+    // Handler for component permission requests
+    document.addEventListener('request-user-permissions', function(e) {
+      const { requestId, cardType, cardId } = e.detail;
+  
+      const responseEvent = new CustomEvent('user-permissions-response', {
+        detail: {
+          requestId,
+          canEdit: true, // All authenticated users can edit (card-level permissions checked separately)
+          userRole: currentUserRole,
+          isResponsable
+        },
+        bubbles: true
+      });
+  
+      setTimeout(() => document.dispatchEvent(responseEvent), 0);
+    });
+  
+    // Handler for TaskCard permissions
+    document.addEventListener('request-task-permissions', function(e) {
+      const { cardId, cardType, userEmail, createdBy, callback } = e.detail;
+  
+      // All authenticated users can edit tasks; admins can also delete
+      const canEdit = !isYearReadOnly;
+      const canDelete = isResponsable && !isYearReadOnly;
+  
+      const permissions = {
+        canEdit,
+        canSave: canEdit,
+        canDelete,
+        userRole: currentUserRole,
+        isResponsable,
+        isYearReadOnly
+      };
+  
+      if (callback && typeof callback === 'function') {
+        callback(permissions);
+      }
+    });
+  
+    // Handler for BugCard permissions
+    document.addEventListener('request-bug-permissions', function(e) {
+      const { cardId, cardType, userEmail, createdBy, callback } = e.detail;
+  
+      // All authenticated users can edit bugs; admins can delete any, owners can delete own
+      const currentUserEmail = document.body.dataset.userEmail;
+      const isOwner = createdBy && currentUserEmail && createdBy === currentUserEmail;
+      const canEdit = !isYearReadOnly;
+      const canDelete = (isResponsable || isOwner) && !isYearReadOnly;
+  
+      const permissions = {
+        canEdit,
+        canSave: canEdit,
+        canDelete,
+        userRole: currentUserRole,
+        isResponsable,
+        isYearReadOnly
+      };
+  
+      if (callback && typeof callback === 'function') {
+        callback(permissions);
+      }
+    });
+  
+    // Handler for cards with ownership logic (ProposalCard and QACard)
+    document.addEventListener('request-ownership-permissions', function(e) {
+      const { cardId, cardType, userEmail, createdBy, callback } = e.detail;
+  
+      const currentUserEmail = document.body.dataset.userEmail;
+      const isOwner = createdBy && currentUserEmail && createdBy === currentUserEmail;
+  
+      // All authenticated users can edit their own proposals/QA; admins can edit all
+      const canEdit = isResponsable || isOwner;
+  
+      const permissions = {
+        canEdit,
+        canSave: canEdit,
+        canDelete: isResponsable || isOwner, // Owners can delete their own, admins can delete any
+        canConvertToTask: canEdit,
+        userRole: currentUserRole,
+        isOwner,
+        isAdmin: isResponsable
+      };
+  
+      if (callback && typeof callback === 'function') {
+        callback(permissions);
+      }
+    });
+  
+    // Handler for other card types (Sprint, Epic) - admin only
+    document.addEventListener('request-card-permissions', function(e) {
+      const { cardId, cardType, userEmail, createdBy, callback } = e.detail;
+  
+      // Epics and Sprints: only admins can edit
+      const canEdit = isResponsable && !isYearReadOnly;
+  
+      const permissions = {
+        canEdit,
+        canSave: canEdit,
+        canDelete: canEdit,
+        userRole: currentUserRole,
+        isResponsable,
+        isYearReadOnly
+      };
+  
+      if (callback && typeof callback === 'function') {
+        callback(permissions);
+      }
+    });
+  
+    // Sistema de gestión de modales a nivel de aplicación
+    class ModalStateManager {
+      constructor() {
+        this.expandedCards = new Map(); // elementId -> modalId
+        this.modalStack = []; // Stack LIFO para modales anidados: [{ modalId, elementId, parentModalId? }]
+        this.setupEventListeners();
+      }
+  
+      // Añadir modal al stack LIFO
+      pushModal(modalId, elementId, parentModalId = null) {
+        const modalInfo = { modalId, elementId, parentModalId };
+        this.modalStack.push(modalInfo);
+  }
+  
+      // Obtener el modal más reciente (top of stack)
+      getTopModal() {
+        return this.modalStack.length > 0 ? this.modalStack[this.modalStack.length - 1] : null;
+      }
+  
+      // Remover modal del stack
+      popModal() {
+        if (this.modalStack.length > 0) {
+          const removedModal = this.modalStack.pop();
+  return removedModal;
+        }
+        return null;
+      }
+  
+      // Encontrar modal en stack por modalId
+      findModalInStack(modalId) {
+        return this.modalStack.find(modal => modal.modalId === modalId);
+      }
+  
+      setupEventListeners() {
+        // Escuchar solicitud de mostrar tareas de épica
+        document.addEventListener('show-epic-tasks-requested', (e) => {
+          const { epicId, epicTitle, projectId } = e.detail;
+          this.handleShowEpicTasks(epicId, epicTitle, projectId);
+        });
+  
+        // Escuchar cuando una card se expande
+        document.addEventListener('card-expanded', (e) => {
+          const { tagName, elementId } = e.detail;
+  // Si es una task-card que se expande, buscar su modal
+          if (tagName === 'task-card') {
+            setTimeout(() => {
+              const modals = Array.from(document.querySelectorAll('app-modal'));
+              const taskModal = modals.find(modal => 
+                modal.querySelector(`task-card[id="${elementId}"]`)
+              );
+              
+              if (taskModal) {
+                const modalId = taskModal.getAttribute('modal-id');
+                this.expandedCards.set(elementId, modalId);
+  }
+            }, 50);
+          }
+        });
+  
+        // Escuchar cuando una card se guarda
+        document.addEventListener('card-saved-successfully', (e) => {
+          const { tagName, elementId } = e.detail;
+  // Si es una task-card que se guardó, cerrar SOLO el modal más reciente (LIFO)
+          if (tagName === 'task-card') {
+            const topModal = this.getTopModal();
+  if (topModal && topModal.elementId === elementId) {
+              
+              // Verificar que el modal existe en el DOM antes de cerrar
+              const modalElement = document.querySelector(`app-modal[modal-id="${topModal.modalId}"]`);
+  document.dispatchEvent(new CustomEvent('close-modal', {
+                bubbles: true,
+                composed: true,
+                detail: { modalId: topModal.modalId }
+              }));
+              
+              // Remover del stack y limpiar registro
+              this.popModal();
+              this.expandedCards.delete(elementId);
+            } else {
+  }
+          }
+        });
+      }
+  
+      async handleShowEpicTasks(epicId, epicTitle, projectId) {
+        window.handleShowEpicTasks(epicId, epicTitle, projectId);
+      }
+    }
+  
+    // Función global para manejar mostrar tareas de épica (a nivel de app)
+    window.handleShowEpicTasks = async function(epicId, epicTitle, projectId) {
+      try {
+        // Verificar que AppController esté inicializado
+        if (!window.appController) {
+          // Esperar a que AppController se inicialice (máximo 5 segundos)
+          let attempts = 0;
+          while (!window.appController && attempts < 50) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+          }
+          if (!window.appController) {
+            console.error('[AdminProject] AppController not available after timeout');
+            return;
+          }
+        }
+  
+        // Solicitar las tareas del proyecto
+        document.dispatchEvent(new CustomEvent('request-project-tasks', {
+          detail: {
+            projectId: projectId,
+            fullData: true,
+            callback: (tasks) => {
+              window.displayEpicTasksModal(tasks, epicId, epicTitle);
+            }
+          },
+          bubbles: true,
+          composed: true
+        }));
+      } catch (error) {
+  const notification = document.createElement('slide-notification');
+        notification.message = 'Error al cargar las tareas de la épica';
+        notification.type = 'error';
+        document.body.appendChild(notification);
+      }
+    };
+  
+    // Función global para mostrar el modal con tabla de tareas épica
+    window.displayEpicTasksModal = function(allTasks, epicId, epicTitle) {
+      if (!allTasks || !Array.isArray(allTasks)) {
+        return;
+      }
+  
+      // Filtrar las tareas que pertenecen a esta épica
+      const epicTasks = allTasks.filter(task => task.epic === epicId);
+  
+      if (epicTasks.length === 0) {
+        document.dispatchEvent(new CustomEvent('show-modal', {
+          detail: {
+            options: {
+              title: `Tareas de la épica: ${epicTitle}`,
+              message: `<p>No hay tareas asignadas a esta épica.</p>`,
+              button1Text: 'Cerrar',
+              button1css: 'background-color: green; color: var(--text-on-primary, white);',
+              button1Action: () => { },
+              maxWidth: '80vw',
+              maxHeight: '80vh',
+              showHeader: true,
+              showFooter: true
+            }
+          }
+        }));
+        return;
+      }
+  
+      // Crear tabla HTML con las tareas
+      const tableHtml = window.createTasksTableHtml(epicTasks);
+  
+      // Crear el modal manualmente con ID específico
+      const modal = document.createElement('app-modal');
+      const epicModalId = `epic-modal-${epicId}-${Date.now()}`;
+  
+      // IMPORTANTE: Activar modo programático para que el modal se muestre al añadirse al DOM
+      modal._programmaticMode = true;
+  
+      // Asignar modalId ANTES de añadir al DOM para evitar ID auto-generado
+      modal.modalId = epicModalId;
+      modal.setAttribute('modal-id', epicModalId);
+      modal.title = `Tareas de la épica: ${epicTitle} (${epicTasks.length} tareas)`;
+      modal.maxWidth = '80vw';
+      modal.maxHeight = '80vh';
+  
+      let handleModalCloseRequested = null;
+  
+      const cleanupEpicModalListeners = () => {
+        if (handleModalCloseRequested) {
+          document.removeEventListener('modal-closed-requested', handleModalCloseRequested);
+          handleModalCloseRequested = null;
+        }
+        document.removeEventListener('modal-close-confirmed', handleEpicModalCloseConfirmed);
+  
+        if (window.modalStateManager) {
+          const topModal = window.modalStateManager.getTopModal?.();
+          if (topModal && topModal.modalId === epicModalId) {
+            window.modalStateManager.popModal();
+          } else if (Array.isArray(window.modalStateManager.modalStack)) {
+            window.modalStateManager.modalStack = window.modalStateManager.modalStack.filter(
+              (modalInfo) => modalInfo.modalId !== epicModalId
+            );
+          }
+        }
+      };
+  
+      const handleEpicModalCloseConfirmed = (e) => {
+        const { modalId, componentType } = e.detail || {};
+        const matchesModal = modalId === epicModalId || (!modalId && componentType === 'epic-tasks');
+        if (!matchesModal) return;
+  
+        cleanupEpicModalListeners();
+        modal.close();
+      };
+  
+      document.addEventListener('modal-close-confirmed', handleEpicModalCloseConfirmed);
+  
+      // Añadir modal al DOM
+      document.body.appendChild(modal);
+  
+      // Crear contenido del modal
+      const tempContainer = document.createElement('div');
+      tempContainer.id = `epic-tasks-${epicId}`;
+      tempContainer.innerHTML = tableHtml;
+  
+      // Esperar a que el modal esté conectado antes de setContent
+      modal.updateComplete.then(() => {
+        modal.setContent(tempContainer);
+        modal.contentElementId = tempContainer.id;
+        modal.contentElementType = 'epic-tasks';
+  
+        handleModalCloseRequested = (event) => {
+          const { contentElementId, modalId } = event.detail || {};
+          if (modalId && modalId !== epicModalId) return;
+          if (contentElementId && contentElementId !== tempContainer.id) return;
+  
+          document.dispatchEvent(new CustomEvent('modal-close-confirmed', {
+            detail: {
+              modalId: epicModalId,
+              componentType: 'epic-tasks',
+              contentElementId: tempContainer.id
+            }
+          }));
+        };
+  
+        document.addEventListener('modal-closed-requested', handleModalCloseRequested);
+  
+        // Configurar event listeners para botones "Ver tarea"
+        window.setupTaskViewButtons(tempContainer, epicTasks);
+      });
+      
+      // Registrar modal de épica en el stack
+      if (window.modalStateManager) {
+        window.modalStateManager.pushModal(epicModalId, `epic-${epicId}`);
+      }
+  };
+  
+    // Función para crear HTML de tabla (movido desde EpicCard)
+    window.createTasksTableHtml = function(tasks) {
+      const tableStyle = `
+        <style is:global>
+          .epic-tasks-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.95em;
+            background-color: var(--bg-primary, #ffffff);
+            color: var(--text-primary, #333333);
+          }
+          .epic-tasks-table th,
+          .epic-tasks-table td {
+            border: 1px solid var(--border-subtle, #dee2e6);
+            padding: 10px;
+            text-align: left;
+            color: var(--text-primary, #333333);
+          }
+          .epic-tasks-table th {
+            background-color: var(--brand-primary, #6366f1);
+            color: var(--text-on-primary, #ffffff);
+            font-weight: bold;
+            font-size: 1em;
+          }
+          .epic-tasks-table tbody tr {
+            background-color: var(--bg-primary, #ffffff);
+            color: var(--text-primary, #333333);
+          }
+          .epic-tasks-table tbody tr:nth-child(even) {
+            background-color: var(--bg-secondary, #f8f9fa);
+            color: var(--text-primary, #333333);
+          }
+          .epic-tasks-table tbody tr:hover {
+            background-color: var(--bg-tertiary, #e9ecef);
+            color: var(--text-primary, #333333);
+          }
+          .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 500;
+          }
+          .status-todo { background-color: var(--status-todo, #94a3b8); color: var(--status-todo-text, #ffffff); }
+          .status-inprogress { background-color: var(--status-in-progress, #3b82f6); color: var(--status-in-progress-text, #ffffff); }
+          .status-done { background-color: var(--status-done, #10b981); color: var(--status-done-text, #ffffff); }
+          .status-blocked { background-color: var(--status-blocked, #f43f5e); color: var(--status-blocked-text, #ffffff); }
+          .status-inreview { background-color: var(--status-expedited, #8b5cf6); color: var(--status-expedited-text, #ffffff); }
+          .status-testing { background-color: var(--status-in-progress, #3b82f6); color: var(--status-in-progress-text, #ffffff); }
+          .status-tovalidate { background-color: var(--status-to-validate, #f59e0b); color: var(--status-to-validate-text, #ffffff); }
+          .status-cancelled { background-color: var(--status-blocked, #f43f5e); color: var(--status-blocked-text, #ffffff); }
+          .view-task-btn {
+            background: var(--brand-primary, #6366f1);
+            color: var(--text-on-primary, #ffffff);
+            border: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.2s;
+          }
+          .view-task-btn:hover {
+            background: var(--brand-primary-hover, #4f46e5);
+          }
+          .view-task-btn:active {
+            transform: scale(0.95);
+          }
+        </style>
+      `;
+  
+      const formatDate = function(inputDate) {
+        if (!inputDate) return '';
+        const date = new Date(inputDate.split('T')[0]);
+        if (isNaN(date.getTime())) return 'Invalid Date';
+        return date.toLocaleDateString('es-ES');
+      };
+  
+      const tableRows = tasks.map(task => {
+        const statusClass = task.status ? `status-${task.status.toLowerCase().replace(/\s+/g, '')}` : '';
+        const sprintTitle = task.sprint && window.globalSprintList && window.globalSprintList[task.sprint]
+          ? window.globalSprintList[task.sprint].title
+          : '';
+  
+        return `
+          <tr>
+            <td>${task.cardId || ''}</td>
+            <td>${task.title || ''}</td>
+            <td><span class="status-badge ${statusClass}">${task.status || ''}</span></td>
+            <td>${task.businessPoints || 0}</td>
+            <td>${task.devPoints || 0}</td>
+            <td>${sprintTitle}</td>
+            <td>${task.developer || ''}</td>
+            <td>${task.startDate ? formatDate(task.startDate) : ''}</td>
+            <td>${task.endDate ? formatDate(task.endDate) : ''}</td>
+            <td>
+              <button class="view-task-btn" data-task-id="${task.id}" title="Editar tarea">
+                ✏️
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+  
+      return `
+        ${tableStyle}
+        <div style="max-height: 400px; overflow-y: auto;">
+          <table class="epic-tasks-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Título</th>
+                <th>Estado</th>
+                <th>B. Points</th>
+                <th>D. Points</th>
+                <th>Sprint</th>
+                <th>Developer</th>
+                <th>Inicio</th>
+                <th>Fin</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+        </div>
+      `;
+    };
+  
+    // Función para configurar event listeners de botones "Ver tarea"
+    window.setupTaskViewButtons = function(container, tasks) {
+      const viewButtons = container.querySelectorAll('.view-task-btn');
+      
+      viewButtons.forEach(button => {
+        button.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const taskId = button.getAttribute('data-task-id');
+          const task = tasks.find(t => t.id === taskId);
+          
+          if (!task) {
+  return;
+          }
+  // Crear TaskCard element y configurarlo
+          const taskCard = document.createElement('task-card');
+          
+          // Configurar IDs de manera clara
+          const uniqueDOMId = `task-modal-element-${taskId}-${Date.now()}`;
+          taskCard.id = uniqueDOMId;        // ID único para el DOM
+          taskCard.firebaseId = task.id;    // ID de Firebase (usa setter de BaseCard)
+          taskCard.cardId = task.cardId || task.id;        // Identificador visible en el proyecto
+          taskCard.group = 'tasks';        // Grupo requerido para el guardado
+          
+          // Obtener projectId desde el contexto global o la task
+          const currentProjectId = task.projectId || window.currentProjectId || document.body.dataset.projectId;
+          taskCard.projectId = currentProjectId;
+          
+          // Propiedades de contenido
+          taskCard.title = task.title || '';
+          taskCard.description = task.description || '';
+          taskCard.status = task.status || '';
+          taskCard.businessPoints = task.businessPoints ?? 0;
+          taskCard.devPoints = task.devPoints ?? 0;
+          taskCard.developer = task.developer || '';
+          taskCard.startDate = task.startDate || '';
+          taskCard.endDate = task.endDate || '';
+          taskCard.epic = task.epic || '';
+          taskCard.sprint = task.sprint || '';
+          taskCard.validator = task.validator || '';
+          taskCard.acceptanceCriteria = task.acceptanceCriteria || '';
+          taskCard.notes = task.notes || '';
+          taskCard.objective = task.objective || '';
+          taskCard.relatedTasks = Array.isArray(task.relatedTasks) ? [...task.relatedTasks] : [];
+          taskCard.blockedByBusiness = task.blockedByBusiness || false;
+          taskCard.blockedByDevelopment = task.blockedByDevelopment || false;
+          taskCard.bbbWhy = task.bbbWhy || '';
+          taskCard.bbbWho = task.bbbWho || '';
+          taskCard.bbdWhy = task.bbdWhy || '';
+          taskCard.bbdWho = task.bbdWho || '';
+          taskCard.expedited = task.expedited || false;
+          taskCard.attachment = task.attachment || '';
+  // Expandir la card para mostrar el formulario
+          taskCard.expanded = true;
+          
+          // Crear modal para la card manualmente (mismo patrón que épica)
+          const cardModalId = `task-modal-${taskId}-${Date.now()}`;
+          
+          // Crear modal manualmente con ID específico
+          const taskModal = document.createElement('app-modal');
+  
+          // IMPORTANTE: Activar modo programático para que el modal se muestre
+          taskModal._programmaticMode = true;
+  
+          taskModal.modalId = cardModalId;
+          taskModal.setAttribute('modal-id', cardModalId);
+          taskModal.showHeader = false;
+          taskModal.maxWidth = '80vw';
+          taskModal.maxHeight = '80vh';
+  
+          // Añadir modal al DOM primero
+          document.body.appendChild(taskModal);
+          
+          // Crear contenido del modal después de que esté en el DOM
+          taskModal.updateComplete.then(() => {
+            taskModal.setContent(taskCard);
+  
+            Promise.resolve(taskCard.updateComplete)
+              .then(() => taskCard.initializeChecksum?.())
+              .then(() => {
+                if (typeof taskCard._resetChecksums === 'function') {
+                  taskCard._resetChecksums();
+                }
+              })
+              .catch(error => {
+  });
+            
+            // Registrar el modal en expandedCards y stack
+            if (window.modalStateManager) {
+              window.modalStateManager.expandedCards.set(uniqueDOMId, cardModalId);
+              
+              // Obtener el modal padre (el modal de épica actualmente en la cima)
+              const parentModal = window.modalStateManager.getTopModal();
+              const parentModalId = parentModal ? parentModal.modalId : null;
+              
+              // Añadir al stack como modal hijo
+              window.modalStateManager.pushModal(cardModalId, uniqueDOMId, parentModalId);
+  }
+  });
+        });
+      });
+  };
+  
+    // Convert Git SSH URL to HTTPS URL for browser navigation
+    function convertGitUrlToHttps(url) {
+      if (!url) return null;
+      // Already HTTPS
+      if (url.startsWith('https://')) return url;
+      // SSH format: git@github.com:Org/Repo.git
+      const sshMatch = url.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
+      if (sshMatch) {
+        return `https://${sshMatch[1]}/${sshMatch[2]}`;
+      }
+      // HTTP format
+      if (url.startsWith('http://')) return url;
+      return url;
+    }
+  
+    // Normalize repoUrl to array format (handles string, array, or Firebase object)
+    function normalizeRepoUrls(repoUrl) {
+      if (!repoUrl) return [];
+      if (typeof repoUrl === 'string') {
+        return repoUrl.trim() ? [{ url: repoUrl.trim(), label: 'Repositorio' }] : [];
+      }
+      if (Array.isArray(repoUrl)) {
+        return repoUrl.filter(r => r && r.url);
+      }
+      // Firebase object format: {0: {url, label}, 1: {url, label}}
+      if (typeof repoUrl === 'object') {
+        return Object.values(repoUrl).filter(r => r && r.url);
+      }
+      return [];
+    }
+  
+    // Function to update doc buttons visibility based on project data
+    window.updateDocButtons = function(projectData) {
+      const repoBtn = document.getElementById('repoLinkBtn');
+      const descBtn = document.getElementById('projectDescBtn');
+  
+      if (!repoBtn || !descBtn) return;
+  
+      // Show repo button if repoUrl exists
+      const repos = normalizeRepoUrls(projectData?.repoUrl);
+      if (repos.length > 0) {
+        repoBtn.style.display = 'inline-flex';
+        repoBtn.onclick = () => {
+          if (repos.length === 1) {
+            const url = convertGitUrlToHttps(repos[0].url);
+            if (url) window.open(url, '_blank');
+          } else {
+            // Multiple repos: show selection modal
+            const repoLinks = repos.map(r => {
+              const url = convertGitUrlToHttps(r.url);
+              return `<a href="${url}" target="_blank" style="display: block; padding: 0.5rem 1rem; margin: 0.25rem 0; background: var(--bg-secondary); border-radius: 4px; text-decoration: none; color: var(--text-primary); border: 1px solid var(--border-subtle);">
+                <strong>${r.label || 'Repositorio'}</strong><br>
+                <small style="color: var(--text-muted);">${url}</small>
+              </a>`;
+            }).join('');
+            document.dispatchEvent(new CustomEvent('show-modal', {
+              detail: {
+                options: {
+                  title: 'Seleccionar repositorio',
+                  message: `<div style="padding: 0.5rem;">${repoLinks}</div>`,
+                  button1Text: 'Cerrar',
+                  button1css: 'background-color: var(--brand-primary, #6366f1); color: var(--text-on-primary, white);',
+                  button1Action: () => {},
+                  maxWidth: '500px',
+                  showHeader: true
+                }
+              }
+            }));
+          }
+        };
+      } else {
+        repoBtn.style.display = 'none';
+        repoBtn.onclick = null;
+      }
+  
+      // Show description button if description exists
+      if (projectData && projectData.description) {
+        descBtn.style.display = 'inline-flex';
+        descBtn.onclick = () => {
+          // Escape HTML to prevent XSS but preserve markdown
+          const escapedDescription = projectData.description
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+  
+          document.dispatchEvent(new CustomEvent('show-modal', {
+            detail: {
+              options: {
+                title: `Documentación: ${projectData.name || 'Proyecto'}`,
+                message: `<md-renderer style="display: block; text-align: left; padding: 1rem;">${escapedDescription}</md-renderer>`,
+                button1Text: 'Cerrar',
+                button1css: 'background-color: var(--brand-primary, #6366f1); color: var(--text-on-primary, white);',
+                button1Action: () => {},
+                maxWidth: '700px',
+                maxHeight: '80vh',
+                showHeader: true
+              }
+            }
+          }));
+        };
+      } else {
+        descBtn.style.display = 'none';
+        descBtn.onclick = null;
+      }
+    };
+  
+    // Inicializar cuando el DOM esté listo
+    document.addEventListener('astro:page-load', function() {
+  // Inicializar gestor de modales
+      window.modalStateManager = new ModalStateManager();
+  
+      // Listen for project changes to update doc buttons, ADR list, and tab visibility
+      document.addEventListener('project-changed', function(e) {
+        const projectId = e.detail?.projectId;
+        if (projectId && window.projects && window.projects[projectId]) {
+          const projectData = window.projects[projectId];
+          window.updateDocButtons(projectData);
+          // Update App tab visibility based on project config
+          projectHasApps = Boolean(projectData.allowExecutables);
+          window.updateTabVisibility();
+        }
+        // Update ADR list with new projectId
+        const adrList = document.getElementById('adrList');
+        if (adrList && projectId) {
+          adrList.projectId = projectId;
+        }
+        // Update Dev Plans section with new projectId
+        const devPlansSection = document.getElementById('devPlansSection');
+        if (devPlansSection && projectId) {
+          devPlansSection.projectId = projectId;
+        }
+      });
+  
+      // Update doc buttons, ADR list, and tab visibility on initial load
+      const checkAndUpdateDocButtons = () => {
+        const projectId = window.currentProjectId || document.body.dataset.projectId;
+        if (projectId && window.projects && window.projects[projectId]) {
+          const projectData = window.projects[projectId];
+          window.updateDocButtons(projectData);
+          // Update App tab visibility
+          projectHasApps = Boolean(projectData.allowExecutables);
+          window.updateTabVisibility();
+          // Initialize ADR list with projectId
+          const adrList = document.getElementById('adrList');
+          if (adrList) {
+            adrList.projectId = projectId;
+          }
+          // Initialize Dev Plans section with projectId
+          const devPlansSection = document.getElementById('devPlansSection');
+          if (devPlansSection) {
+            devPlansSection.projectId = projectId;
+          }
+        } else {
+          // Retry after a short delay if projects not loaded yet
+          setTimeout(checkAndUpdateDocButtons, 500);
+        }
+      };
+      setTimeout(checkAndUpdateDocButtons, 100);
+  
+      // Initial tab visibility and permissions
+      window.updateTabVisibility();
+  
+      // Listener for year-based permission changes
+      document.addEventListener('year-permissions-updated', function(e) {
+        const { year, isPastYear, isYearReadOnly: yearReadOnly } = e.detail;
+        isYearReadOnly = yearReadOnly;
+  
+        // Update button visibility based on new year state
+        toggleEditButtons();
+  
+        // Notify components about permission changes
+        window.notifyPermissionsUpdate();
+      });
+    });
+  </script>
+  
+  <script type="module" src="/js/main.js"></script>
+  <script is:inline type="module">
+    import { modalService } from '/js/services/modal-service.js';
+    import { URLStateManager } from '/js/utils/url-utils.js';
+  
+    window.modalService = modalService;
+  
+    // Restore section from URL hash on page load
+    document.addEventListener('astro:page-load', () => {
+      const urlState = URLStateManager.getState();
+  
+      // Restore section (tab) from hash
+      if (urlState.section) {
+        const sectionTab = document.querySelector(`[data-section="${urlState.section}"]`);
+        if (sectionTab) {
+          // Wait a bit for the tab system to initialize
+          setTimeout(() => {
+            sectionTab.click();
+          }, 100);
+        }
+      }
+    });
+  
+    // Listen for browser back/forward navigation
+    URLStateManager.onPopState((state) => {
+      if (state.section) {
+        const sectionTab = document.querySelector(`[data-section="${state.section}"]`);
+        if (sectionTab) {
+          sectionTab.click();
+        }
+      }
+    });
+  </script>
+  
+  <script is:inline type="module">
+  // Edit Project functionality
+  import { showModal } from '@manufosela/app-modal';
+  import 'https://esm.sh/@manufosela/md-renderer';
+  import { database, ref, get, set, update, auth, superAdminEmail } from '/firebase-config.js';
+  import { FirebaseService } from '/js/services/firebase-service.js';
+  import { encodeEmailForFirebase } from '/js/utils/email-sanitizer.js';
+  import '/js/wc/ProjectForm.js';
+  import '/js/wc/CardSearch.js';
+  
+  let currentProjectName = '';
+  
+  // Initialize edit button visibility
+  function initEditProjectButton() {
+    const editBtn = document.getElementById('editProjectBtn');
+    if (!editBtn) return;
+  
+    // Check if user is superAdmin
+    const checkSuperAdmin = () => {
+      const user = auth.currentUser;
+      if (user && user.email === superAdminEmail) {
+        editBtn.style.display = '';
+      } else {
+        editBtn.style.display = 'none';
+      }
+    };
+  
+    // Check on auth state change
+    auth.onAuthStateChanged(() => {
+      checkSuperAdmin();
+    });
+  
+    // Initial check
+    checkSuperAdmin();
+  
+    // Handle click
+    editBtn.addEventListener('click', () => {
+      const projectSelector = document.getElementById('projectSelector');
+      const projectName = projectSelector?.selectedProject || window.currentProjectId;
+      if (projectName) {
+        showEditProjectModal(projectName);
+      }
+    });
+  }
+  
+  // Listen for project changes
+  document.addEventListener('project-changed', (e) => {
+    currentProjectName = e.detail?.projectId || e.detail?.projectName || '';
+  });
+  
+  async function showEditProjectModal(projectName) {
+    try {
+      // Load project data
+      const projectRef = ref(database, `/projects/${projectName}`);
+      const snapshot = await get(projectRef);
+      const projectData = snapshot.val();
+  
+      if (!projectData) {
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: { options: { message: 'No se encontraron datos del proyecto', type: 'error' } }
+        }));
+        return;
+      }
+  
+      // Check if project has existing cards (locks name and abbreviation)
+      const cardsRef = ref(database, `/cards/${projectName}`);
+      const cardsSnapshot = await get(cardsRef);
+      const hasCards = cardsSnapshot.exists();
+  
+      const projectForm = document.createElement('project-form');
+  
+      // Store project data to apply after component is ready
+      const applyProjectData = () => {
+        projectForm.editMode = true;
+        projectForm.hasCards = hasCards;
+        projectForm.originalProjectName = projectName;
+        projectForm.projectName = projectData.name || projectName;
+        projectForm.abbreviation = projectData.abbreviation || '';
+        projectForm.scoringSystem = projectData.scoringSystem || '1-5';
+        projectForm.stakeholders = projectData.stakeholders || [];
+        projectForm.developers = projectData.developers || [];
+        projectForm.allowExecutables = projectData.allowExecutables || false;
+        projectForm.description = projectData.description || '';
+        projectForm.repoUrl = projectData.repoUrl ?? projectData.repositoryUrl ?? '';
+        projectForm.languagesText = Array.isArray(projectData.languages) ? projectData.languages.join(', ') : '';
+        projectForm.frameworksText = Array.isArray(projectData.frameworks) ? projectData.frameworks.join(', ') : '';
+        projectForm.businessContext = projectData.businessContext || '';
+        // Migration: if no businessContext but agentsGuidelines exists, migrate
+        if (!projectData.businessContext && projectData.agentsGuidelines) {
+          projectForm.businessContext = projectData.agentsGuidelines;
+          document.dispatchEvent(new CustomEvent('show-slide-notification', {
+            detail: { options: {
+              message: 'Se han migrado las directrices de agents al campo "Contexto de Negocio". Revisa y guarda.',
+              type: 'info'
+            }}
+          }));
+        }
+        projectForm.useIa = Boolean(projectData.iaEnabled);
+        projectForm.iaAvailable = projectData.iaEnabled || projectForm.iaAvailable;
+        projectForm.archived = Boolean(projectData.archived);
+        projectForm.requestUpdate();
+      };
+  
+      // Apply initial data
+      applyProjectData();
+  
+      showModal({
+        title: 'Editar Proyecto',
+        maxWidth: '50dvw',
+        maxHeight: '80dvh',
+        showFooter: true,
+        button1Text: 'Guardar Cambios',
+        button2Text: 'Cancelar',
+        button1Action: async () => {
+          const validation = projectForm.validateWithFeedback();
+          if (!validation.valid) {
+            const errorMsg = validation.errors.map(e => e.message).join('. ');
+            document.dispatchEvent(new CustomEvent('show-slide-notification', {
+              detail: { options: { message: errorMsg, type: 'error' } }
+            }));
+            return false;
+          }
+          await updateProject(projectForm, projectName, projectData);
+        },
+        button2Action: () => {}
+      });
+  
+      // Add form to modal and wait for component to be ready
+      setTimeout(() => {
+        const modal = document.querySelector('app-modal');
+        if (modal) {
+          modal.setContent(projectForm);
+  
+          // Wait for component to finish loading, then re-apply data
+          const waitForReady = () => {
+            if (!projectForm.isLoading) {
+              applyProjectData();
+            } else {
+              // Check again after a short delay
+              setTimeout(waitForReady, 50);
+            }
+          };
+          waitForReady();
+  
+          projectForm.addEventListener('delete-project', (e) => {
+            deleteProject(e.detail.projectName);
+          });
+  
+          projectForm.addEventListener('archive-project', (e) => {
+            archiveProject(e.detail.projectName, e.detail.archived);
+          });
+        }
+      }, 100);
+  
+    } catch (error) {
+      console.error('Error loading project:', error);
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: 'Error al cargar los datos del proyecto', type: 'error' } }
+      }));
+    }
+  }
+  
+  /**
+   * Sync project team assignments to /users/{email}/projects/{projectId}
+   * so entityDirectoryService sees them (single source of truth).
+   * Only updates users that already exist in /users/.
+   */
+  async function syncProjectTeamToUsers(projectName, developers, stakeholders) {
+    const devEmails = new Set();
+    const stkEmails = new Set();
+  
+    for (const dev of developers) {
+      if (dev.email) devEmails.add(dev.email.toLowerCase().trim());
+    }
+    for (const stk of stakeholders) {
+      if (stk.email) stkEmails.add(stk.email.toLowerCase().trim());
+    }
+  
+    const allEmails = new Set([...devEmails, ...stkEmails]);
+    const updates = {};
+  
+    for (const email of allEmails) {
+      const encodedEmail = encodeEmailForFirebase(email);
+      if (!encodedEmail) continue;
+  
+      // Only sync if user exists in /users/
+      const userSnap = await get(ref(database, `/users/${encodedEmail}`));
+      if (!userSnap.exists()) continue;
+  
+      const isDev = devEmails.has(email);
+      const isStk = stkEmails.has(email);
+      updates[`/users/${encodedEmail}/projects/${projectName}/developer`] = isDev;
+      updates[`/users/${encodedEmail}/projects/${projectName}/stakeholder`] = isStk;
+    }
+  
+    if (Object.keys(updates).length > 0) {
+      await update(ref(database), updates);
+    }
+  }
+  
+  async function updateProject(projectForm, originalProjectName, originalData) {
+    const formData = projectForm.getFormData();
+  
+    try {
+      // Build project data, excluding undefined values (Firebase doesn't accept undefined)
+      const projectData = {
+        name: formData.projectName,
+        abbreviation: formData.abbreviation,
+        scoringSystem: formData.scoringSystem,
+        stakeholders: formData.stakeholders,
+        developers: formData.developers,
+        allowExecutables: formData.allowExecutables || false,
+        description: formData.description || '',
+        repoUrl: formData.repoUrl || '',
+        languages: formData.languages || [],
+        frameworks: formData.frameworks || [],
+        businessContext: formData.businessContext || '',
+        iaEnabled: formData.useIa || false,
+        updatedAt: new Date().toISOString(),
+        updatedBy: auth.currentUser?.email || 'unknown',
+        archived: originalData?.archived || false
+      };
+  
+      // Only include optional fields if they exist in originalData
+      if (originalData?.order !== undefined) {
+        projectData.order = originalData.order;
+      }
+      if (originalData?.createdAt !== undefined) {
+        projectData.createdAt = originalData.createdAt;
+      }
+      if (originalData?.createdBy !== undefined) {
+        projectData.createdBy = originalData.createdBy;
+      }
+  
+      if (formData.projectName !== originalProjectName) {
+        await set(ref(database, `/projects/${formData.projectName}`), projectData);
+        await set(ref(database, `/projects/${originalProjectName}`), null);
+      } else {
+        await set(ref(database, `/projects/${originalProjectName}`), projectData);
+      }
+  
+      // Sync team assignments to /users/ for entityDirectoryService consistency
+      const targetProjectName = formData.projectName || originalProjectName;
+      await syncProjectTeamToUsers(targetProjectName, formData.developers || [], formData.stakeholders || []);
+  
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: 'Proyecto actualizado exitosamente!' } }
+      }));
+  
+      // Reload page if name changed
+      if (formData.projectName !== originalProjectName) {
+        window.location.href = `/adminproject?projectId=${encodeURIComponent(formData.projectName)}`;
+      }
+  
+    } catch (error) {
+      console.error('Error updating project:', error);
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: 'Error al actualizar el proyecto', type: 'error' } }
+      }));
+    }
+  }
+  
+  async function archiveProject(projectName, archived) {
+    try {
+      await set(ref(database, `/projects/${projectName}/archived`), archived);
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: archived ? 'Proyecto archivado' : 'Proyecto desarchivado' } }
+      }));
+    } catch (error) {
+      console.error('Error archiving project:', error);
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: 'Error al archivar el proyecto', type: 'error' } }
+      }));
+    }
+  }
+  
+  async function deleteProject(projectName) {
+    try {
+      await set(ref(database, `/projects/${projectName}`), null);
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: 'Proyecto eliminado' } }
+      }));
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: 'Error al eliminar el proyecto', type: 'error' } }
+      }));
+    }
+  }
+  
+  // === Trash Tab ===
+  
+  let trashLoaded = false;
+  
+  async function loadTrashCards(projectName) {
+    if (trashLoaded) return;
+  
+    const container = document.getElementById('trashCardsList');
+    if (!container) return;
+  
+    container.innerHTML = '<p class="loading-message">Cargando papelera...</p>';
+  
+    try {
+      const trashRef = ref(database, `/trash/cards/${projectName}`);
+      const snapshot = await get(trashRef);
+      const trashData = snapshot.val();
+  
+      if (!trashData) {
+        container.innerHTML = '<p class="empty-message">La papelera está vacía.</p>';
+        trashLoaded = true;
+        return;
+      }
+  
+      const items = [];
+      for (const [cardType, cards] of Object.entries(trashData)) {
+        for (const [firebaseId, card] of Object.entries(cards)) {
+          items.push({ ...card, _firebaseId: firebaseId, _cardType: cardType });
+        }
+      }
+  
+      items.sort((a, b) => (b.deletedAt || '').localeCompare(a.deletedAt || ''));
+  
+      if (items.length === 0) {
+        container.innerHTML = '<p class="empty-message">La papelera está vacía.</p>';
+        trashLoaded = true;
+        return;
+      }
+  
+      const table = document.createElement('table');
+      table.className = 'trash-table';
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Card ID</th>
+            <th>Tipo</th>
+            <th>Título</th>
+            <th>Estado</th>
+            <th>Eliminado por</th>
+            <th>Fecha eliminación</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(item => {
+            const type = (item._cardType || '').replace(`_${projectName}`, '');
+            const deletedDate = item.deletedAt
+              ? new Date(item.deletedAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
+              : '-';
+            const reason = item.deleteReason === 'moved_to_project'
+              ? `Movido a ${item.movedTo?.projectId || '?'}`
+              : '';
+            return `<tr>
+              <td>${item.cardId || '-'}</td>
+              <td>${type}</td>
+              <td>${item.title || '-'}</td>
+              <td>${item.status || '-'} ${reason ? `<span class="moved-badge">${reason}</span>` : ''}</td>
+              <td>${item.deletedBy || '-'}</td>
+              <td>${deletedDate}</td>
+              <td><button class="btn-restore" data-action="restore" data-firebase-id="${item._firebaseId}" data-card-type="${item._cardType}">Restaurar</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      `;
+      container.innerHTML = '';
+      container.append(table);
+  
+      // Attach restore button handlers
+      table.querySelectorAll('[data-action="restore"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const fbId = btn.dataset.firebaseId;
+          const cardType = btn.dataset.cardType;
+          btn.disabled = true;
+          btn.textContent = 'Restaurando...';
+          try {
+            await FirebaseService.restoreCard(projectName, cardType, fbId);
+            trashLoaded = false;
+            loadTrashCards(projectName);
+          } catch {
+            btn.disabled = false;
+            btn.textContent = 'Restaurar';
+          }
+        });
+      });
+  
+      trashLoaded = true;
+    } catch (error) {
+      console.error('Error loading trash:', error);
+      container.innerHTML = '<p class="error-message">Error al cargar la papelera.</p>';
+    }
+  }
+  
+  document.addEventListener('tab-changed', (e) => {
+    const section = e.detail?.section;
+    if (section === 'trash') {
+      const projectName = new URLSearchParams(window.location.search).get('projectId');
+      if (projectName) loadTrashCards(projectName);
+    }
+  });
+  
+  // Invalidate trash cache when a card is deleted or restored so it reloads on next visit
+  document.addEventListener('card-deleted', () => {
+    trashLoaded = false;
+  });
+  document.addEventListener('card-restored', () => {
+    trashLoaded = false;
+  });
+  
+  // Initialize on page load
+  document.addEventListener('astro:page-load', () => {
+    initEditProjectButton();
+  });
+  </script>
+  
+  <script is:inline type="module">
+  // Task Guide Modal
+    const taskGuideStyles = `
+      <style is:global>
+        /* Override modal centering for this content */
+        .modal-message {
+          text-align: left !important;
+        }
+        .task-guide-content {
+          text-align: left !important;
+          line-height: 1.7;
+          padding: 1.5rem 2rem;
+          max-height: 70vh;
+          overflow-y: auto;
+          font-size: 0.95rem;
+          color: #333;
+          display: block !important;
+        }
+        .task-guide-content,
+        .task-guide-content * { text-align: left !important; }
+        .task-guide-content p { margin: 0.8rem 0; }
+        .task-guide-content h2 {
+          margin-top: 2rem;
+          margin-bottom: 1rem;
+          color: #1a1a1a;
+          font-size: 1.5rem;
+          border-bottom: 2px solid #6366f1;
+          padding-bottom: 0.5rem;
+        }
+        .task-guide-content h3 {
+          margin-top: 1.5rem;
+          margin-bottom: 0.8rem;
+          color: #2a2a2a;
+          font-size: 1.2rem;
+        }
+        .task-guide-content h4 {
+          margin-top: 1.2rem;
+          margin-bottom: 0.6rem;
+          color: #3a3a3a;
+          font-size: 1.05rem;
+        }
+        .task-guide-content code {
+          background: var(--bg-tertiary, #f0f4f8);
+          padding: 0.15rem 0.4rem;
+          border-radius: 4px;
+          font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+          font-size: 0.88em;
+          color: #d63384;
+        }
+        .task-guide-content pre {
+          background: #1e1e1e;
+          color: #d4d4d4;
+          padding: 1.2rem;
+          border-radius: 8px;
+          overflow-x: auto;
+          margin: 1rem 0;
+          border-left: 4px solid var(--brand-primary, #6366f1);
+        }
+        .task-guide-content pre code {
+          background: transparent;
+          color: inherit;
+          padding: 0;
+          font-size: 0.9em;
+        }
+        .task-guide-content table {
+          border-collapse: collapse;
+          width: 100%;
+          margin: 1.2rem 0;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .task-guide-content th,
+        .task-guide-content td {
+          border: 1px solid var(--border-subtle, #e0e0e0);
+          padding: 0.75rem 1rem;
+          text-align: left !important;
+        }
+        .task-guide-content th {
+          background: var(--bg-secondary, #f8f9fa);
+          font-weight: 600;
+          color: var(--text-primary, #333);
+        }
+        .task-guide-content tr:nth-child(even) td { background: var(--bg-secondary, #fafafa); }
+        .task-guide-content ul,
+        .task-guide-content ol {
+          padding-left: 2rem;
+          margin: 0.8rem 0;
+        }
+        .task-guide-content li {
+          margin: 0.5rem 0;
+          padding-left: 0.5rem;
+          line-height: 1.6;
+        }
+        .task-guide-content ul li::marker { color: var(--brand-primary, #6366f1); }
+        .task-guide-content hr {
+          margin: 2rem 0;
+          border: none;
+          border-top: 1px solid #e0e0e0;
+        }
+        .task-guide-content a { color: #6366f1; text-decoration: none; }
+        .task-guide-content a:hover { text-decoration: underline; }
+        .task-guide-content strong { color: #1a1a1a; font-weight: 600; }
+      </style>
+    `;
+  
+    async function showTaskGuide() {
+      try {
+        const response = await fetch('/docs/task-guide.md');
+        if (!response.ok) throw new Error('No se pudo cargar la guía');
+        const markdown = await response.text();
+  
+        // Convert markdown to HTML (basic conversion)
+        const html = markdownToHtml(markdown);
+  
+        document.dispatchEvent(new CustomEvent('show-modal', {
+          detail: {
+            options: {
+              title: 'Guía de Tasks',
+              message: `${taskGuideStyles}<div class="task-guide-content">${html}</div>`,
+              button1Text: 'Cerrar',
+              button1css: 'background-color: var(--brand-primary, #6366f1); color: var(--text-on-primary, white);',
+              button1Action: () => {},
+              maxWidth: '800px',
+              maxHeight: '85vh',
+              showHeader: true
+            }
+          }
+        }));
+      } catch (error) {
+  }
+    }
+  
+    // Basic markdown to HTML converter
+    function markdownToHtml(md) {
+      return md
+        // Code blocks with language
+        .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+        // Inline code
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        // Headers
+        .replace(/^### (.*$)/gm, '<h4>$1</h4>')
+        .replace(/^## (.*$)/gm, '<h3>$1</h3>')
+        .replace(/^# (.*$)/gm, '<h2>$1</h2>')
+        // Bold
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        // Italic
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        // Horizontal rule
+        .replace(/^---$/gm, '<hr>')
+        // Tables (basic)
+        .replace(/^\|(.+)\|$/gm, (match, content) => {
+          const cells = content.split('|').map(c => c.trim());
+          if (cells.every(c => /^[-:]+$/.test(c))) return '';
+          const tag = cells.some(c => c.includes('**')) ? 'th' : 'td';
+          return '<tr>' + cells.map(c => `<${tag}>${c.replace(/\*\*/g, '')}</${tag}>`).join('') + '</tr>';
+        })
+        // Unordered lists
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+        // Ordered lists
+        .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+        // Checkboxes
+        .replace(/\[ \]/g, '☐')
+        .replace(/\[x\]/g, '☑')
+        // Links
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+        // Paragraphs
+        .replace(/\n\n/g, '</p><p>')
+        // Line breaks (exclude newlines inside/after list items)
+        .replace(/\n/g, '<br>')
+        // Remove <br> immediately after </li> or inside lists
+        .replace(/<\/li><br>/g, '</li>')
+        .replace(/<br><li>/g, '<li>')
+        .replace(/<ul><br>/g, '<ul>')
+        .replace(/<br><\/ul>/g, '</ul>');
+    }
+  
+    // Add event listener when DOM is ready
+    document.addEventListener('astro:page-load', () => {
+      const guideBtn = document.getElementById('taskGuideBtn');
+      if (guideBtn) {
+        guideBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          showTaskGuide();
+        });
+      }
+    });
+  </script>
+  
+  <style is:global>
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: var(--bg-secondary, #f8f9fa);
+      border-bottom: 1px solid var(--border-default, #dee2e6);
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+    }
+  
+    .header-tabs {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+      flex: 1 1 auto;
+    }
+  
+    .edit-project-btn {
+      background: transparent;
+      border: 1px solid var(--border-default, #ced4da);
+      border-radius: 0.375rem;
+      padding: 0.35rem 0.6rem;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.15s ease;
+    }
+  
+    .edit-project-btn:hover {
+      background: var(--bg-tertiary, #e9ecef);
+      border-color: #6366f1;
+    }
+  
+    .tablinks {
+      padding: 0.45rem 0.85rem;
+    }
+  
+  
+    .subheader-hint {
+      margin: 0;
+      color: var(--text-muted, #6c757d);
+      font-size: 0.9rem;
+    }
+  
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      justify-content: center;
+    }
+  
+    /* Estilos para details/summary */
+    details {
+      width: 100%;
+      margin-bottom: 1rem;
+      border: 1px solid var(--border-default, #ddd);
+      border-radius: 8px;
+      background: var(--bg-secondary, #f8f9fa);
+      display: block; /* Asegura que cada details ocupe una fila completa */
+    }
+  
+    details summary {
+      padding: 1rem;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 1.2rem;
+      background: var(--brand-primary, #6366f1);
+      color: var(--text-on-primary, #fff);
+      border-radius: 8px 8px 0 0;
+      user-select: none;
+      display: block;
+    }
+  
+    details summary:hover {
+      background: var(--brand-primary-hover, #4f46e5);
+    }
+  
+    details[open] summary {
+      border-radius: 8px 8px 0 0;
+    }
+  
+    details > div {
+      padding: 1rem;
+      width: 100%; /* Asegura que el contenedor interno ocupe todo el ancho */
+    }
+  
+    /* Ajustar el contenedor de tarjetas dentro de details */
+    details > div > div {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      width: 100%;
+    }
+  
+    /* Ajustar el contenedor principal de tarjetas QA */
+    #qaCardsList {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      width: 100%;
+    }
+  
+    .cards-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      justify-content: flex-start;
+      align-content: flex-start;
+      max-width: 100%;
+      margin-top: 2rem;
+    }
+  
+    .cards-container.list-view {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      gap: 1rem !important;
+      justify-content: flex-start !important;
+      align-content: flex-start !important;
+      max-width: 100% !important;
+      height: auto !important;
+      overflow: visible !important;
+      padding: 0 !important;
+      flex-direction: row !important;
+    }
+  
+    .cards-container > *:not(.cards-list-container) {
+      width:300px;
+      max-width: 300px;
+      box-sizing: border-box;
+    }
+  
+    .cards-container > .cards-list-container {
+      width: 100%;
+      max-width: 100%;
+    }
+  
+    .subheader {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      border:0;
+      background-color: transparent;
+    }
+  
+    .subheader h3 {
+      font-size:1.7rem;
+    }
+  
+    .subheader card-search {
+      flex-shrink: 0;
+    }
+  
+    .add-button,
+    .add-plan-button {
+      width: 12rem;
+      padding: 12px;
+      background: var(--brand-primary, #6366f1);
+      color: var(--text-on-primary, #fff);
+      border: 3px solid var(--brand-secondary);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1.1em;
+      margin-bottom: 16px;
+      transition: background-color 0.2s;
+    }
+  
+    .add-button:hover,
+    .add-plan-button:hover {
+      background: var(--brand-secondary);
+      border: 3px solid var(--brand-primary, #6366f1);
+    }
+  
+    .help-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.5rem;
+      height: 1.5rem;
+      padding: 0;
+      margin-left: 0.5rem;
+      background: var(--text-muted, #64748b);
+      color: var(--text-on-primary, #fff);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: bold;
+      vertical-align: middle;
+      transition: background-color 0.2s;
+    }
+  
+    .help-button:hover {
+      background: var(--text-secondary, #475569);
+    }
+  
+    .doc-button {
+      background: var(--brand-primary, #6366f1);
+    }
+  
+    .doc-button:hover {
+      background: var(--brand-primary-hover, #4f46e5);
+    }
+  
+    .doc-button svg {
+      display: block;
+    }
+  
+    :global(h3) {
+      margin: 0 0 8px 0;
+      color: var(--text-primary, #333);
+      flex-grow: 1;
+      max-width: 400px; /* Ajusta según sea necesario */
+      display: -webkit-box;
+      -webkit-line-clamp: 2; /* Máximo 2 líneas */
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      word-break: break-word;
+    }
+  
+    /* tabs */
+    .tabs {
+      display: flex;
+      background-color: var(--bg-tertiary, #f1f1f1);
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+      padding: 0.5rem;
+      gap: 0.5rem; /* Espacio entre los botones */
+    }
+  
+    .tablinks {
+        background-color: var(--bg-primary, white);
+        border: 1px solid var(--border-default, #ccc);
+        border-radius: 0.5rem;
+        outline: none;
+        cursor: pointer;
+        padding: 10px 20px;
+        font-size: 17px;
+        transition: background-color 0.3s, box-shadow 0.3s;
+    }
+  
+    .tablinks:hover {
+        background-color: var(--bg-muted, #ddd);
+    }
+  
+    .tablinks.active {
+        background-color: var(--brand-primary, #6366f1) !important;
+        color: var(--text-on-primary, #fff) !important;
+        border-color: var(--brand-primary, #6366f1) !important;
+        font-weight: bold !important;
+        box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3) !important;
+    }
+  
+    .tabcontent {
+        display: none;
+        padding: 1rem;
+        border: 1px solid var(--border-default, #ccc);
+        border-radius: 0.5rem;
+        background: var(--bg-primary, white);
+        overflow-x: auto;
+    }
+    /* FIN tab */
+  
+    .project-selector {
+      margin-bottom: 1rem;
+      position: relative;
+      display: inline-block;
+      padding-right: 25px;
+    }
+  
+    .project-selector select {
+      font-size: 1.5em;
+      font-weight: bold;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      padding: 0;
+      margin: 0;
+      color: inherit;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      text-align: center;
+      width: auto;
+      max-width: 100%;
+      display: block;
+      position: relative;
+      z-index: 1;
+    }
+  
+    .project-selector select:focus {
+      outline: none;
+    }
+  
+    .project-selector select option {
+      font-size: 1em;
+      padding: 0.5em;
+      background: var(--bg-primary, white);
+      color: var(--text-primary, black);
+    }
+  
+    /* Estilo para el ícono del select */
+    .project-selector::after {
+      content: '▼';
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      font-size: 0.8em;
+      color: var(--text-muted, #666);
+      z-index: 2;
+    }
+  
+    /* Sobrescribir cualquier estilo global que pueda afectar al select */
+    :global(select) {
+      -webkit-appearance: none !important;
+      -moz-appearance: none !important;
+      appearance: none !important;
+    }
+  
+    .view-buttons {
+      display: flex;
+      gap: 0.5rem;
+    }
+  
+    .view-button {
+      padding: 0 1rem;
+      border: 1px solid var(--border-default, #dee2e6);
+      background: var(--bg-primary, #fff);
+      color: var(--text-muted, #666);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      height: 3rem;
+    }
+  
+    .view-button:hover {
+      background: var(--bg-secondary, #f8f9fa);
+    }
+  
+    .view-button.active {
+      background: var(--brand-primary, #6366f1);
+      color: var(--text-on-primary, #fff);
+      border-color: var(--brand-primary, #6366f1);
+    }
+  
+    /* When kanban is active, prevent main scroll */
+    body.kanban-active main {
+      overflow: hidden !important;
+      padding-bottom: 0 !important;
+    }
+  
+    .kanban-view {
+      width: 100% !important;
+      overflow-x: auto !important;
+      overflow-y: hidden !important;
+      padding: 0.5rem !important;
+      height: calc(100vh - 180px) !important;
+      display: flex !important;
+      flex-direction: row !important;
+      gap: 1rem !important;
+      align-items: stretch !important;
+    }
+  
+    .kanban-columns {
+      display: flex;
+      gap: 1rem;
+      min-width: min-content;
+      padding: 0;
+      height: 100%;
+      align-items: stretch;
+    }
+  
+    .kanban-column {
+      min-width: 250px;
+      max-width: 250px;
+      width: 250px;
+      background: transparent;
+      border-radius: 8px;
+      padding: 0;
+      box-shadow: none;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+  
+    .kanban-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      min-height: 100px;
+      background: var(--hover-overlay, rgba(0,0,0,0.02));
+      border-radius: 4px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      flex: 1;
+      cursor: grab;
+      user-select: none;
+      max-width: 250px;
+      transition: background-color 0.2s;
+    }
+  
+    .kanban-cards:active {
+      cursor: grabbing;
+    }
+  
+    .kanban-column h4 {
+      margin: 0;
+      padding: 0.5rem;
+      color: var(--text-on-primary, #fff);
+      border-radius: 6px;
+      text-align: center;
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.2);
+      margin-bottom: 0.5rem;
+      min-height: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+  
+    .sprint-view {
+      width: 100% !important;
+      height: calc(100vh - 200px) !important;
+      position: relative !important;
+      display: block !important;
+      flex-direction: initial !important;
+      flex-wrap: initial !important;
+      justify-content: initial !important;
+      align-content: initial !important;
+      gap: initial !important;
+      overflow: hidden !important;
+      padding: 0 !important;
+    }
+  
+    .sprint-view-container {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+  
+    .backlog-column {
+      background: linear-gradient(135deg, #6c757d, #495057);
+      color: var(--text-on-primary, #fff);
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      width: 320px;
+      flex-shrink: 0;
+      margin-right: 1rem;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      padding: 1rem;
+    }
+  
+    .backlog-column h4 {
+      margin: 0;
+      padding: 1rem;
+      color: var(--text-on-primary, #fff);
+      background: linear-gradient(135deg, #6c757d, #495057);
+      border-radius: 8px;
+      text-align: center;
+      font-size: 1.4rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+      border: 2px solid rgba(255,255,255,0.2);
+    }
+  
+    .import-backlog-btn {
+      margin: 0.5rem 0;
+      padding: 0.5rem 1rem;
+      background: linear-gradient(135deg, #f39c12, #e67e22);
+      color: var(--text-on-primary, #fff);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+  
+    .import-backlog-btn:hover {
+      background: linear-gradient(135deg, #e67e22, #d35400);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+  
+    .sprint-column {
+      width: 250px;
+      min-width: 250px;
+      max-width: 250px;
+      flex-shrink: 0;
+      background: transparent;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: none;
+      padding: 0;
+    }
+  
+    .sprint-column h4 {
+      margin: 0;
+      padding: 0.5rem;
+      color: var(--text-on-primary, #fff) !important;
+      border-radius: 6px;
+      text-align: center;
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      margin-bottom: 0.5rem;
+      min-height: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.2;
+      flex-shrink: 0;
+    }
+  
+    .sprint-tasks {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      min-height: 100px;
+      background: var(--hover-overlay, rgba(0,0,0,0.02));
+      border-radius: 4px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      flex: 1;
+      transition: background-color 0.2s;
+    }
+  
+    .sprint-points {
+      background: rgba(74, 158, 255, 0.1);
+      border-radius: 4px;
+      padding: 0.5rem;
+      text-align: center;
+      font-weight: bold;
+      margin-top: 0.5rem;
+    }
+  
+    #backlog-cards,
+    .sprint-cards {
+      overflow-y: auto;
+      overflow-x: hidden;
+      height: calc(100% - 90px);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      background: var(--hover-overlay, rgba(0,0,0,0.02));
+      border-radius: 4px;
+      transition: background-color 0.2s;
+    }
+  
+    .sprint-columns-scroll {
+      flex-grow: 1;
+      overflow-x: auto;
+      padding-bottom: 15px;
+    }
+  
+    .sprint-columns {
+      display: flex;
+      gap: 1rem;
+      height: 100%;
+      padding: 0 1rem;
+    }
+  
+    .sprint-cards.drag-over {
+      background: rgba(74, 158, 255, 0.1);
+      border: 2px dashed #6366f1;
+    }
+  
+    /* Estilos para scrollbars */
+    .sprint-cards::-webkit-scrollbar,
+    #backlog-cards::-webkit-scrollbar {
+      width: 8px;
+    }
+  
+    .sprint-cards::-webkit-scrollbar-track,
+    #backlog-cards::-webkit-scrollbar-track {
+      background: transparent;
+    }
+  
+    .sprint-cards::-webkit-scrollbar-thumb,
+    #backlog-cards::-webkit-scrollbar-thumb {
+      background-color: rgba(155, 155, 155, 0.5);
+      border-radius: 4px;
+      border: 2px solid transparent;
+    }
+  
+    .sprint-columns-scroll::-webkit-scrollbar {
+      height: 8px;
+    }
+  
+    .sprint-columns-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+  
+    .sprint-columns-scroll::-webkit-scrollbar-thumb {
+      background-color: rgba(155, 155, 155, 0.5);
+      border-radius: 4px;
+      border: 2px solid transparent;
+    }
+  
+    .sprint-cards:empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      min-height: 100px;
+    }
+  
+    .sprint-cards:empty::after {
+      content: 'Drop tasks here';
+      color: var(--text-muted, #666);
+      font-style: italic;
+      pointer-events: none;
+    }
+  
+    /* Estilos para los select de filtros de tareas y bugs */
+    :global(.task-filter-select),
+    :global(.bug-filter-select) {
+      font-size: 1.1em;
+      padding: 8px 32px 8px 12px;
+      border: 2px solid #6366f1;
+      border-radius: 8px;
+      background: var(--bg-secondary, #f8f9fa);
+      color: var(--text-primary, #333);
+      margin-right: 0.5rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      min-width: 160px;
+      max-width: 220px;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      box-shadow: 0 2px 6px rgba(74,158,255,0.05);
+      cursor: pointer;
+      position: relative;
+    }
+    :global(.task-filter-select:focus),
+    :global(.bug-filter-select:focus) {
+      border-color: var(--brand-primary, #6366f1);
+      box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+      background: var(--bg-primary, #fff);
+    }
+    :global(.task-filter-select:hover),
+    :global(.bug-filter-select:hover) {
+      border-color: var(--brand-primary, #6366f1);
+      background: var(--bg-secondary, #f1f5f9);
+    }
+    :global(.task-filter-select option),
+    :global(.bug-filter-select option) {
+      background: var(--bg-primary, #fff);
+      color: var(--text-primary, #333);
+      font-size: 1em;
+      padding: 0.5em;
+    }
+    /* Flecha personalizada para el select */
+    :global(.task-filter-select),
+    :global(.bug-filter-select) {
+      background-image: url('data:image/svg+xml;utf8,<svg fill="%236366f1" height="20" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 20px 20px;
+    }
+  
+    /* Estilos para el botón limpiar filtros */
+    :global(.clear-filters-button:hover) {
+      background: #c82333 !important;
+      transform: scale(1.05);
+    }
+  
+    /* Estilos para la sección de filtros */
+    .filters-section {
+      margin: 1rem 0;
+      padding: 1rem;
+      background: var(--bg-secondary, #f8f9fa);
+      border-radius: 6px;
+    }
+  
+    #tasksFilters {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      flex-wrap: wrap;
+      width: 100%;
+    }
+  
+    #tasksFilters .filter-group {
+      min-width: 200px;
+      flex: 1;
+    }
+  
+    #tasksFilters .filter-label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      color: var(--text-secondary, #495057);
+    }
+  
+    #tasksFilters multi-select {
+      width: 100%;
+    }
+  
+    #tasksFilters .controls-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-left: auto;
+      min-width: 120px;
+    }
+  
+    #tasksFilters .results-counter {
+      padding: 0.5rem;
+      background: var(--bg-primary, white);
+      border: 1px solid var(--border-default, #dee2e6);
+      border-radius: 4px;
+      text-align: center;
+      font-size: 0.9em;
+      color: var(--text-secondary, #495057);
+    }
+  
+    #tasksFilters .clear-button {
+      padding: 0.5rem;
+      background: var(--color-error, #f43f5e);
+      color: var(--text-on-primary, #fff);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: background-color 0.2s;
+    }
+  
+    #tasksFilters .clear-button:hover {
+      background: var(--status-blocked, #e11d48);
+    }
+  
+    #tasksFilters .clear-button:disabled {
+      background: var(--text-muted, #64748b);
+      cursor: not-allowed;
+    }
+  
+  </style>
 </Layout>

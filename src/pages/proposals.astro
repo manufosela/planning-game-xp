@@ -1,20 +1,20 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { appShellRoutes, resolveAppShellPartial } from '../lib/app-shell-routes.js';
-
-const shellRoute = Astro.url.pathname;
-const shellPartial = resolveAppShellPartial(shellRoute);
 ---
 
-<Layout
-  title="Backlog Global de Propuestas"
-  shellRoute={shellRoute}
-  shellPartial={shellPartial}
-  shellRoutes={appShellRoutes}
->
-  <noscript>
-    <div style="padding: 1.5rem;">
-      Esta pagina necesita JavaScript para cargar el contenido.
+<Layout title="Backlog Global de Propuestas">
+  <div class="proposals-page">
+      <global-proposals-list></global-proposals-list>
     </div>
-  </noscript>
+  
+    <script is:inline type="module">
+      import '/js/wc/GlobalProposalsList.js';
+    </script>
+  
+    <style is:global>
+      .proposals-page {
+        max-width: 100%;
+        margin: 0 auto;
+      }
+    </style>
 </Layout>

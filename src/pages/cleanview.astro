@@ -1,20 +1,708 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { appShellRoutes, resolveAppShellPartial } from '../lib/app-shell-routes.js';
-
-const shellRoute = Astro.url.pathname;
-const shellPartial = resolveAppShellPartial(shellRoute);
 ---
 
-<Layout
-  title="Clean View"
-  shellRoute={shellRoute}
-  shellPartial={shellPartial}
-  shellRoutes={appShellRoutes}
->
-  <noscript>
-    <div style="padding: 1.5rem;">
-      Esta pagina necesita JavaScript para cargar el contenido.
-    </div>
-  </noscript>
+<Layout title="Clean View">
+  <section class="cleanview-container">
+      <div class="cleanview-header">
+        <select id="projectSelector" class="project-select">
+          <option value="">Cargando proyectos...</option>
+        </select>
+        <notification-bell></notification-bell>
+      </div>
+  
+      <div class="summary-cards" id="summaryCards">
+        <div class="summary-card summary-validate" id="summaryValidate">
+          <span class="summary-count" id="validateCount">0</span>
+          <span class="summary-label">A Validar</span>
+        </div>
+        <div class="summary-card summary-mine" id="summaryMine">
+          <span class="summary-count" id="myTasksCount">0</span>
+          <span class="summary-label">En Vuelo</span>
+        </div>
+        <div class="summary-card summary-pending" id="summaryPending">
+          <span class="summary-count" id="pendingCount">0</span>
+          <span class="summary-label">Pendientes</span>
+        </div>
+      </div>
+  
+      <div class="cleanview-tabs">
+        <button class="cv-tab-button active" data-tab="validate">A Validar</button>
+        <button class="cv-tab-button" data-tab="mine">Mis Tareas</button>
+        <button class="cv-tab-button" data-tab="all">Todas</button>
+      </div>
+  
+      <div id="tab-validate" class="cv-tab-panel">
+        <div id="validateList" class="card-list">Cargando...</div>
+      </div>
+      <div id="tab-mine" class="cv-tab-panel hidden">
+        <div id="myTasksList" class="card-list">Cargando...</div>
+      </div>
+      <div id="tab-all" class="cv-tab-panel hidden">
+        <div id="allTasksList" class="card-list">Cargando...</div>
+      </div>
+  
+      <button id="fabCreate" class="fab" title="Crear nueva card">+</button>
+      <div id="fabMenu" class="fab-menu hidden">
+        <button class="fab-option" data-type="tasks">Nueva Tarea</button>
+        <button class="fab-option" data-type="bugs">Nuevo Bug</button>
+        <button class="fab-option" data-type="proposals">Nueva Propuesta</button>
+      </div>
+    </section>
+  
+  
+  <script is:inline type="module">
+    import { database, ref, onValue, get } from '/firebase-config.js';
+    import { normalizeEmail as normalizeEmailSafe } from '/js/utils/super-admin-check.js';
+    import { entityDirectoryService } from '/js/services/entity-directory-service.js';
+    import { FirebaseService } from '/js/services/firebase-service.js';
+    import '/js/core/app-initializer.js';
+  
+    // DOM elements
+    const projectSelector = document.getElementById('projectSelector');
+    const validateList = document.getElementById('validateList');
+    const myTasksList = document.getElementById('myTasksList');
+    const allTasksList = document.getElementById('allTasksList');
+    const validateCount = document.getElementById('validateCount');
+    const myTasksCount = document.getElementById('myTasksCount');
+    const pendingCount = document.getElementById('pendingCount');
+    const tabButtons = Array.from(document.querySelectorAll('.cv-tab-button'));
+    const tabValidate = document.getElementById('tab-validate');
+    const tabMine = document.getElementById('tab-mine');
+    const tabAll = document.getElementById('tab-all');
+    const fabCreate = document.getElementById('fabCreate');
+    const fabMenu = document.getElementById('fabMenu');
+  
+    // State
+    let currentUserEmail = '';
+    let currentStakeholderId = '';
+    let currentDeveloperId = '';
+    let currentProject = localStorage.getItem('cleanview-project') || '';
+    let activeTab = 'validate';
+    let allCards = []; // Flat array of all cards for current project
+    let activeListeners = []; // Firebase listener unsubscribers
+  
+    // Status sort order for display
+    const STATUS_ORDER = {
+      'To Validate': 0,
+      'In Progress': 1,
+      'To Do': 2,
+      'Blocked': 3,
+      'Reopened': 4,
+      'Created': 5,
+      'Assigned': 6,
+      'Done': 7,
+      'Done&Validated': 8,
+      'Fixed': 9,
+      'Verified': 10,
+      'Closed': 11
+    };
+  
+    // Tab switching
+    const tabPanels = { validate: tabValidate, mine: tabMine, all: tabAll };
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeTab = btn.dataset.tab;
+        tabButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
+        Object.entries(tabPanels).forEach(([key, panel]) => {
+          panel.classList.toggle('hidden', key !== activeTab);
+        });
+      });
+    });
+  
+    // FAB menu
+    fabCreate.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fabMenu.classList.toggle('hidden');
+    });
+  
+    document.addEventListener('click', () => {
+      fabMenu.classList.add('hidden');
+    });
+  
+    fabMenu.querySelectorAll('.fab-option').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        fabMenu.classList.add('hidden');
+        await openNewCard(btn.dataset.type);
+      });
+    });
+  
+    // Project selector
+    projectSelector.addEventListener('change', () => {
+      currentProject = projectSelector.value;
+      localStorage.setItem('cleanview-project', currentProject);
+      loadProjectData();
+    });
+  
+    // Listen for card detail open events from CleanCardItem
+    document.addEventListener('open-card-detail', async (e) => {
+      const { cardId, firebaseId, cardType, projectId } = e.detail;
+      await openCardInModal(cardType, projectId, firebaseId, cardId);
+    });
+  
+    // ===== Data Loading =====
+  
+    function cleanupListeners() {
+      activeListeners.forEach(unsub => {
+        if (typeof unsub === 'function') unsub();
+      });
+      activeListeners = [];
+    }
+  
+    function loadProjectData() {
+      cleanupListeners();
+      allCards = [];
+      renderCards();
+  
+      if (!currentProject) return;
+  
+      const sections = ['tasks', 'bugs', 'proposals'];
+      sections.forEach(section => {
+        const path = `/cards/${currentProject}/${section.toUpperCase()}_${currentProject}`;
+        const cardsRef = ref(database, path);
+        const unsubscribe = onValue(cardsRef, (snapshot) => {
+          // Remove old cards of this section
+          allCards = allCards.filter(c => c._section !== section);
+          if (snapshot.exists()) {
+            const data = snapshot.val() || {};
+            Object.entries(data).forEach(([fbId, card]) => {
+              if (!card) return;
+              allCards.push({
+                ...card,
+                firebaseId: fbId,
+                cardId: card.cardId || fbId,
+                _section: section,
+                projectId: currentProject
+              });
+            });
+          }
+          renderCards();
+        });
+        activeListeners.push(unsubscribe);
+      });
+    }
+  
+    // ===== Rendering =====
+  
+    const VALIDATE_STATUSES = ['tovalidate', 'fixed'];
+    const FINISHED_STATUSES = ['done', 'donevalidated', 'closed', 'verified'];
+  
+    function _isMyCard(card) {
+      return card.validator === currentStakeholderId
+        || card.developer === currentDeveloperId
+        || card.codeveloper === currentDeveloperId;
+    }
+  
+    function _normalizeStatus(status) {
+      return (status || '').toLowerCase().replace(/[\s&]+/g, '');
+    }
+  
+    function getMyToValidate() {
+      return allCards.filter(card => {
+        if (!_isMyCard(card)) return false;
+        return VALIDATE_STATUSES.includes(_normalizeStatus(card.status));
+      }).sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
+    }
+  
+    function getMyInFlight() {
+      return allCards.filter(card => {
+        if (!_isMyCard(card)) return false;
+        const norm = _normalizeStatus(card.status);
+        return !VALIDATE_STATUSES.includes(norm) && !FINISHED_STATUSES.includes(norm);
+      }).sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
+    }
+  
+    function getAllActiveCards() {
+      return allCards
+        .filter(card => !FINISHED_STATUSES.includes(_normalizeStatus(card.status)))
+        .sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
+    }
+  
+    function renderCards() {
+      const toValidate = getMyToValidate();
+      const inFlight = getMyInFlight();
+      const allActive = getAllActiveCards();
+  
+      validateCount.textContent = toValidate.length;
+      myTasksCount.textContent = inFlight.length;
+      pendingCount.textContent = allActive.length;
+  
+      renderCardList(validateList, toValidate, 'No tienes tareas pendientes de validar');
+      renderCardList(myTasksList, inFlight, 'No tienes tareas en vuelo');
+      renderCardList(allTasksList, allActive, 'No hay tareas activas');
+    }
+  
+    function renderCardList(container, cards, emptyMessage) {
+      if (cards.length === 0) {
+        container.innerHTML = `<div class="empty-state">${emptyMessage}</div>`;
+        return;
+      }
+  
+      container.innerHTML = '';
+      cards.forEach(card => {
+        const el = document.createElement('clean-card-item');
+        el.cardId = card.cardId || '';
+        el.firebaseId = card.firebaseId || '';
+        el.cardType = card._section || 'tasks';
+        el.projectId = card.projectId || '';
+        el.title = card.title || '';
+        el.status = card.status || '';
+        el.priority = card.priority || '';
+        el.endDate = card.endDate || '';
+        el.isMyTask = _isMyCard(card);
+        const devId = card.developer || '';
+        el.developerName = devId ? entityDirectoryService.getDeveloperDisplayName(devId) || devId : '';
+        container.append(el);
+      });
+    }
+  
+    // ===== Card Modal =====
+  
+    async function openCardInModal(section, projectId, firebaseId, cardId) {
+      try {
+        await import('/js/wc/CleanCardDetail.js');
+  
+        // Load card data
+        const path = `/cards/${projectId}/${section.toUpperCase()}_${projectId}`;
+        const cards = await FirebaseService.getCards(path);
+        if (!cards) return;
+  
+        let cardData = cards[firebaseId];
+        if (!cardData) {
+          for (const [fbId, c] of Object.entries(cards)) {
+            if (c && (c.cardId === cardId || c.id === cardId)) {
+              cardData = { ...c, firebaseId: fbId };
+              firebaseId = fbId;
+              break;
+            }
+          }
+        } else {
+          cardData = { ...cardData, firebaseId };
+        }
+  
+        if (!cardData) {
+          document.dispatchEvent(new CustomEvent('show-slide-notification', {
+            detail: { options: { message: 'No se encontró la tarjeta', type: 'error' } }
+          }));
+          return;
+        }
+  
+        // Create CleanCardDetail component
+        const detailEl = document.createElement('clean-card-detail');
+        const devId = cardData.developer || '';
+        const valId = cardData.validator || '';
+  
+        Object.assign(detailEl, {
+          cardId: cardData.cardId || firebaseId,
+          firebaseId,
+          cardType: section,
+          projectId,
+          title: cardData.title || '',
+          status: cardData.status || '',
+          description: cardData.description || '',
+          descriptionStructured: cardData.descriptionStructured || [],
+          acceptanceCriteriaStructured: cardData.acceptanceCriteriaStructured || [],
+          developerName: devId ? entityDirectoryService.getDeveloperDisplayName(devId) || devId : '',
+          validatorName: valId ? entityDirectoryService.getStakeholderDisplayName(valId) || valId : '',
+          createdBy: cardData.createdBy || '',
+          endDate: cardData.endDate || '',
+          startDate: cardData.startDate || '',
+          devPoints: cardData.devPoints || 0,
+          businessPoints: cardData.businessPoints || 0,
+          notes: cardData.notes || [],
+          userEmail: currentUserEmail
+        });
+  
+        // Internal state for reopen logic (follows TaskCard pattern)
+        detailEl._currentReopenCount = cardData.reopenCount || 0;
+        detailEl._currentReopenCycles = cardData.reopenCycles || [];
+        // Notes can be string or array — store raw for reopen note prepending
+        detailEl._currentNotesRaw = typeof cardData.notes === 'string' ? cardData.notes : '';
+  
+        // Open in modal
+        const modal = document.createElement('app-modal');
+        modal._programmaticMode = true;
+        modal.modalId = `clean-detail-${cardId}-${Date.now()}`;
+        modal.showHeader = false;
+        modal.maxWidth = '680px';
+        modal.maxHeight = '90dvh';
+        modal.append(detailEl);
+  
+        // Close modal on validate/reopen
+        detailEl.addEventListener('card-validated', () => modal.remove());
+        detailEl.addEventListener('card-reopened', () => modal.remove());
+  
+        document.body.append(modal);
+      } catch (error) {
+        console.error('Error opening card:', error);
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: { options: { message: 'Error abriendo tarjeta: ' + error.message, type: 'error' } }
+        }));
+      }
+    }
+  
+    // ===== Create New Card =====
+  
+    async function openNewCard(section) {
+      if (!currentProject) return;
+      try {
+        const cardImport = section === 'proposals'
+          ? import('/js/wc/ProposalCard.js')
+          : (section === 'bugs'
+            ? import('/js/wc/BugCard.js')
+            : import('/js/wc/TaskCard.js'));
+  
+        await Promise.all([
+          import('/js/wc/ColorTabs.js'),
+          import('/js/wc/card-history-viewer.js'),
+          import('/js/wc/FirebaseStorageUploader.js'),
+          cardImport
+        ]);
+  
+        const tagName = section === 'proposals' ? 'proposal-card'
+          : (section === 'bugs' ? 'bug-card' : 'task-card');
+        const cardElement = document.createElement(tagName);
+  
+        const cardTypeForStatus = section === 'bugs' ? 'bug-card' : 'task-card';
+        const [statusList, projectSprintList] = await Promise.all([
+          FirebaseService.getStatusList(cardTypeForStatus),
+          FirebaseService.getSprintList(currentProject)
+        ]);
+  
+        const developersList = entityDirectoryService.getActiveDevelopers().map(dev => ({
+          id: dev.id, email: dev.email, name: dev.name
+        }));
+  
+        const statusArray = Array.isArray(statusList) ? statusList : Object.keys(statusList || {});
+  
+        Object.assign(cardElement, {
+          projectId: currentProject,
+          cardType: section,
+          userEmail: currentUserEmail,
+          expanded: true,
+          isEditable: true,
+          statusList: statusArray,
+          developerList: developersList,
+          developers: developersList,
+          globalSprintList: projectSprintList,
+          _skipClone: true
+        });
+  
+        const { showExpandedCardInModal } = await import('/js/utils/common-functions.js');
+        showExpandedCardInModal(cardElement);
+      } catch (error) {
+        console.error('Error creating card:', error);
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: { options: { message: 'Error creando tarjeta: ' + error.message, type: 'error' } }
+        }));
+      }
+    }
+  
+    // ===== Init =====
+  
+    async function initCleanView(email) {
+      currentUserEmail = normalizeEmailSafe(email);
+      await entityDirectoryService.init();
+  
+      // Resolve current user's stakeholder and developer IDs
+      currentStakeholderId = entityDirectoryService.resolveStakeholderId(currentUserEmail) || '';
+      currentDeveloperId = entityDirectoryService.resolveDeveloperId(currentUserEmail) || '';
+  
+      // Import CleanCardItem component
+      await import('/js/wc/CleanCardItem.js');
+  
+      // Load user projects (exclude archived)
+      await FirebaseService.loadProjects(currentUserEmail);
+      const allProjects = window.projects || {};
+      const userProjects = await FirebaseService.getUserProjects(currentUserEmail);
+  
+      let projectNames = [];
+      if (userProjects === null) {
+        projectNames = Object.keys(allProjects);
+      } else {
+        projectNames = userProjects;
+      }
+  
+      // Filter out archived projects
+      projectNames = projectNames.filter(name => !allProjects[name]?.archived);
+  
+      // Populate project selector
+      projectSelector.innerHTML = '';
+      if (projectNames.length === 0) {
+        projectSelector.innerHTML = '<option value="">Sin proyectos</option>';
+        return;
+      }
+  
+      projectNames.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        projectSelector.append(opt);
+      });
+  
+      // Restore or default selection
+      if (currentProject && projectNames.includes(currentProject)) {
+        projectSelector.value = currentProject;
+      } else {
+        currentProject = projectNames[0];
+        projectSelector.value = currentProject;
+        localStorage.setItem('cleanview-project', currentProject);
+      }
+  
+      loadProjectData();
+  
+      // Handle deep link: ?projectId=X&cardId=Y
+      const urlParams = new URLSearchParams(window.location.search);
+      const deepLinkProjectId = urlParams.get('projectId');
+      const deepLinkCardId = urlParams.get('cardId');
+  
+      if (deepLinkProjectId && projectNames.includes(deepLinkProjectId)) {
+        currentProject = deepLinkProjectId;
+        projectSelector.value = deepLinkProjectId;
+        localStorage.setItem('cleanview-project', deepLinkProjectId);
+        loadProjectData();
+      }
+  
+      if (deepLinkCardId) {
+        // Wait for data to load, then open the card
+        const waitForCard = () => {
+          const card = allCards.find(c => c.cardId === deepLinkCardId);
+          if (card) {
+            openCardInModal(card._section, card.projectId, card.firebaseId, card.cardId);
+            // Clean URL without reloading
+            const cleanUrl = window.location.pathname;
+            window.history.replaceState({}, '', cleanUrl);
+          } else if (allCards.length === 0) {
+            // Data not loaded yet, retry
+            setTimeout(waitForCard, 300);
+          } else {
+            document.dispatchEvent(new CustomEvent('show-slide-notification', {
+              detail: { options: { message: `No se encontró la card ${deepLinkCardId}`, type: 'warning' } }
+            }));
+          }
+        };
+        // Small delay to let Firebase listeners populate allCards
+        setTimeout(waitForCard, 500);
+      }
+    }
+  
+    // Auth flow
+    const email = document.body.dataset.userEmail || '';
+    if (email) {
+      initCleanView(email);
+    } else {
+      document.addEventListener('user-authenticated', (event) => {
+        const authEmail = event?.detail?.user?.email || document.body.dataset.userEmail || '';
+        if (authEmail) initCleanView(authEmail);
+      }, { once: true });
+    }
+  </script>
+  
+  <style is:global>
+    .cleanview-container {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 16px;
+      padding-bottom: 80px;
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+  
+    .cleanview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      gap: 12px;
+    }
+  
+    .project-select {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid var(--border-default, #e2e8f0);
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 500;
+      background: var(--bg-primary, #fff);
+      color: var(--text-primary, #1e293b);
+      cursor: pointer;
+      appearance: auto;
+    }
+  
+    .summary-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+  
+    .summary-card {
+      background: var(--bg-primary, #fff);
+      border-radius: 14px;
+      padding: 16px;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+  
+    .summary-validate {
+      border-top: 3px solid var(--status-to-validate, #f59e0b);
+    }
+  
+    .summary-mine {
+      border-top: 3px solid var(--brand-primary, #6366f1);
+    }
+  
+    .summary-pending {
+      border-top: 3px solid var(--text-muted, #94a3b8);
+    }
+  
+    .summary-count {
+      display: block;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary, #1e293b);
+      line-height: 1.2;
+    }
+  
+    .summary-label {
+      font-size: 13px;
+      color: var(--text-secondary, #64748b);
+      margin-top: 4px;
+      display: block;
+    }
+  
+    .cleanview-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 16px;
+      background: var(--bg-secondary, #f1f5f9);
+      border-radius: 10px;
+      padding: 3px;
+    }
+  
+    .cv-tab-button {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      background: transparent;
+      color: var(--text-secondary, #64748b);
+      transition: background 0.2s, color 0.2s;
+    }
+  
+    .cv-tab-button.active {
+      background: var(--bg-primary, #fff);
+      color: var(--text-primary, #1e293b);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+  
+    .cv-tab-panel.hidden {
+      display: none;
+    }
+  
+    .card-list {
+      min-height: 100px;
+    }
+  
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted, #94a3b8);
+      font-size: 14px;
+    }
+  
+    /* FAB */
+    .fab {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--brand-primary, #6366f1);
+      color: var(--text-on-primary, #fff);
+      border: none;
+      font-size: 28px;
+      font-weight: 300;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s, box-shadow 0.2s;
+      z-index: 100;
+    }
+  
+    .fab:hover {
+      transform: scale(1.08);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+    }
+  
+    .fab-menu {
+      position: fixed;
+      bottom: 88px;
+      right: 24px;
+      background: var(--bg-primary, #fff);
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      overflow: hidden;
+      z-index: 100;
+    }
+  
+    .fab-menu.hidden {
+      display: none;
+    }
+  
+    .fab-option {
+      display: block;
+      width: 100%;
+      padding: 12px 20px;
+      border: none;
+      background: transparent;
+      font-size: 14px;
+      text-align: left;
+      cursor: pointer;
+      color: var(--text-primary, #1e293b);
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+  
+    .fab-option:hover {
+      background: var(--bg-secondary, #f1f5f9);
+    }
+  
+    .fab-option + .fab-option {
+      border-top: 1px solid var(--border-default, #e2e8f0);
+    }
+  
+    /* Responsive */
+    @media (min-width: 768px) {
+      .cleanview-container {
+        padding: 24px;
+        padding-bottom: 40px;
+      }
+  
+      .summary-count {
+        font-size: 32px;
+      }
+    }
+  
+    @media (max-width: 380px) {
+      .cleanview-container {
+        padding: 12px;
+        padding-bottom: 80px;
+      }
+  
+      .summary-card {
+        padding: 12px;
+      }
+  
+      .summary-count {
+        font-size: 24px;
+      }
+    }
+  </style>
 </Layout>

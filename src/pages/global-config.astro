@@ -1,20 +1,57 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { appShellRoutes, resolveAppShellPartial } from '../lib/app-shell-routes.js';
-
-const shellRoute = Astro.url.pathname;
-const shellPartial = resolveAppShellPartial(shellRoute);
 ---
 
-<Layout
-  title="Global Configuration"
-  shellRoute={shellRoute}
-  shellPartial={shellPartial}
-  shellRoutes={appShellRoutes}
->
-  <noscript>
-    <div style="padding: 1.5rem;">
-      Esta pagina necesita JavaScript para cargar el contenido.
+<Layout title="Global Configuration">
+  <div class="page-header">
+      <h1>Global Configuration</h1>
+      <p class="subtitle">Manage global agents, prompts, and instructions that can be assigned to projects</p>
     </div>
-  </noscript>
+  
+    <global-config-list id="globalConfigList"></global-config-list>
+  
+  
+  <script is:inline type="module">
+    import '/js/wc/GlobalConfigList.js';
+  
+    // Handle events
+    document.getElementById('globalConfigList')?.addEventListener('config-saved', (e) => {
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: `${e.detail.name} saved successfully`, type: 'success' } }
+      }));
+    });
+  
+    document.getElementById('globalConfigList')?.addEventListener('config-deleted', (e) => {
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: `${e.detail.name} deleted`, type: 'info' } }
+      }));
+    });
+  
+    document.getElementById('globalConfigList')?.addEventListener('config-created', (e) => {
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: `New config created`, type: 'success' } }
+      }));
+    });
+  </script>
+  
+  <style is:global>
+    .page-header {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 0.5rem;
+    }
+  
+    .page-header h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: var(--text-primary, #333);
+      margin: 0 0 0.5rem 0;
+    }
+  
+    .page-header .subtitle {
+      color: var(--text-secondary, #666);
+      margin: 0;
+      font-size: 0.95rem;
+    }
+  </style>
 </Layout>

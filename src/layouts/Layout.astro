@@ -167,7 +167,9 @@ let user = null;
 
     <MenuNav currentPath={Astro.url.pathname} />
 
-    <div id="subNavContainer"></div>
+    <div id="subNavContainer">
+      <slot name="subnav" />
+    </div>
 
     <div id="welcomeMessage" class="welcome-container hidden">
       <div class="welcome-content">

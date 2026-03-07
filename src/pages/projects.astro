@@ -1,20 +1,1364 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { appShellRoutes, resolveAppShellPartial } from '../lib/app-shell-routes.js';
-
-const shellRoute = Astro.url.pathname;
-const shellPartial = resolveAppShellPartial(shellRoute);
 ---
 
-<Layout
-  title="Projects"
-  shellRoute={shellRoute}
-  shellPartial={shellPartial}
-  shellRoutes={appShellRoutes}
->
-  <noscript>
-    <div style="padding: 1.5rem;">
-      Esta pagina necesita JavaScript para cargar el contenido.
+<Layout title="Projects">
+  <div class="main-container">
+      <div class="projects-container">
+        <div class="loading">Cargando proyectos...</div>
+      </div>
     </div>
-  </noscript>
+  
+  <script is:inline type="module">
+    import { onAuthStateChanged, auth, database, ref, onValue, set, get, update, superAdminEmail } from '/firebase-config.js';
+    import { showModal } from '@manufosela/app-modal';
+    import { demoModeService } from '/js/services/demo-mode-service.js';
+    import '/js/wc/ProjectForm.js';
+    import { APP_CONSTANTS } from '/js/constants/app-constants.js';
+    import { encodeEmailForFirebase } from '/js/utils/email-sanitizer.js';
+    import { normalizeDeveloperEntries } from '/js/utils/developer-normalizer.js';
+  
+    let projectListElement;
+    let hoverTimeout;
+    // NOTE: superAdminEmails from database is DEPRECATED - SuperAdmin is only from .env
+    let isUserSuperAdmin = false;
+    let isUserAdmin = false; // Users with "All" in projectsByUser can create/edit projects
+    let userProjects = [];
+    let hasAllProjectsAccess = false;
+    let allProjects = [];
+    // Firebase listeners to cleanup on logout
+    let unsubscribeProjects = null;
+    let unsubscribeUserProjects = null;
+  
+    const SECTIONS = APP_CONSTANTS.SECTIONS;
+  
+    // Point conversion mappings between scoring systems
+    const POINTS_1_TO_5_TO_FIBONACCI = { 0: 0, 1: 1, 2: 2, 3: 3, 4: 5, 5: 8 };
+    const POINTS_FIBONACCI_TO_1_TO_5 = { 0: 0, 1: 1, 2: 2, 3: 3, 5: 4, 8: 5, 13: 5 };
+  
+    function convertPoints(points, fromSystem, toSystem) {
+      if (fromSystem === toSystem) return points;
+  
+      if (fromSystem === '1-5' && toSystem === 'fibonacci') {
+        return POINTS_1_TO_5_TO_FIBONACCI[points] || points;
+      } else if (fromSystem === 'fibonacci' && toSystem === '1-5') {
+        return POINTS_FIBONACCI_TO_1_TO_5[points] || points;
+      }
+  
+      return points;
+    }
+  
+    function normalizeDevelopersForForm(rawData) {
+      if (!rawData) {
+        return [];
+      }
+  
+      const entries = [];
+  
+      if (Array.isArray(rawData)) {
+        rawData.forEach(item => entries.push(item));
+      } else if (typeof rawData === 'object') {
+        Object.entries(rawData).forEach(([name, value]) => {
+          if (typeof value === 'string') {
+            entries.push({ name, email: value });
+          } else if (value && typeof value === 'object') {
+            entries.push({
+              name: value.name || name,
+              email: value.email || value.mail || value.value
+            });
+          }
+        });
+      } else if (typeof rawData === 'string') {
+        entries.push(rawData);
+      }
+  
+      const normalized = normalizeDeveloperEntries(entries);
+      return normalized
+        .filter(entry => !entry.isUnassigned)
+        .map(entry => {
+          const email = entry.email || entry.sourceEmail || '';
+          const original = entries.find(item => {
+            if (!item) return false;
+            if (typeof item === 'object' && item.id) {
+              return item.email === email || item.name === entry.name || item.id === entry.canonicalId;
+            }
+            if (typeof item === 'string') {
+              return item === email || item === entry.name;
+            }
+            return false;
+          });
+          const id = (typeof original === 'object' && original.id) ? original.id : (entry.canonicalId || '');
+          return {
+            id,
+            name: entry.name,
+            email
+          };
+        });
+    }
+  
+    function showLoader(message = 'Recalculando puntos...') {
+      const loader = document.createElement('div');
+      loader.id = 'scoring-system-loader';
+      loader.innerHTML = `
+        <div class="loader-backdrop">
+          <div class="loader-content">
+            <div class="loader-spinner"></div>
+            <p class="loader-message">${message}</p>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(loader);
+    }
+  
+    function hideLoader() {
+      const loader = document.getElementById('scoring-system-loader');
+      if (loader) {
+        loader.remove();
+      }
+    }
+  
+    async function getAllProjectCards(projectId) {
+      const cardTypes = ['TASKS', 'BUGS', 'EPICS', 'SPRINTS'];
+      const allCards = [];
+  
+      for (const cardType of cardTypes) {
+        try {
+          const cardsRef = ref(database, `/cards/${projectId}/${cardType}_${projectId}`);
+          const snapshot = await get(cardsRef);
+          const cardsData = snapshot.val() || {};
+  
+          Object.entries(cardsData).forEach(([cardKey, cardData]) => {
+            if (cardData && typeof cardData === 'object') {
+              allCards.push({
+                ...cardData,
+                firebaseKey: cardKey,
+                cardType: cardType,
+                path: `/cards/${projectId}/${cardType}_${projectId}/${cardKey}`
+              });
+            }
+          });
+        } catch (error) {
+        }
+      }
+  
+      return allCards;
+    }
+  
+    async function recalculateProjectPoints(projectId, fromSystem, toSystem) {
+      showLoader(`Recalculando puntos del proyecto ${projectId}...`);
+  
+      try {
+  
+        const allCards = await getAllProjectCards(projectId);
+        const cardsWithPoints = allCards.filter(card =>
+          card.businessPoints !== undefined || card.devPoints !== undefined
+        );
+  
+  
+        let updatedCount = 0;
+  
+        for (const card of cardsWithPoints) {
+          try {
+            const originalBusinessPoints = card.businessPoints || 0;
+            const originalDevPoints = card.devPoints || 0;
+  
+            const newBusinessPoints = convertPoints(originalBusinessPoints, fromSystem, toSystem);
+            const newDevPoints = convertPoints(originalDevPoints, fromSystem, toSystem);
+  
+            if (newBusinessPoints !== originalBusinessPoints || newDevPoints !== originalDevPoints) {
+              const updatedCard = {
+                ...card,
+                businessPoints: newBusinessPoints,
+                devPoints: newDevPoints
+              };
+  
+              // Remove properties that should not be saved to Firebase
+              delete updatedCard.firebaseKey;
+              delete updatedCard.cardType;
+              delete updatedCard.path;
+  
+              await set(ref(database, card.path), updatedCard);
+              updatedCount++;
+  
+            }
+          } catch (error) {
+          }
+        }
+  
+  
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: {
+            options: {
+              message: `Recálculo completado: ${updatedCount} tarjetas actualizadas`,
+              type: 'success'
+            }
+          }
+        }));
+  
+      } catch (error) {
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: {
+            options: {
+              message: 'Error durante el recálculo de puntos',
+              type: 'error'
+            }
+          }
+        }));
+      } finally {
+        hideLoader();
+      }
+    }
+  
+    function getUserKeyFromEmail(email) {
+      if (!email) return '';
+      // Use centralized encoding function for consistency
+      return encodeEmailForFirebase(email);
+    }
+  
+    function showLoading() {
+      const container = document.querySelector('.projects-container');
+      if (container) {
+        container.innerHTML = '<div class="loading">Cargando proyectos...</div>';
+      }
+    }
+  
+    // Check if user can manage projects (superadmin or admin)
+    function canManageProjects() {
+      return isUserSuperAdmin || isUserAdmin;
+    }
+  
+    function showError(message) {
+      const container = document.querySelector('.projects-container');
+      if (container) {
+        container.innerHTML = `<div class="error">${message}</div>`;
+      }
+    }
+  
+    function showNoProjects() {
+      const container = document.querySelector('.projects-container');
+  
+      const addProjectButton = canManageProjects() ? /*HTML*/`
+        <button class="add-project-btn" onclick="showAddProjectModal()">
+          <span class="plus-icon">+</span>
+          Nuevo Proyecto
+        </button>
+      ` : '';
+  
+      container.innerHTML = /*HTML*/`
+        <div class="projects-header">
+          <h1>Proyectos</h1>
+          ${addProjectButton}
+        </div>
+        <div class="no-projects">No hay proyectos disponibles</div>`;
+    }
+  
+    /**
+     * Check if current user is SuperAdmin
+     * SuperAdmin is ONLY the ONE email defined in .env (superAdminEmail)
+     * NOTE: /data/appAdmins is for app management only, NOT for SuperAdmin privileges
+     */
+    async function checkSuperAdminStatus() {
+      try {
+        const currentUserEmail = auth.currentUser?.email?.toLowerCase().trim();
+        if (!currentUserEmail) {
+          isUserSuperAdmin = false;
+          fetchUserProjects();
+          return;
+        }
+  
+        // SuperAdmin check: ONLY from .env
+        if (superAdminEmail) {
+          const envSuperAdmin = superAdminEmail.toLowerCase().trim();
+          isUserSuperAdmin = currentUserEmail === envSuperAdmin;
+        } else {
+          isUserSuperAdmin = false;
+        }
+      } catch (error) {
+        isUserSuperAdmin = false;
+      }
+  
+      // Continue with the flow
+      fetchUserProjects();
+    }
+  
+    function fetchUserProjects() {
+      const currentUserEmail = auth.currentUser?.email;
+      if (!currentUserEmail) {
+        userProjects = APP_CONSTANTS.DEFAULT_USER_PROJECTS;
+        hasAllProjectsAccess = false;
+        isUserAdmin = false;
+        fetchProjects();
+        return;
+      }
+  
+      // SuperAdmin always sees all projects
+      if (isUserSuperAdmin) {
+        hasAllProjectsAccess = true;
+        userProjects = [];
+        fetchProjects();
+        return;
+      }
+  
+      const userKey = getUserKeyFromEmail(currentUserEmail);
+      const userProjectsRef = ref(database, `/data/projectsByUser/${userKey}`);
+  
+      unsubscribeUserProjects = onValue(userProjectsRef, async (snapshot) => {
+        const projectsData = snapshot.val();
+  
+        if (projectsData === 'All') {
+          hasAllProjectsAccess = true;
+          isUserAdmin = true; // Users with "All" are admins
+          userProjects = [];
+        } else if (projectsData && typeof projectsData === 'string') {
+          hasAllProjectsAccess = false;
+          isUserAdmin = false;
+          userProjects = projectsData.split(',').map(p => p.trim()).filter(p => p.length > 0);
+        } else {
+          // User not found in database - create entry with default projects
+          hasAllProjectsAccess = false;
+          isUserAdmin = false;
+          userProjects = APP_CONSTANTS.DEFAULT_USER_PROJECTS;
+  
+          try {
+            // Create entry in Firebase with default projects
+            const defaultProjectsString = userProjects.join(', ');
+            await set(userProjectsRef, defaultProjectsString);
+          } catch (error) {
+          }
+        }
+  
+        // Refresh projects display after permissions are loaded
+        fetchProjects();
+      }, (error) => {
+        userProjects = APP_CONSTANTS.DEFAULT_USER_PROJECTS;
+        hasAllProjectsAccess = false;
+        isUserAdmin = false;
+        // Continue showing projects even if permissions load fails
+        fetchProjects();
+      });
+    }
+  
+    function extractMarkdownSummary(text) {
+      if (!text) return '';
+      const trimmed = text.trim();
+      // Detect if it's Markdown (starts with #)
+      if (!trimmed.startsWith('#')) return text;
+  
+      const lines = trimmed.split('\n');
+      let title = '';
+      let subtitle = '';
+  
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith('# ') && !title) {
+          title = trimmedLine.replace(/^#\s+/, '');
+        } else if (trimmedLine.startsWith('## ')) {
+          // Stop at first section
+          break;
+        } else if (title && trimmedLine && !trimmedLine.startsWith('#')) {
+          // First paragraph after title
+          subtitle = trimmedLine;
+          break;
+        }
+      }
+  
+      if (title && subtitle) {
+        return `<strong>${title}</strong> - ${subtitle}`;
+      }
+      return title || text.substring(0, 100) + '...';
+    }
+  
+    function getProjectColor(index) {
+      const colors = [
+        '#6366f1', // indigo primary
+        '#10b981', // emerald secondary
+        '#10b981', // emerald
+        '#f59e0b', // amber
+        '#8b5cf6', // violet
+        '#ef4444', // red
+        '#06b6d4', // cyan
+        '#84cc16', // lime
+        '#f97316', // orange
+        '#6366f1', // indigo
+      ];
+      return colors[index % colors.length];
+    }
+  
+    function fetchProjects() {
+      showLoading();
+      const projectsRef = ref(database, '/projects');
+      unsubscribeProjects = onValue(projectsRef, (snapshot) => {
+        const projectsInfo = snapshot.val() || {};
+        let groups = Object.keys(projectsInfo);
+  
+        // Store all projects for user management
+        allProjects = groups.map(name => ({ name, ...projectsInfo[name] }));
+  
+        // Filter projects by user permissions
+        if (!hasAllProjectsAccess && userProjects.length > 0) {
+          groups = groups.filter(projectName => userProjects.includes(projectName));
+        } else if (!hasAllProjectsAccess && userProjects.length === 0) {
+          groups = [];
+        } else {
+        }
+  
+        if (groups.length === 0) {
+          showNoProjects();
+          return;
+        }
+  
+        // Sort projects: by order field, then archived at the bottom
+        groups.sort((a, b) => {
+          const aArchived = projectsInfo[a]?.archived || false;
+          const bArchived = projectsInfo[b]?.archived || false;
+          // Archived projects always go to the bottom
+          if (aArchived !== bArchived) return aArchived ? 1 : -1;
+          // Sort by order field (lower number = higher priority)
+          const aOrder = projectsInfo[a]?.order ?? 999999;
+          const bOrder = projectsInfo[b]?.order ?? 999999;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          // Fallback to alphabetical
+          return a.localeCompare(b);
+        });
+  
+        const projectListElement = document.querySelector('.projects-container');
+  
+        const addProjectButton = canManageProjects() ? /*HTML*/`
+          <button class="add-project-btn" onclick="showAddProjectModal()">
+            <span class="plus-icon">+</span>
+            Nuevo Proyecto
+          </button>
+        ` : '';
+  
+        projectListElement.innerHTML = /*HTML*/`
+          <div class="projects-header">
+            <h1>Proyectos</h1>
+            ${addProjectButton}
+          </div>
+          <div class="projects-grid" id="projects-grid">
+            ${groups.map((project, index) => {
+              const projectData = projectsInfo[project] || {};
+              const isArchived = projectData.archived || false;
+              const abbreviation = projectData.abbreviation || project.substring(0, 3).toUpperCase();
+              const description = projectData.description
+                ? extractMarkdownSummary(projectData.description)
+                : 'Sin descripción';
+  
+              // Count developers
+              let developerCount = 0;
+              if (Array.isArray(projectData.developers)) {
+                developerCount = projectData.developers.length;
+              } else if (projectData.developers && typeof projectData.developers === 'object') {
+                developerCount = Object.keys(projectData.developers).length;
+              }
+  
+              const hasDevelopers = developerCount > 0;
+              const hasStakeholders = Array.isArray(projectData.stakeholders)
+                ? projectData.stakeholders.length > 0
+                : projectData.stakeholders && typeof projectData.stakeholders === 'object'
+                  ? Object.keys(projectData.stakeholders).length > 0
+                  : false;
+              const needsTeamConfig = !hasDevelopers || !hasStakeholders;
+              const color = getProjectColor(index);
+              const draggable = canManageProjects() && !isArchived;
+  
+              // Escape project name for safe use in HTML attributes
+              const safeProject = project.replace(/&/g, '&amp;').replace(/'/g, "\\'");
+              const safeProjectAttr = project.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  
+              return /*HTML*/`
+                <div class="project-card ${isArchived ? 'archived' : ''}"
+                     data-project="${safeProjectAttr}"
+                     ${draggable ? 'draggable="true"' : ''}
+                     onclick="navigateToProject('${safeProject}')">
+                  <div class="card-header">
+                    <div class="project-badge" style="background-color: ${color}">
+                      ${abbreviation}
+                    </div>
+                    ${canManageProjects() ? `
+                      <button class="edit-btn" onclick="event.stopPropagation(); showEditProjectModal('${safeProject}')" title="Editar proyecto">
+                        ✏️
+                      </button>
+                    ` : ''}
+                  </div>
+                  <div class="card-body">
+                    <h3 class="project-name">
+                      ${projectData.name || project}
+                      ${isArchived ? '<span class="archived-badge">Archivado</span>' : ''}
+                      ${needsTeamConfig && !isArchived ? '<span class="warning-badge" title="Añade al menos 1 developer y 1 stakeholder">⚠️</span>' : ''}
+                    </h3>
+                    <p class="project-description">${description}</p>
+                  </div>
+                  <div class="card-footer">
+                    <span class="developer-count">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                      </svg>
+                      ${developerCount} developer${developerCount !== 1 ? 's' : ''}
+                    </span>
+                    ${canManageProjects() && !isArchived ? '<span class="drag-hint">⋮⋮</span>' : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>`;
+  
+        // Setup drag and drop for admins
+        if (canManageProjects()) {
+          setupProjectsDragAndDrop();
+        }
+      }, (error) => {
+        showError('Error al cargar los proyectos. Por favor, inténtalo de nuevo.');
+      });
+    }
+  
+    window.navigateToProject = (projectId) => {
+      window.location.href = `/adminproject?projectId=${encodeURIComponent(projectId)}`;
+    };
+  
+    let draggedCard = null;
+  
+    function setupProjectsDragAndDrop() {
+      const grid = document.getElementById('projects-grid');
+      if (!grid) return;
+  
+      grid.addEventListener('dragstart', (e) => {
+        const card = e.target.closest('.project-card[draggable="true"]');
+        if (!card) return;
+        draggedCard = card;
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', card.dataset.project);
+      });
+  
+      grid.addEventListener('dragend', (e) => {
+        const card = e.target.closest('.project-card');
+        if (card) card.classList.remove('dragging');
+        draggedCard = null;
+        // Remove all drag-over classes
+        grid.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      });
+  
+      grid.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const card = e.target.closest('.project-card[draggable="true"]');
+        if (card && card !== draggedCard) {
+          // Remove previous drag-over
+          grid.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+          card.classList.add('drag-over');
+        }
+      });
+  
+      grid.addEventListener('dragleave', (e) => {
+        const card = e.target.closest('.project-card');
+        if (card) card.classList.remove('drag-over');
+      });
+  
+      grid.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const targetCard = e.target.closest('.project-card[draggable="true"]');
+        if (!targetCard || !draggedCard || targetCard === draggedCard) return;
+  
+        // Get bounding rect to determine if dropping before or after
+        const rect = targetCard.getBoundingClientRect();
+        const midpoint = rect.left + rect.width / 2;
+        const insertBefore = e.clientX < midpoint;
+  
+        if (insertBefore) {
+          grid.insertBefore(draggedCard, targetCard);
+        } else {
+          grid.insertBefore(draggedCard, targetCard.nextSibling);
+        }
+  
+        // Save new order to Firebase
+        saveProjectsOrder();
+      });
+    }
+  
+    async function saveProjectsOrder() {
+      try {
+        const grid = document.getElementById('projects-grid');
+        if (!grid) return;
+  
+        const cards = grid.querySelectorAll('.project-card[data-project]');
+        const updates = {};
+  
+        cards.forEach((card, index) => {
+          const projectName = card.dataset.project;
+          // Only update non-archived projects
+          if (!card.classList.contains('archived')) {
+            updates[`/projects/${projectName}/order`] = index;
+          }
+        });
+  
+        // Update all orders in a single batch
+        const dbRef = ref(database);
+        await update(dbRef, updates);
+  
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: { options: { message: 'Orden de proyectos guardado', type: 'success' } }
+        }));
+      } catch (error) {
+        console.error('Error saving projects order:', error);
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: { options: { message: 'Error al guardar el orden', type: 'error' } }
+        }));
+      }
+    }
+  
+    // Keep menu open if mouse is over project or sections
+    window.handleMouseEnter = (project) => {
+      clearTimeout(hoverTimeout);
+      document.querySelectorAll('.dropdown').forEach((dropdown) => {
+        dropdown.style.display = 'none';
+      });
+      const dropdown = document.getElementById(`dropdown-${project}`);
+      if (dropdown) {
+        dropdown.style.display = 'block';
+      }
+    };
+  
+    // Close menu if mouse leaves both project and sections
+    window.handleMouseLeave = (project) => {
+      hoverTimeout = setTimeout(() => {
+        const dropdown = document.getElementById(`dropdown-${project}`);
+        if (dropdown) {
+          dropdown.style.display = 'none';
+        }
+      }, 300);
+    };
+  
+    window.showAddProjectModal = () => {
+      // Demo mode: block project creation
+      if (demoModeService.isDemo()) {
+        demoModeService.showFeatureDisabled('project creation');
+        return;
+      }
+  
+      const projectForm = document.createElement('project-form');
+  
+      showModal({
+        title: 'Crear Nuevo Proyecto',
+        maxWidth: '600px',
+        maxHeight: '80vh',
+        showFooter: true,
+        button1Text: 'Crear Proyecto',
+        button2Text: 'Cancelar',
+        button1Action: () => {
+          const validation = projectForm.validateWithFeedback();
+          if (!validation.valid) {
+            const errorMsg = validation.errors.map(e => e.message).join('. ');
+            document.dispatchEvent(new CustomEvent('show-slide-notification', {
+              detail: { options: { message: errorMsg, type: 'error' } }
+            }));
+            return false;
+          }
+          createProject(projectForm);
+        },
+        button2Action: () => {
+          // Modal closes automatically
+        }
+      });
+  
+      // Add form to modal after creation
+      setTimeout(() => {
+        const modal = document.querySelector('app-modal');
+        if (modal) {
+          modal.setContent(projectForm);
+        }
+      }, 100);
+    };
+  
+    window.showEditProjectModal = async (projectName) => {
+      // Demo mode: block project editing
+      if (demoModeService.isDemo()) {
+        demoModeService.showFeatureDisabled('project editing');
+        return;
+      }
+  
+      try {
+        // Load project data
+        const projectRef = ref(database, `/projects/${projectName}`);
+        const snapshot = await get(projectRef);
+        const projectData = snapshot.val();
+  
+        if (!projectData) {
+          document.dispatchEvent(new CustomEvent('show-slide-notification', {
+            detail: { options: { message: 'No se encontraron datos del proyecto', type: 'error' } }
+          }));
+          return;
+        }
+  
+        // Load stakeholders and developers from /projects
+        const stakeholders = projectData.stakeholders || [];
+        const developers = projectData.developers || [];
+  
+        const normalizedDevelopers = normalizeDevelopersForForm(developers);
+  
+        const projectForm = document.createElement('project-form');
+  
+        // Store project data to apply after component is ready
+        const applyProjectData = () => {
+          projectForm.editMode = true;
+          projectForm.originalProjectName = projectName;
+          projectForm.projectName = projectData.name || projectName;
+          projectForm.abbreviation = projectData.abbreviation || '';
+          projectForm.scoringSystem = projectData.scoringSystem || '1-5';
+          projectForm.stakeholders = stakeholders;
+          projectForm.developers = normalizedDevelopers;
+          projectForm.allowExecutables = projectData.allowExecutables || false;
+          projectForm.description = projectData.description || '';
+          // repoUrl can be string (1 repo) or array [{url, label}] (multiple)
+          projectForm.repoUrl = projectData.repoUrl ?? projectData.repositoryUrl ?? '';
+          projectForm.languagesText = Array.isArray(projectData.languages) ? projectData.languages.join(', ') : '';
+          projectForm.frameworksText = Array.isArray(projectData.frameworks) ? projectData.frameworks.join(', ') : '';
+          projectForm.businessContext = projectData.businessContext || '';
+          // Migration: if no businessContext but agentsGuidelines exists, migrate
+          if (!projectData.businessContext && projectData.agentsGuidelines) {
+            projectForm.businessContext = projectData.agentsGuidelines;
+            document.dispatchEvent(new CustomEvent('show-slide-notification', {
+              detail: { options: {
+                message: 'Se han migrado las directrices de agents al campo "Contexto de Negocio". Revisa y guarda.',
+                type: 'info'
+              }}
+            }));
+          }
+          projectForm.useIa = Boolean(projectData.iaEnabled);
+          projectForm.iaAvailable = projectData.iaEnabled || projectForm.iaAvailable;
+          projectForm.archived = Boolean(projectData.archived);
+          projectForm.canDelete = isUserSuperAdmin; // Only superadmin can delete projects
+          projectForm.requestUpdate();
+        };
+  
+        // Apply initial data
+        applyProjectData();
+  
+        showModal({
+          title: 'Editar Proyecto',
+          maxWidth: '50dvw',
+          maxHeight: '80dvh',
+          showFooter: true,
+          button1Text: 'Guardar Cambios',
+          button2Text: 'Cancelar',
+          button1Action: () => {
+            const validation = projectForm.validateWithFeedback();
+            if (!validation.valid) {
+              const errorMsg = validation.errors.map(e => e.message).join('. ');
+              document.dispatchEvent(new CustomEvent('show-slide-notification', {
+                detail: { options: { message: errorMsg, type: 'error' } }
+              }));
+              return false;
+            }
+            updateProject(projectForm, projectName);
+          },
+          button2Action: () => {
+            // Modal closes automatically
+          }
+        });
+  
+        // Add form to modal and wait for component to be ready
+        setTimeout(() => {
+          const modal = document.querySelector('app-modal');
+          if (modal) {
+            modal.setContent(projectForm);
+  
+            // Wait for component to finish loading, then re-apply data
+            const waitForReady = () => {
+              if (!projectForm.isLoading) {
+                applyProjectData();
+              } else {
+                // Check again after a short delay
+                setTimeout(waitForReady, 50);
+              }
+            };
+            waitForReady();
+  
+            // Listen for delete event
+            projectForm.addEventListener('delete-project', (e) => {
+              const projectName = e.detail.projectName;
+              deleteProject(projectName);
+            });
+  
+            // Listen for archive/unarchive event
+            projectForm.addEventListener('archive-project', (e) => {
+              const { projectName, archived } = e.detail;
+              archiveProject(projectName, archived);
+            });
+          }
+        }, 100);
+  
+      } catch (error) {
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: { options: { message: 'Error al cargar los datos del proyecto', type: 'error' } }
+        }));
+      }
+    };
+  
+    async function createProject(projectForm) {
+      // Demo mode: block project creation entirely
+      if (demoModeService.isDemo()) {
+        demoModeService.showFeatureDisabled('project creation');
+        return;
+      }
+  
+      const formData = projectForm.getFormData();
+      const normalizedDevelopers = normalizeDevelopersForForm(formData.developers);
+      const developersWithIa = [...normalizedDevelopers];
+      if (formData.useIa) {
+        const hasIa = developersWithIa.some(dev => ((dev.id || dev.name || '') || '').toLowerCase() === 'becaria');
+        if (!hasIa) {
+          developersWithIa.push({ id: 'BecarIA', name: 'BecarIA', email: 'becaria@ia.local' });
+        }
+      }
+  
+      try {
+        // Create project in Firebase
+        const projectsRef = ref(database, '/projects');
+        const projectData = {
+          name: formData.projectName,
+          abbreviation: formData.abbreviation,
+          scoringSystem: formData.scoringSystem,
+          stakeholders: formData.stakeholders,
+          developers: developersWithIa,
+          allowExecutables: formData.allowExecutables || false,
+          description: formData.description || '',
+          repoUrl: formData.repoUrl || '',
+          languages: formData.languages || [],
+          frameworks: formData.frameworks || [],
+          businessContext: formData.businessContext || '',
+          iaEnabled: formData.useIa || false,
+          createdAt: new Date().toISOString(),
+          createdBy: auth.currentUser?.email || 'unknown'
+        };
+  
+        await set(ref(database, `/projects/${formData.projectName}`), projectData);
+  
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: { options: { message: 'Proyecto creado exitosamente!' } }
+        }));
+  
+        // Refresh projects list
+        fetchProjects();
+  
+      } catch (error) {
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: { options: { message: 'Error al crear el proyecto', type: 'error' } }
+        }));
+      }
+    }
+  
+    async function updateProject(projectForm, originalProjectName) {
+      // Demo mode: block project editing
+      if (demoModeService.isDemo()) {
+        demoModeService.showFeatureDisabled('project editing');
+        return;
+      }
+  
+      const formData = projectForm.getFormData();
+      const normalizedDevelopers = normalizeDevelopersForForm(formData.developers);
+      const developersWithIa = [...normalizedDevelopers];
+      if (formData.useIa) {
+        const hasIa = developersWithIa.some(dev => ((dev.id || dev.name || '') || '').toLowerCase() === 'becaria');
+        if (!hasIa) {
+          developersWithIa.push({ id: 'BecarIA', name: 'BecarIA', email: 'becaria@ia.local' });
+        }
+      }
+  
+      try {
+        // Get original project data to compare
+        const originalRef = ref(database, `/projects/${originalProjectName}`);
+        const originalSnapshot = await get(originalRef);
+        const originalData = originalSnapshot.val();
+  
+        const originalScoringSystem = originalData?.scoringSystem || '1-5';
+        const newScoringSystem = formData.scoringSystem;
+        const scoringSystemChanged = originalScoringSystem !== newScoringSystem;
+  
+        // Update project in Firebase (preserving order and other original fields)
+        // Build project data, excluding undefined values (Firebase doesn't accept undefined)
+        const projectData = {
+          name: formData.projectName,
+          abbreviation: formData.abbreviation,
+          scoringSystem: formData.scoringSystem,
+          stakeholders: formData.stakeholders,
+          developers: developersWithIa,
+          allowExecutables: formData.allowExecutables || false,
+          description: formData.description || '',
+          repoUrl: formData.repoUrl || '',
+          languages: formData.languages || [],
+          frameworks: formData.frameworks || [],
+          businessContext: formData.businessContext || '',
+          iaEnabled: formData.useIa || false,
+          updatedAt: new Date().toISOString(),
+          updatedBy: auth.currentUser?.email || 'unknown',
+          archived: originalData?.archived || false
+        };
+  
+        // Only include optional fields if they exist in originalData
+        if (originalData?.order !== undefined) {
+          projectData.order = originalData.order;
+        }
+        if (originalData?.createdAt !== undefined) {
+          projectData.createdAt = originalData.createdAt;
+        }
+        if (originalData?.createdBy !== undefined) {
+          projectData.createdBy = originalData.createdBy;
+        }
+  
+        // If name changed, we need to move the project
+        if (formData.projectName !== originalProjectName) {
+          // Create new project with new name
+          await set(ref(database, `/projects/${formData.projectName}`), projectData);
+          // Delete project with old name
+          await set(ref(database, `/projects/${originalProjectName}`), null);
+        } else {
+          // Only update existing project
+          await set(ref(database, `/projects/${originalProjectName}`), projectData);
+        }
+  
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: { options: { message: 'Proyecto actualizado exitosamente!' } }
+        }));
+  
+        // If scoring system changed, recalculate points
+        if (scoringSystemChanged) {
+  
+          // Use final project name (in case it was renamed)
+          const finalProjectName = formData.projectName;
+  
+          // Execute recalculation in background
+          setTimeout(async () => {
+            await recalculateProjectPoints(finalProjectName, originalScoringSystem, newScoringSystem);
+          }, 500); // Small delay to let project update complete
+        }
+  
+        // Refresh projects list
+        fetchProjects();
+  
+      } catch (error) {
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: { options: { message: 'Error al actualizar el proyecto', type: 'error' } }
+        }));
+      }
+    }
+  
+    async function archiveProject(projectName, archived) {
+      if (demoModeService.isDemo()) {
+        demoModeService.showFeatureDisabled('project archiving');
+        return;
+      }
+      try {
+        showLoader(archived ? `Archivando proyecto ${projectName}...` : `Desarchivando proyecto ${projectName}...`);
+  
+        const projectRef = ref(database, `/projects/${projectName}`);
+        const userEmail = auth.currentUser?.email || '';
+        const updates = {
+          archived: archived,
+          archivedAt: archived ? new Date().toISOString() : null,
+          archivedBy: archived ? userEmail : null
+        };
+  
+        await update(projectRef, updates);
+  
+        hideLoader();
+  
+        // Close modal
+        if (typeof modalManager !== 'undefined') {
+          modalManager.closeLastModal();
+        }
+  
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: {
+            options: {
+              message: archived ? `Proyecto ${projectName} archivado` : `Proyecto ${projectName} desarchivado`,
+              type: 'success'
+            }
+          }
+        }));
+  
+        // Refresh projects list
+        fetchProjects();
+  
+      } catch (error) {
+        console.error('Error archiving/unarchiving project:', error);
+        hideLoader();
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: { options: { message: 'Error al archivar/desarchivar el proyecto', type: 'error' } }
+        }));
+      }
+    }
+  
+    async function deleteProject(projectName) {
+      if (demoModeService.isDemo()) {
+        demoModeService.showFeatureDisabled('project deletion');
+        return;
+      }
+      try {
+  
+        showLoader(`Eliminando proyecto ${projectName}...`);
+  
+        // Delete project from /projects/
+        const projectRef = ref(database, `/projects/${projectName}`);
+        await set(projectRef, null);
+  
+        // Delete all project cards from /cards/
+        const cardsRef = ref(database, `/cards/${projectName}`);
+        await set(cardsRef, null);
+  
+        hideLoader();
+  
+        // Close the modal
+        const modal = document.querySelector('app-modal');
+        if (modal) {
+          modal.close();
+        }
+  
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: {
+            options: {
+              message: `Proyecto "${projectName}" eliminado exitosamente`,
+              type: 'success'
+            }
+          }
+        }));
+  
+        // Refresh projects list
+        fetchProjects();
+  
+      } catch (error) {
+        hideLoader();
+        document.dispatchEvent(new CustomEvent('show-slide-notification', {
+          detail: {
+            options: {
+              message: 'Error al eliminar el proyecto',
+              type: 'error'
+            }
+          }
+        }));
+      }
+    }
+  
+    function cleanupFirebaseListeners() {
+      if (unsubscribeProjects) {
+        unsubscribeProjects();
+        unsubscribeProjects = null;
+      }
+      if (unsubscribeUserProjects) {
+        unsubscribeUserProjects();
+        unsubscribeUserProjects = null;
+      }
+    }
+  
+    function onAuthStateChangedAction(user) {
+      if (user) {
+        checkSuperAdminStatus();
+      } else {
+        cleanupFirebaseListeners();
+  
+        const projectsContainer = document.querySelector('.projects-container');
+        if (projectsContainer) {
+          projectsContainer.innerHTML = '<div class="loading">Por favor, inicia sesión para ver los proyectos</div>';
+        }
+        // Reset state
+        isUserSuperAdmin = false;
+        isUserAdmin = false;
+        userProjects = [];
+        hasAllProjectsAccess = false;
+        allProjects = [];
+      }
+    }
+  
+    onAuthStateChanged(auth, onAuthStateChangedAction);
+  </script>
+  
+  <style is:global>
+    .main-container {
+      display: flex;
+      flex-direction: column;
+      padding: 2rem;
+      align-items: stretch;
+      gap: 2rem;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+      box-sizing: border-box;
+    }
+  
+    .projects-container {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1.5rem;
+      width: 100%;
+    }
+  
+    :global(.projects-header) {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      margin-bottom: 0.5rem;
+    }
+  
+    :global(.projects-header h1) {
+      margin: 0;
+      color: var(--secundary-color);
+      font-size: 1.6rem;
+    }
+  
+    :global(.add-project-btn) {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      background-color: var(--brand-secondary);
+      color: var(--text-on-secondary, #fff);
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: var(--shadow-md, 0 2px 4px rgba(0, 0, 0, 0.1));
+    }
+  
+    :global(.add-project-btn:hover) {
+      background-color: var(--brand-primary-hover, #0056b3);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg, 0 4px 8px rgba(0, 0, 0, 0.2));
+    }
+  
+    :global(.add-project-btn .plus-icon) {
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+  
+    .loading, .error, .no-projects {
+      padding: 2rem;
+      text-align: center;
+      font-size: 1.2rem;
+      color: var(--secundary-color);
+    }
+  
+    .error {
+      color: var(--color-error, #ff4444);
+    }
+  
+    /* Project Cards Grid */
+    :global(.projects-grid) {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.5rem;
+      width: 100%;
+    }
+  
+    :global(.project-card) {
+      background: var(--bg-primary, white);
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg, 0 4px 12px rgba(0, 0, 0, 0.08));
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border-default, #e5e7eb);
+    }
+  
+    :global(.project-card:hover) {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-xl, 0 12px 24px rgba(0, 0, 0, 0.12));
+    }
+  
+    :global(.project-card.archived) {
+      opacity: 0.65;
+      background: var(--bg-secondary, #f8f9fa);
+    }
+  
+    :global(.project-card.dragging) {
+      opacity: 0.5;
+      transform: scale(0.98);
+    }
+  
+    :global(.project-card.drag-over) {
+      border: 2px dashed var(--brand-secondary);
+    }
+  
+    :global(.card-header) {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 1.25rem 1.25rem 0.75rem;
+    }
+  
+    :global(.project-badge) {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-on-primary, #fff);
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      box-shadow: var(--shadow-lg, 0 2px 8px rgba(0, 0, 0, 0.15));
+    }
+  
+    :global(.edit-btn) {
+      background: var(--bg-secondary, #f1f3f5);
+      border: 1px solid var(--border-default, #dee2e6);
+      border-radius: 8px;
+      cursor: pointer;
+      padding: 0.4rem 0.6rem;
+      font-size: 0.9rem;
+      transition: all 0.15s ease;
+      opacity: 0;
+    }
+  
+    :global(.project-card:hover .edit-btn) {
+      opacity: 1;
+    }
+  
+    :global(.edit-btn:hover) {
+      background: var(--bg-hover, #e7f1ff);
+      transform: scale(1.05);
+    }
+  
+    :global(.card-body) {
+      padding: 0 1.25rem;
+      flex: 1;
+    }
+  
+    :global(.project-name) {
+      margin: 0 0 0.5rem;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--text-primary, #1f2937);
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+  
+    :global(.archived-badge) {
+      background-color: var(--text-muted, #64748b);
+      color: var(--text-on-primary, #fff);
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+  
+    :global(.warning-badge) {
+      font-size: 0.9rem;
+      cursor: help;
+    }
+  
+    :global(.project-description) {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--text-muted, #6b7280);
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 2.7rem;
+    }
+  
+    :global(.card-footer) {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      border-top: 1px solid var(--border-subtle, #f1f3f5);
+      margin-top: auto;
+    }
+  
+    :global(.developer-count) {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+      color: var(--text-muted, #6b7280);
+      font-weight: 500;
+    }
+  
+    :global(.developer-count svg) {
+      opacity: 0.7;
+    }
+  
+    :global(.drag-hint) {
+      color: var(--text-muted, #adb5bd);
+      font-size: 1.1rem;
+      cursor: grab;
+      user-select: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+  
+    :global(.project-card:hover .drag-hint) {
+      opacity: 1;
+    }
+  
+    /* Loader styles */
+    :global(#scoring-system-loader) {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 9999;
+    }
+  
+    :global(.loader-backdrop) {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--modal-overlay-bg, rgba(0, 0, 0, 0.7));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  
+    :global(.loader-content) {
+      background: var(--bg-primary, white);
+      padding: 2rem;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: var(--shadow-lg, 0 4px 8px rgba(0, 0, 0, 0.3));
+    }
+  
+    :global(.loader-spinner) {
+      width: 40px;
+      height: 40px;
+      border: 4px solid var(--border-subtle, #f3f3f3);
+      border-top: 4px solid var(--brand-secondary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+  
+    :global(.loader-message) {
+      margin: 0;
+      color: var(--secundary-color);
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+  
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </Layout>
