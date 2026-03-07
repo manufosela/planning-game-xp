@@ -37,7 +37,6 @@ function isActiveLink(href: string, currentPath: string): boolean {
   {navItems.map(item => (
     <a
       href={item.href}
-      data-astro-reload
       class:list={[
         "nav-link",
         { active: isActiveLink(item.href, currentPath) },
