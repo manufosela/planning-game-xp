@@ -62,6 +62,23 @@ export const HoursReportTabStyles = css`
     cursor: not-allowed;
   }
 
+  .btn-export {
+    padding: 0.5rem 1.25rem;
+    border: 1px solid var(--primary-color, #4a90d9);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    color: var(--primary-color, #4a90d9);
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .btn-export:hover {
+    background: var(--primary-color, #4a90d9);
+    color: #fff;
+  }
+
   /* Loading */
   .loading-container {
     display: flex;

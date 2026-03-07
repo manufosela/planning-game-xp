@@ -67,6 +67,11 @@ class HoursReportTab extends LitElement {
         <button class="btn-generate" @click=${this._generateReport} ?disabled=${this._loading}>
           Generar Informe
         </button>
+        ${this._report && !this._loading ? html`
+          <button class="btn-export" @click=${this._exportPDF}>
+            Exportar PDF
+          </button>
+        ` : nothing}
       </div>
     `;
   }
@@ -264,6 +269,113 @@ class HoursReportTab extends LitElement {
         </td>
       </tr>
     `;
+  }
+
+  async _exportPDF() {
+    const { weeks, groups, grandTotals } = this._report;
+    const months = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+    ];
+    const monthName = months[this._selectedMonth - 1];
+    const title = `Informe de Horas - ${monthName} ${this._selectedYear}`;
+
+    const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/+esm');
+    const autoTableModule = await import('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/+esm');
+    if (autoTableModule.default) autoTableModule.default(jsPDF);
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+    doc.setFontSize(16);
+    doc.text(title, 14, 15);
+    doc.setFontSize(9);
+    doc.text(`Generado: ${new Date().toLocaleDateString('es-ES')}`, 14, 21);
+
+    const head = [['Developer', 'Tipo', ...weeks, 'Total']];
+    const body = this._buildPdfTableBody(groups, weeks, grandTotals);
+
+    doc.autoTable({
+      head,
+      body,
+      startY: 26,
+      theme: 'grid',
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [74, 144, 217], textColor: 255, fontStyle: 'bold' },
+      columnStyles: {
+        0: { cellWidth: 40 },
+        1: { cellWidth: 28 },
+      },
+      didParseCell: (data) => {
+        if (data.row.raw && data.row.raw._rowType === 'group-header') {
+          data.cell.styles.fillColor = [74, 144, 217];
+          data.cell.styles.textColor = 255;
+          data.cell.styles.fontStyle = 'bold';
+        } else if (data.row.raw && data.row.raw._rowType === 'subtotal') {
+          data.cell.styles.fillColor = [230, 230, 230];
+          data.cell.styles.fontStyle = 'bold';
+        } else if (data.row.raw && data.row.raw._rowType === 'grand-total') {
+          data.cell.styles.fillColor = [200, 200, 200];
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fontSize = 8;
+        }
+      },
+    });
+
+    doc.save(`informe-horas-${this._selectedYear}-${String(this._selectedMonth).padStart(2, '0')}.pdf`);
+  }
+
+  _buildPdfTableBody(groups, weeks, grandTotals) {
+    const groupOrder = ['internal', 'external', 'manager', 'unclassified'];
+    const body = [];
+
+    for (const groupKey of groupOrder) {
+      const group = groups[groupKey];
+      if (!group) continue;
+
+      const headerRow = { _rowType: 'group-header' };
+      const headerCells = [{ content: group.label, colSpan: weeks.length + 3, styles: { halign: 'left' } }];
+      Object.assign(headerRow, ...headerCells.map((c, i) => ({ [i]: c })));
+      body.push(headerRow);
+
+      const devEntries = Object.entries(group.developers);
+      for (const [, dev] of devEntries) {
+        // Development row
+        const devRow = [dev.name, 'Desarrollo SW'];
+        for (const w of weeks) devRow.push(this._formatHours(dev.weeks[w]?.development || 0));
+        devRow.push(this._formatHours(dev.totals.development));
+        body.push(devRow);
+
+        // Maintenance row
+        const maintRow = ['', 'Mantenimiento'];
+        for (const w of weeks) maintRow.push(this._formatHours(dev.weeks[w]?.maintenance || 0));
+        maintRow.push(this._formatHours(dev.totals.maintenance));
+        body.push(maintRow);
+      }
+
+      if (devEntries.length === 0) {
+        body.push([{ content: 'Sin datos', colSpan: weeks.length + 3, styles: { halign: 'center', fontStyle: 'italic' } }]);
+      }
+
+      // Subtotals
+      const weeklySubtotals = {};
+      for (const w of weeks) weeklySubtotals[w] = 0;
+      for (const dev of Object.values(group.developers)) {
+        for (const w of weeks) {
+          weeklySubtotals[w] += (dev.weeks[w]?.development || 0) + (dev.weeks[w]?.maintenance || 0);
+        }
+      }
+      const totalSubtotal = group.subtotals.development + group.subtotals.maintenance;
+      const subtotalRow = Object.assign(['Subtotal', '', ...weeks.map(w => this._formatHours(weeklySubtotals[w])), this._formatHours(totalSubtotal)], { _rowType: 'subtotal' });
+      body.push(subtotalRow);
+    }
+
+    // Grand totals
+    const emptyWeeks = weeks.map(() => '');
+    body.push(Object.assign(['TOTAL HORAS DESARROLLO', '', ...emptyWeeks, this._formatHours(grandTotals.development)], { _rowType: 'grand-total' }));
+    body.push(Object.assign(['TOTAL HORAS MANTENIMIENTO', '', ...emptyWeeks, this._formatHours(grandTotals.maintenance)], { _rowType: 'grand-total' }));
+    body.push(Object.assign(['TOTAL HORAS', '', ...emptyWeeks, this._formatHours(grandTotals.development + grandTotals.maintenance)], { _rowType: 'grand-total' }));
+
+    return body;
   }
 
   _toggleDetail(devId) {

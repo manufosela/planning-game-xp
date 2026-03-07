@@ -191,4 +191,130 @@ describe('HoursReportTab', () => {
       expect(card.endDate.substring(0, 10)).toBe('2026-03-05');
     });
   });
+
+  describe('PDF export table body builder', () => {
+    // Reproduce _buildPdfTableBody logic from HoursReportTab.js
+    function buildPdfTableBody(groups, weeks, grandTotals) {
+      const groupOrder = ['internal', 'external', 'manager', 'unclassified'];
+      const body = [];
+
+      for (const groupKey of groupOrder) {
+        const group = groups[groupKey];
+        if (!group) continue;
+
+        // Group header
+        const headerRow = { _rowType: 'group-header' };
+        body.push(headerRow);
+
+        const devEntries = Object.entries(group.developers);
+        for (const [, dev] of devEntries) {
+          const devRow = [dev.name, 'Desarrollo SW'];
+          for (const w of weeks) devRow.push(formatHours(dev.weeks[w]?.development || 0));
+          devRow.push(formatHours(dev.totals.development));
+          body.push(devRow);
+
+          const maintRow = ['', 'Mantenimiento'];
+          for (const w of weeks) maintRow.push(formatHours(dev.weeks[w]?.maintenance || 0));
+          maintRow.push(formatHours(dev.totals.maintenance));
+          body.push(maintRow);
+        }
+
+        if (devEntries.length === 0) {
+          body.push([{ content: 'Sin datos', colSpan: weeks.length + 3 }]);
+        }
+
+        // Subtotals
+        const weeklySubtotals = {};
+        for (const w of weeks) weeklySubtotals[w] = 0;
+        for (const dev of Object.values(group.developers)) {
+          for (const w of weeks) {
+            weeklySubtotals[w] += (dev.weeks[w]?.development || 0) + (dev.weeks[w]?.maintenance || 0);
+          }
+        }
+        const totalSubtotal = group.subtotals.development + group.subtotals.maintenance;
+        const subtotalRow = Object.assign(
+          ['Subtotal', '', ...weeks.map(w => formatHours(weeklySubtotals[w])), formatHours(totalSubtotal)],
+          { _rowType: 'subtotal' }
+        );
+        body.push(subtotalRow);
+      }
+
+      const emptyWeeks = weeks.map(() => '');
+      body.push(Object.assign(['TOTAL HORAS DESARROLLO', '', ...emptyWeeks, formatHours(grandTotals.development)], { _rowType: 'grand-total' }));
+      body.push(Object.assign(['TOTAL HORAS MANTENIMIENTO', '', ...emptyWeeks, formatHours(grandTotals.maintenance)], { _rowType: 'grand-total' }));
+      body.push(Object.assign(['TOTAL HORAS', '', ...emptyWeeks, formatHours(grandTotals.development + grandTotals.maintenance)], { _rowType: 'grand-total' }));
+
+      return body;
+    }
+
+    const sampleReport = {
+      weeks: ['S1', 'S2'],
+      groups: {
+        internal: {
+          label: 'Internos',
+          developers: {
+            dev_001: {
+              name: 'Dev Uno',
+              weeks: { S1: { development: 8, maintenance: 2 }, S2: { development: 16, maintenance: 0 } },
+              totals: { development: 24, maintenance: 2 },
+            },
+          },
+          subtotals: { development: 24, maintenance: 2 },
+        },
+        external: { label: 'Externos', developers: {}, subtotals: { development: 0, maintenance: 0 } },
+      },
+      grandTotals: { development: 24, maintenance: 2 },
+    };
+
+    it('should produce group-header rows for each group', () => {
+      const body = buildPdfTableBody(sampleReport.groups, sampleReport.weeks, sampleReport.grandTotals);
+      const headers = body.filter(r => r._rowType === 'group-header');
+      expect(headers).toHaveLength(2);
+    });
+
+    it('should produce two rows per developer (development + maintenance)', () => {
+      const body = buildPdfTableBody(sampleReport.groups, sampleReport.weeks, sampleReport.grandTotals);
+      const devRows = body.filter(r => Array.isArray(r) && !r._rowType && r[0] === 'Dev Uno');
+      expect(devRows).toHaveLength(1);
+      expect(devRows[0][1]).toBe('Desarrollo SW');
+      const maintRows = body.filter(r => Array.isArray(r) && !r._rowType && r[1] === 'Mantenimiento');
+      expect(maintRows).toHaveLength(1);
+    });
+
+    it('should produce subtotal rows with correct values', () => {
+      const body = buildPdfTableBody(sampleReport.groups, sampleReport.weeks, sampleReport.grandTotals);
+      const subtotals = body.filter(r => r._rowType === 'subtotal');
+      expect(subtotals).toHaveLength(2);
+      // Internal subtotal: S1=10, S2=16, Total=26
+      expect(subtotals[0][0]).toBe('Subtotal');
+      expect(subtotals[0][2]).toBe('10');
+      expect(subtotals[0][3]).toBe('16');
+      expect(subtotals[0][4]).toBe('26');
+    });
+
+    it('should produce 3 grand total rows', () => {
+      const body = buildPdfTableBody(sampleReport.groups, sampleReport.weeks, sampleReport.grandTotals);
+      const grandTotals = body.filter(r => r._rowType === 'grand-total');
+      expect(grandTotals).toHaveLength(3);
+      expect(grandTotals[0][0]).toBe('TOTAL HORAS DESARROLLO');
+      expect(grandTotals[0][grandTotals[0].length - 1]).toBe('24');
+      expect(grandTotals[1][0]).toBe('TOTAL HORAS MANTENIMIENTO');
+      expect(grandTotals[1][grandTotals[1].length - 1]).toBe('2');
+      expect(grandTotals[2][0]).toBe('TOTAL HORAS');
+      expect(grandTotals[2][grandTotals[2].length - 1]).toBe('26');
+    });
+
+    it('should show "Sin datos" for empty groups', () => {
+      const body = buildPdfTableBody(sampleReport.groups, sampleReport.weeks, sampleReport.grandTotals);
+      const emptyRows = body.filter(r => Array.isArray(r) && r[0]?.content === 'Sin datos');
+      expect(emptyRows).toHaveLength(1);
+    });
+
+    it('should have correct column count per dev row', () => {
+      const body = buildPdfTableBody(sampleReport.groups, sampleReport.weeks, sampleReport.grandTotals);
+      const devRow = body.find(r => Array.isArray(r) && r[0] === 'Dev Uno');
+      // Developer + Tipo + 2 weeks + Total = 5
+      expect(devRow).toHaveLength(5);
+    });
+  });
 });
