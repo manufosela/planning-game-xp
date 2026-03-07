@@ -33,7 +33,7 @@ function isActiveLink(href: string, currentPath: string): boolean {
 }
 ---
 
-<nav class="menu-nav" id="menunav" transition:animate="none">
+<nav class="menu-nav" id="menunav" transition:persist="shell-nav" transition:animate="none">
   {navItems.map(item => (
     <a
       href={item.href}

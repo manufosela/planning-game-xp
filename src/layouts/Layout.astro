@@ -104,7 +104,7 @@ let user = null;
     data-shell-partial={shellPartial}
     data-shell-routes={shellRoutes ? JSON.stringify(shellRoutes) : undefined}
   >
-    <header transition:animate="none">
+    <header transition:persist="shell-header" transition:animate="none">
       <a href="/" class="header-logos" data-astro-reload>
         <img src="/images/icono_PGame.png" alt="Planning Game" class="planning-game-icon" />
         <span id="orgBranding" class="org-branding hidden"></span>
