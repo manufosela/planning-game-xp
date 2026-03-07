@@ -1,0 +1,47 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // --- Helper Functions for Permissions ---
+
+    // Check if user has the 'allowed' custom claim (set via Firebase Auth Custom Claims)
+    function isAllowed() {
+      return request.auth != null && request.auth.token.allowed == true;
+    }
+
+    // Check if user has the 'isAppAdmin' custom claim
+    function isAppAdmin() {
+      return request.auth != null && request.auth.token.isAppAdmin == true;
+    }
+
+    // Can upload apps: admins or users with 'isAppUploader' custom claim
+    function canUploadApps() {
+      return isAppAdmin() || (request.auth != null && request.auth.token.isAppUploader == true);
+    }
+
+    // --- Path-specific Rules ---
+
+    match /apps/{projectId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if canUploadApps();
+      allow delete: if isAppAdmin();
+    }
+
+    match /c4d/{fileType}/{fileName} {
+      allow read, write: if isAllowed();
+    }
+
+    match /bug-attachments/{projectId}/{cardId}/{fileName} {
+      allow read, write: if isAllowed();
+    }
+
+    match /task-attachments/{projectId}/{cardId}/{fileName} {
+      allow read, write: if isAllowed();
+    }
+
+    match /{allPaths=**} {
+      allow read: if isAllowed();
+      allow write: if isAllowed();
+    }
+  }
+}
