@@ -314,32 +314,38 @@
 </script>
 
 <script>
-  // Show "select project" message when DOM is ready
-  document.addEventListener('astro:page-load', () => {
+  import { onPageEnter as onPageEnterNav, registerCleanup as registerCleanupNav } from '/js/utils/page-lifecycle.js';
+
+  onPageEnterNav(() => {
+    // Show "select project" message when DOM is ready
     if (!window.currentProjectId) {
       const noProjectMsg = document.getElementById('noProjectMessage');
       if (noProjectMsg) {
         noProjectMsg.style.display = 'flex';
       }
     }
-  });
 
-  // Navigate to selected project when changed from the selector
-  document.addEventListener('project-changed', (e) => {
-    const projectId = e.detail?.projectId;
-    if (projectId) {
-      const url = new URL(window.location);
-      url.searchParams.set('projectId', projectId);
-      if (window.appShellRouter?.navigate) {
-        window.appShellRouter.navigate(url.toString());
-      } else {
-        window.location.href = url.toString();
+    // Navigate to selected project when changed from the selector
+    const handleProjectChanged = (e) => {
+      const projectId = e.detail?.projectId;
+      if (projectId) {
+        const url = new URL(window.location);
+        url.searchParams.set('projectId', projectId);
+        if (window.appShellRouter?.navigate) {
+          window.appShellRouter.navigate(url.toString());
+        } else {
+          window.location.href = url.toString();
+        }
       }
-    }
+    };
+    document.addEventListener('project-changed', handleProjectChanged);
+    registerCleanupNav(() => document.removeEventListener('project-changed', handleProjectChanged));
   });
 </script>
 
-<script>
+<script type="module">
+  import { onPageEnter as onPageEnterMain, registerCleanup as registerCleanupMain } from '/js/utils/page-lifecycle.js';
+
   // Variables globales para permisos
   let isResponsable = false;
   let currentUserRole = { isResponsable: false };
@@ -426,7 +432,7 @@
   };
 
   // Handler for component permission requests
-  document.addEventListener('request-user-permissions', function(e) {
+  const handleRequestUserPermissions = function(e) {
     const { requestId, cardType, cardId } = e.detail;
 
     const responseEvent = new CustomEvent('user-permissions-response', {
@@ -440,10 +446,11 @@
     });
 
     setTimeout(() => document.dispatchEvent(responseEvent), 0);
-  });
+  };
+  document.addEventListener('request-user-permissions', handleRequestUserPermissions);
 
   // Handler for TaskCard permissions
-  document.addEventListener('request-task-permissions', function(e) {
+  const handleRequestTaskPermissions = function(e) {
     const { cardId, cardType, userEmail, createdBy, callback } = e.detail;
 
     // All authenticated users can edit tasks; admins can also delete
@@ -462,10 +469,11 @@
     if (callback && typeof callback === 'function') {
       callback(permissions);
     }
-  });
+  };
+  document.addEventListener('request-task-permissions', handleRequestTaskPermissions);
 
   // Handler for BugCard permissions
-  document.addEventListener('request-bug-permissions', function(e) {
+  const handleRequestBugPermissions = function(e) {
     const { cardId, cardType, userEmail, createdBy, callback } = e.detail;
 
     // All authenticated users can edit bugs; admins can delete any, owners can delete own
@@ -486,10 +494,11 @@
     if (callback && typeof callback === 'function') {
       callback(permissions);
     }
-  });
+  };
+  document.addEventListener('request-bug-permissions', handleRequestBugPermissions);
 
   // Handler for cards with ownership logic (ProposalCard and QACard)
-  document.addEventListener('request-ownership-permissions', function(e) {
+  const handleRequestOwnershipPermissions = function(e) {
     const { cardId, cardType, userEmail, createdBy, callback } = e.detail;
 
     const currentUserEmail = document.body.dataset.userEmail;
@@ -511,10 +520,11 @@
     if (callback && typeof callback === 'function') {
       callback(permissions);
     }
-  });
+  };
+  document.addEventListener('request-ownership-permissions', handleRequestOwnershipPermissions);
 
   // Handler for other card types (Sprint, Epic) - admin only
-  document.addEventListener('request-card-permissions', function(e) {
+  const handleRequestCardPermissions = function(e) {
     const { cardId, cardType, userEmail, createdBy, callback } = e.detail;
 
     // Epics and Sprints: only admins can edit
@@ -532,7 +542,8 @@
     if (callback && typeof callback === 'function') {
       callback(permissions);
     }
-  });
+  };
+  document.addEventListener('request-card-permissions', handleRequestCardPermissions);
 
   // Sistema de gestión de modales a nivel de aplicación
   class ModalStateManager {
@@ -1118,12 +1129,19 @@ return;
   };
 
   // Inicializar cuando el DOM esté listo
-  document.addEventListener('astro:page-load', function() {
+  onPageEnterMain(() => {
+    // Register cleanup for permission handlers
+    registerCleanupMain(() => document.removeEventListener('request-user-permissions', handleRequestUserPermissions));
+    registerCleanupMain(() => document.removeEventListener('request-task-permissions', handleRequestTaskPermissions));
+    registerCleanupMain(() => document.removeEventListener('request-bug-permissions', handleRequestBugPermissions));
+    registerCleanupMain(() => document.removeEventListener('request-ownership-permissions', handleRequestOwnershipPermissions));
+    registerCleanupMain(() => document.removeEventListener('request-card-permissions', handleRequestCardPermissions));
+
 // Inicializar gestor de modales
     window.modalStateManager = new ModalStateManager();
 
     // Listen for project changes to update doc buttons, ADR list, and tab visibility
-    document.addEventListener('project-changed', function(e) {
+    const handleProjectChangedMain = function(e) {
       const projectId = e.detail?.projectId;
       if (projectId && window.projects && window.projects[projectId]) {
         const projectData = window.projects[projectId];
@@ -1142,7 +1160,9 @@ return;
       if (devPlansSection && projectId) {
         devPlansSection.projectId = projectId;
       }
-    });
+    };
+    document.addEventListener('project-changed', handleProjectChangedMain);
+    registerCleanupMain(() => document.removeEventListener('project-changed', handleProjectChangedMain));
 
     // Update doc buttons, ADR list, and tab visibility on initial load
     const checkAndUpdateDocButtons = () => {
@@ -1174,7 +1194,7 @@ return;
     window.updateTabVisibility();
 
     // Listener for year-based permission changes
-    document.addEventListener('year-permissions-updated', function(e) {
+    const handleYearPermissions = function(e) {
       const { year, isPastYear, isYearReadOnly: yearReadOnly } = e.detail;
       isYearReadOnly = yearReadOnly;
 
@@ -1183,7 +1203,9 @@ return;
 
       // Notify components about permission changes
       window.notifyPermissionsUpdate();
-    });
+    };
+    document.addEventListener('year-permissions-updated', handleYearPermissions);
+    registerCleanupMain(() => document.removeEventListener('year-permissions-updated', handleYearPermissions));
   });
 </script>
 
@@ -1191,11 +1213,12 @@ return;
 <script type="module">
   import { modalService } from '/js/services/modal-service.js';
   import { URLStateManager } from '/js/utils/url-utils.js';
+  import { onPageEnter as onPageEnterUrl, registerCleanup as registerCleanupUrl } from '/js/utils/page-lifecycle.js';
 
   window.modalService = modalService;
 
   // Restore section from URL hash on page load
-  document.addEventListener('astro:page-load', () => {
+  onPageEnterUrl(() => {
     const urlState = URLStateManager.getState();
 
     // Restore section (tab) from hash
@@ -1203,20 +1226,24 @@ return;
       const sectionTab = document.querySelector(`[data-section="${urlState.section}"]`);
       if (sectionTab) {
         // Wait a bit for the tab system to initialize
-        setTimeout(() => {
+        const tabTimer = setTimeout(() => {
           sectionTab.click();
         }, 100);
+        registerCleanupUrl(() => clearTimeout(tabTimer));
       }
     }
-  });
 
-  // Listen for browser back/forward navigation
-  URLStateManager.onPopState((state) => {
+    // Listen for browser back/forward navigation
+    const popStateCleanup = URLStateManager.onPopState((state) => {
     if (state.section) {
       const sectionTab = document.querySelector(`[data-section="${state.section}"]`);
       if (sectionTab) {
         sectionTab.click();
       }
+    }
+    });
+    if (typeof popStateCleanup === 'function') {
+      registerCleanupUrl(popStateCleanup);
     }
   });
 </script>
@@ -1228,6 +1255,7 @@ import 'https://esm.sh/@manufosela/md-renderer';
 import { database, ref, get, set, update, auth, superAdminEmail } from '/firebase-config.js';
 import { FirebaseService } from '/js/services/firebase-service.js';
 import { encodeEmailForFirebase } from '/js/utils/email-sanitizer.js';
+import { onPageEnter as onPageEnterEdit, registerCleanup as registerCleanupEdit } from '/js/utils/page-lifecycle.js';
 import '/js/wc/ProjectForm.js';
 import '/js/wc/CardSearch.js';
 
@@ -1267,9 +1295,10 @@ function initEditProjectButton() {
 }
 
 // Listen for project changes
-document.addEventListener('project-changed', (e) => {
+const handleProjectChangedEdit = (e) => {
   currentProjectName = e.detail?.projectId || e.detail?.projectName || '';
-});
+};
+document.addEventListener('project-changed', handleProjectChangedEdit);
 
 async function showEditProjectModal(projectName) {
   try {
@@ -1613,29 +1642,40 @@ async function loadTrashCards(projectName) {
   }
 }
 
-document.addEventListener('tab-changed', (e) => {
+const handleTabChanged = (e) => {
   const section = e.detail?.section;
   if (section === 'trash') {
     const projectName = new URLSearchParams(window.location.search).get('projectId');
     if (projectName) loadTrashCards(projectName);
   }
-});
+};
+document.addEventListener('tab-changed', handleTabChanged);
 
 // Invalidate trash cache when a card is deleted or restored so it reloads on next visit
-document.addEventListener('card-deleted', () => {
+const handleCardDeleted = () => {
   trashLoaded = false;
-});
-document.addEventListener('card-restored', () => {
+};
+document.addEventListener('card-deleted', handleCardDeleted);
+const handleCardRestored = () => {
   trashLoaded = false;
-});
+};
+document.addEventListener('card-restored', handleCardRestored);
 
 // Initialize on page load
-document.addEventListener('astro:page-load', () => {
+onPageEnterEdit(() => {
   initEditProjectButton();
+
+  // Register cleanups for top-level listeners
+  registerCleanupEdit(() => document.removeEventListener('project-changed', handleProjectChangedEdit));
+  registerCleanupEdit(() => document.removeEventListener('tab-changed', handleTabChanged));
+  registerCleanupEdit(() => document.removeEventListener('card-deleted', handleCardDeleted));
+  registerCleanupEdit(() => document.removeEventListener('card-restored', handleCardRestored));
 });
 </script>
 
 <script type="module">
+import { onPageEnter as onPageEnterGuide, registerCleanup as registerCleanupGuide } from '/js/utils/page-lifecycle.js';
+
 // Task Guide Modal
   const taskGuideStyles = `
     <style>
@@ -1814,14 +1854,16 @@ document.addEventListener('astro:page-load', () => {
   }
 
   // Add event listener when DOM is ready
-  document.addEventListener('astro:page-load', () => {
+  onPageEnterGuide(() => {
     const guideBtn = document.getElementById('taskGuideBtn');
     if (guideBtn) {
-      guideBtn.addEventListener('click', (e) => {
+      const handleGuideClick = (e) => {
         e.preventDefault();
         e.stopPropagation();
         showTaskGuide();
-      });
+      };
+      guideBtn.addEventListener('click', handleGuideClick);
+      registerCleanupGuide(() => guideBtn.removeEventListener('click', handleGuideClick));
     }
   });
 </script>
