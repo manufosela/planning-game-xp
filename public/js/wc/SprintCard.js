@@ -1052,8 +1052,18 @@ if (!this.demoVideo) {
   _handleRealDevPointsChange(e) { this.devPoints = Number(e.target.value); }
   _handleRetrospectiveChange(e) { this.retrospective = e.target.value; }
   _handleNotesChange(e) { this.notes = e.target.value; }
-  _handleStartDateChange(e) { this.startDate = e.target.value; }
-  _handleEndDateChange(e) { this.endDate = e.target.value; }
+  _handleStartDateChange(e) {
+    this.startDate = e.target.value;
+    this._enforceDateCoherence();
+  }
+
+  _handleEndDateChange(e) {
+    if (!this._validateEndDateChange(e.target.value)) {
+      e.target.value = this.endDate || '';
+      return;
+    }
+    this.endDate = e.target.value;
+  }
   _handleYearChange(e) { this.year = Number(e.target.value); }
   _handleDemoVideoUrlChange(e) { this.demoVideoUrl = e.target.value; }
   _handleDemoSummaryChange(e) { this.demoSummary = e.target.value; }

@@ -3573,8 +3573,19 @@ this._showNotification(`No se pudo generar Acceptance Criteria con IA: ${reason}
     this.handleStatusPriorityChange('devPoints', newPoints, previousPoints);
   }
 
-  _handleStartDateChange(e) { this.startDate = generateTimestamp(e.target.value, 'start'); }
-  _handleEndDateChange(e) { this.endDate = generateTimestamp(e.target.value, 'end'); }
+  _handleStartDateChange(e) {
+    this.startDate = generateTimestamp(e.target.value, 'start');
+    this._enforceDateCoherence();
+  }
+
+  _handleEndDateChange(e) {
+    const newEnd = generateTimestamp(e.target.value, 'end');
+    if (!this._validateEndDateChange(newEnd)) {
+      e.target.value = this.endDate ? extractDateTimeLocal(this.endDate, 'end') : '';
+      return;
+    }
+    this.endDate = newEnd;
+  }
   _handleSprintChange(e) {
     const newValue = e.target.value;
     if (this.sprint !== newValue) {

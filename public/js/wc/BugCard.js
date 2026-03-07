@@ -1742,14 +1742,16 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
    */
   _handleStartDateChange(e) {
     this.startDate = generateTimestamp(e.target.value, 'start');
+    this._enforceDateCoherence();
   }
 
-  /**
-   * Maneja el cambio en el campo End Date.
-   * @param {Event} e - Evento de cambio del input.
-   */
   _handleEndDateChange(e) {
-    this.endDate = generateTimestamp(e.target.value, 'end');
+    const newEnd = generateTimestamp(e.target.value, 'end');
+    if (!this._validateEndDateChange(newEnd)) {
+      e.target.value = this.endDate ? extractDateTimeLocal(this.endDate, 'end') : '';
+      return;
+    }
+    this.endDate = newEnd;
   }
 
   /**

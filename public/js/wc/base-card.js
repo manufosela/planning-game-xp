@@ -453,6 +453,29 @@ this.canEditPermission = permissions.canEdit || false;
     return new Date(this.endDate) >= new Date(this.startDate);
   }
 
+  /**
+   * Call after startDate changes. If endDate exists and is now before startDate, clear it.
+   */
+  _enforceDateCoherence() {
+    if (this.startDate && this.endDate && new Date(this.endDate) < new Date(this.startDate)) {
+      this.endDate = '';
+      this._showNotification('Fecha de fin borrada: era anterior a la nueva fecha de inicio', 'warning');
+    }
+  }
+
+  /**
+   * Validate endDate change. If before startDate, reject it.
+   * @returns {boolean} true if endDate is valid
+   */
+  _validateEndDateChange(newEndDate) {
+    if (!this.startDate || !newEndDate) return true;
+    if (new Date(newEndDate) < new Date(this.startDate)) {
+      this._showNotification('La fecha de fin no puede ser anterior a la fecha de inicio', 'error');
+      return false;
+    }
+    return true;
+  }
+
   _showNotification(message, type = 'info') {
     const notification = document.createElement('slide-notification');
     notification.message = message;

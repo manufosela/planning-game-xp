@@ -502,8 +502,14 @@ this.stakeholders = [];
 
   _handleStartDateChange(e) {
     this.startDate = e.target.value;
+    this._enforceDateCoherence();
   }
+
   _handleEndDateChange(e) {
+    if (!this._validateEndDateChange(e.target.value)) {
+      e.target.value = this.endDate || '';
+      return;
+    }
     this.endDate = e.target.value;
   }
   _handleYearChange(e) {
