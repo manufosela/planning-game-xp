@@ -21,6 +21,7 @@ pnpm-debug.log*
 .env.production
 !.env.example
 !functions/.env.example
+!functions/.env.demo
 
 # API Keys and secrets (stored in Google Drive IT)
 API_KEYS.txt
@@ -89,6 +90,7 @@ scripts/*-credentials.sh
 !.claude/settings.json
 !public/theme-config.example.json
 !public/theme-config.json
+!public/theme-config.demo.json
 !storage.rules.example
 !database.rules.example.json
 *.json:Zone.Identifier

@@ -37,6 +37,7 @@
     "build:all": "./scripts/build-all.sh",
     "deploy:all": "./scripts/deploy-all.sh",
     "emulator": "node scripts/instance-manager.cjs select && ./scripts/emulation/start-emulators.sh",
+    "demo": "./scripts/start-demo.sh",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
