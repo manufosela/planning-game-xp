@@ -9,24 +9,39 @@
 
 <script type="module">
   import '/js/wc/GlobalConfigList.js';
+  import { onPageEnter, registerCleanup } from '/js/utils/page-lifecycle.js';
 
-  // Handle events
-  document.getElementById('globalConfigList')?.addEventListener('config-saved', (e) => {
-    document.dispatchEvent(new CustomEvent('show-slide-notification', {
-      detail: { options: { message: `${e.detail.name} saved successfully`, type: 'success' } }
-    }));
-  });
+  onPageEnter(() => {
+    const el = document.getElementById('globalConfigList');
+    if (!el) return;
 
-  document.getElementById('globalConfigList')?.addEventListener('config-deleted', (e) => {
-    document.dispatchEvent(new CustomEvent('show-slide-notification', {
-      detail: { options: { message: `${e.detail.name} deleted`, type: 'info' } }
-    }));
-  });
+    const onSaved = (e) => {
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: `${e.detail.name} saved successfully`, type: 'success' } }
+      }));
+    };
 
-  document.getElementById('globalConfigList')?.addEventListener('config-created', (e) => {
-    document.dispatchEvent(new CustomEvent('show-slide-notification', {
-      detail: { options: { message: `New config created`, type: 'success' } }
-    }));
+    const onDeleted = (e) => {
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: `${e.detail.name} deleted`, type: 'info' } }
+      }));
+    };
+
+    const onCreated = () => {
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: `New config created`, type: 'success' } }
+      }));
+    };
+
+    el.addEventListener('config-saved', onSaved);
+    el.addEventListener('config-deleted', onDeleted);
+    el.addEventListener('config-created', onCreated);
+
+    registerCleanup(() => {
+      el.removeEventListener('config-saved', onSaved);
+      el.removeEventListener('config-deleted', onDeleted);
+      el.removeEventListener('config-created', onCreated);
+    });
   });
 </script>
 

@@ -35,6 +35,9 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
   import { generateTimestamp } from '/js/utils/timestamp-utils.js';
   import '/js/core/app-initializer.js';
   import 'https://cdn.jsdelivr.net/npm/@manufosela/loading-layer@2.0.1/+esm';
+  import { onPageEnter, registerCleanup } from '/js/utils/page-lifecycle.js';
+
+  const _cleanupFns = [];
 
   // DOM elements
   const wipContent = document.getElementById('wipContent');
@@ -1208,16 +1211,17 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
     };
 
     syncDirectory();
-    entityDirectoryService.addChangeListener((type) => {
+    const unsubDirectory = entityDirectoryService.addChangeListener((type) => {
       if (type === 'projects' || type === 'developers') {
         syncDirectory();
       }
     });
+    _cleanupFns.push(unsubDirectory);
   }
 
   function listenWip() {
     const wipRef = ref(database, '/wip');
-    onValue(wipRef, (snapshot) => {
+    const unsubWip = onValue(wipRef, (snapshot) => {
       wipEntries.clear();
       if (snapshot.exists()) {
         const data = snapshot.val() || {};
@@ -1229,11 +1233,12 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
       }
       render();
     });
+    _cleanupFns.push(unsubWip);
   }
 
   function listenBacklogs() {
     const backlogRef = ref(database, '/developerBacklogs');
-    onValue(backlogRef, (snapshot) => {
+    const unsubBacklog = onValue(backlogRef, (snapshot) => {
       backlogEntries.clear();
       if (snapshot.exists()) {
         const raw = snapshot.val() || {};
@@ -1250,6 +1255,7 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
         render();
       }
     });
+    _cleanupFns.push(unsubBacklog);
   }
 
   function setupCardEventHandlers() {
@@ -1257,7 +1263,7 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
     FirebaseService.init();
 
     // Handle request-project-tasks (needed for _validateDeveloperInProgressLimit in TaskCard)
-    document.addEventListener('request-project-tasks', async (e) => {
+    const handleRequestProjectTasks = async (e) => {
       const { projectId, callback, fullData = false } = e.detail;
       try {
         const path = FirebaseService.getPathBySectionAndProjectId('tasks', projectId);
@@ -1310,10 +1316,12 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
       } catch (error) {
         if (callback) callback([]);
       }
-    });
+    };
+    document.addEventListener('request-project-tasks', handleRequestProjectTasks);
+    _cleanupFns.push(() => document.removeEventListener('request-project-tasks', handleRequestProjectTasks));
 
     // Handle save-card event (needed for BaseCard._handleSave to persist to Firebase)
-    document.addEventListener('save-card', async (e) => {
+    const handleSaveCard = async (e) => {
       const { cardData } = e.detail;
       if (!cardData) return;
 
@@ -1329,11 +1337,13 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
           detail: { error: error.message, cardData }
         }));
       }
-    });
+    };
+    document.addEventListener('save-card', handleSaveCard);
+    _cleanupFns.push(() => document.removeEventListener('save-card', handleSaveCard));
   }
 
   function setupPermissionHandlers() {
-    document.addEventListener('request-task-permissions', (e) => {
+    const handleTaskPermissions = (e) => {
       const { callback } = e.detail;
       const devMatch = modalDevContext && modalDevContext === currentUserId;
       const isAdmin = isSuperAdmin || devMatch;
@@ -1345,9 +1355,11 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
         viewMode: 'management'
       };
       if (callback) callback(permissions);
-    });
+    };
+    document.addEventListener('request-task-permissions', handleTaskPermissions);
+    _cleanupFns.push(() => document.removeEventListener('request-task-permissions', handleTaskPermissions));
 
-    document.addEventListener('request-ownership-permissions', (e) => {
+    const handleOwnershipPermissions = (e) => {
       const { createdBy, callback } = e.detail;
       const current = normalizeEmailSafe(userEmail);
       const isOwner = createdBy && current && normalizeEmailSafe(createdBy) === current;
@@ -1365,7 +1377,9 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
         isAdmin
       };
       if (callback) callback(permissions);
-    });
+    };
+    document.addEventListener('request-ownership-permissions', handleOwnershipPermissions);
+    _cleanupFns.push(() => document.removeEventListener('request-ownership-permissions', handleOwnershipPermissions));
   }
 
   // Init
@@ -1409,7 +1423,13 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
     }
   }
 
-  init();
+  onPageEnter(() => {
+    init();
+    registerCleanup(() => {
+      _cleanupFns.forEach(fn => fn());
+      _cleanupFns.length = 0;
+    });
+  });
 </script>
 
 <style>
