@@ -64,6 +64,7 @@
     "instance:use": "node scripts/instance-manager.cjs use",
     "instance:create": "node scripts/instance-manager.cjs create",
     "instance:list": "node scripts/instance-manager.cjs list",
+    "mcp:test": "node mcp/scripts/smoke-test.js",
     "sonar": "~/.local/sonar-scanner/bin/sonar-scanner -Dsonar.token=$(cat ~/.sonar-token)",
     "sonar:npx": "npx sonar-scanner",
     "validate": "npm test && npm run sonar:npx",
