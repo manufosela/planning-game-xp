@@ -114,6 +114,7 @@ serviceAccountKey.json
 # Multi-instance configuration (contains secrets per instance)
 planning-game-instances/*
 !planning-game-instances/README.md
+!planning-game-instances/example
 .last-instance
 
 # Test coverage
