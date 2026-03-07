@@ -2476,22 +2476,20 @@ this.attachment = '';
   _parseSingleScenario(text) {
     const scenario = { given: '', when: '', then: '', raw: text };
 
-    // Extract Given (Dado)
-    const givenMatch = text.match(/(?:Dado|Given)\s+(.+?)(?=(?:Cuando|When|Entonces|Then|Y\s|$))/is);
-    if (givenMatch) {
-      scenario.given = givenMatch[1].trim();
-    }
+    // Split by Gherkin keywords to avoid complex regex with backtracking
+    const parts = text.split(/\b(?:Dado|Given|Cuando|When|Entonces|Then)\b/i);
+    const keywords = text.match(/\b(?:Dado|Given|Cuando|When|Entonces|Then)\b/gi) || [];
 
-    // Extract When (Cuando)
-    const whenMatch = text.match(/(?:Cuando|When)\s+(.+?)(?=(?:Entonces|Then|Y\s|$))/is);
-    if (whenMatch) {
-      scenario.when = whenMatch[1].trim();
-    }
-
-    // Extract Then (Entonces)
-    const thenMatch = text.match(/(?:Entonces|Then)\s+(.+?)$/is);
-    if (thenMatch) {
-      scenario.then = thenMatch[1].trim();
+    for (let i = 0; i < keywords.length; i++) {
+      const kw = keywords[i].toLowerCase();
+      const value = (parts[i + 1] || '').trim();
+      if (kw === 'dado' || kw === 'given') {
+        scenario.given = value;
+      } else if (kw === 'cuando' || kw === 'when') {
+        scenario.when = value;
+      } else if (kw === 'entonces' || kw === 'then') {
+        scenario.then = value;
+      }
     }
 
     return scenario;
