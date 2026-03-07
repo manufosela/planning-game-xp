@@ -471,15 +471,141 @@ class SetupWizard {
   }
 
   async setupMCP() {
-    this.print('El MCP Server permite gestionar el proyecto desde Claude Code.\n');
+    this.print('El MCP Server permite gestionar el proyecto desde Claude Code.');
+    this.print('Se registrará como "planning-game-' + (this.instanceName || 'default') + '".\n');
 
     if (!await this.confirm('¿Deseas instalar el MCP Server?', false)) {
-      this.print('  ⏭️  Puedes instalarlo después siguiendo docs/MCP_INSTALLATION_GUIDE.md');
+      this.print('  ⏭️  Puedes instalarlo después con: npm run setup:mcp');
       return;
     }
 
-    this.print('\n  Consulta docs/MCP_INSTALLATION_GUIDE.md para instrucciones detalladas.');
-    this.print('  El MCP se configura en ~/.claude/claude_desktop_config.json\n');
+    const mcpDir = path.join(ROOT_DIR, 'mcp');
+    const instanceDir = this.instanceDir || ROOT_DIR;
+    const instanceName = this.instanceName || 'default';
+    const serverName = `planning-game-${instanceName}`;
+
+    // Step 1: Install MCP dependencies
+    this.print('\n  Instalando dependencias del MCP...');
+    try {
+      execSync('npm install --ignore-scripts', { stdio: 'pipe', cwd: mcpDir });
+      this.print('  ✅ Dependencias instaladas');
+    } catch (error) {
+      this.print(`  ❌ Error instalando dependencias: ${error.message}`);
+      this.print('  Ejecuta manualmente: cd mcp && npm install');
+      return;
+    }
+
+    // Step 2: Verify serviceAccountKey.json
+    const keyPath = path.join(instanceDir, 'serviceAccountKey.json');
+    if (!fs.existsSync(keyPath)) {
+      this.print(`\n  ⚠️  No se encontró serviceAccountKey.json en ${instanceDir}`);
+      this.print('  Para obtenerlo:');
+      this.print('    1. Ve a Firebase Console > Project Settings > Service Accounts');
+      this.print('    2. Haz clic en "Generate new private key"');
+      this.print(`    3. Guarda el archivo como: ${keyPath}`);
+      this.print(`    4. Después ejecuta: npm run setup:mcp`);
+      return;
+    }
+    this.print('  ✅ serviceAccountKey.json encontrado');
+
+    // Step 3: Read project ID and build database URL
+    let projectId;
+    try {
+      const serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+      projectId = serviceAccount.project_id;
+    } catch (error) {
+      this.print(`  ❌ Error leyendo serviceAccountKey.json: ${error.message}`);
+      return;
+    }
+
+    // Try to get database URL from .env files or derive from project ID
+    let databaseURL = '';
+    const envDevPath = path.join(instanceDir, '.env.dev');
+    const envProdPath = path.join(instanceDir, '.env.prod');
+    for (const envPath of [envProdPath, envDevPath]) {
+      if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        const match = envContent.match(/PUBLIC_FIREBASE_DATABASE_URL=(.+)/);
+        if (match) {
+          databaseURL = match[1].trim();
+          break;
+        }
+      }
+    }
+    if (!databaseURL) {
+      databaseURL = `https://${projectId}-default-rtdb.europe-west1.firebasedatabase.app`;
+      this.print(`  ℹ️  Database URL derivada: ${databaseURL}`);
+      const customUrl = await this.question('  ¿URL correcta? (Enter para aceptar, o escribe otra)', databaseURL);
+      databaseURL = customUrl;
+    }
+
+    // Step 4: Register MCP server with Claude Code CLI
+    this.print(`\n  Registrando MCP server como "${serverName}"...`);
+    const mcpIndexPath = path.join(mcpDir, 'index.js');
+
+    try {
+      // Check if claude CLI is available
+      execSync('which claude', { stdio: 'pipe' });
+    } catch {
+      this.print('  ⚠️  Claude CLI no encontrado. Registra manualmente:');
+      this.printManualMcpConfig(serverName, mcpIndexPath, instanceDir, keyPath, databaseURL);
+      return;
+    }
+
+    try {
+      // Remove existing entry if present (to allow re-registration)
+      try {
+        execSync(`claude mcp remove "${serverName}" -s user`, { stdio: 'pipe' });
+      } catch {
+        // Ignore — may not exist yet
+      }
+
+      const addCmd = [
+        'claude', 'mcp', 'add',
+        '-e', `MCP_INSTANCE_DIR=${instanceDir}`,
+        '-e', `GOOGLE_APPLICATION_CREDENTIALS=${keyPath}`,
+        '-e', `FIREBASE_DATABASE_URL=${databaseURL}`,
+        '-s', 'user',
+        `"${serverName}"`,
+        '--', 'node', `"${mcpIndexPath}"`
+      ].join(' ');
+
+      execSync(addCmd, { stdio: 'pipe', cwd: ROOT_DIR });
+      this.print(`  ✅ MCP server "${serverName}" registrado en Claude Code`);
+    } catch (error) {
+      this.print(`  ⚠️  Error registrando MCP: ${error.message}`);
+      this.print('  Registra manualmente:');
+      this.printManualMcpConfig(serverName, mcpIndexPath, instanceDir, keyPath, databaseURL);
+      return;
+    }
+
+    // Step 5: Run smoke test
+    this.print('\n  Ejecutando test de verificación...');
+    try {
+      const smokeResult = execSync('node mcp/scripts/smoke-test.js', {
+        stdio: 'pipe',
+        cwd: ROOT_DIR,
+        env: {
+          ...process.env,
+          MCP_INSTANCE_DIR: instanceDir,
+          GOOGLE_APPLICATION_CREDENTIALS: keyPath,
+          FIREBASE_DATABASE_URL: databaseURL,
+        }
+      });
+      this.print(smokeResult.toString());
+      this.print('  ✅ MCP Server verificado correctamente');
+    } catch (error) {
+      this.print(`  ⚠️  El test de verificación falló.`);
+      this.print('  Puedes reintentar con: npm run mcp:test');
+    }
+  }
+
+  printManualMcpConfig(serverName, mcpIndexPath, instanceDir, keyPath, databaseURL) {
+    this.print(`\n  claude mcp add \\`);
+    this.print(`    -e MCP_INSTANCE_DIR=${instanceDir} \\`);
+    this.print(`    -e GOOGLE_APPLICATION_CREDENTIALS=${keyPath} \\`);
+    this.print(`    -e FIREBASE_DATABASE_URL=${databaseURL} \\`);
+    this.print(`    -s user "${serverName}" -- node "${mcpIndexPath}"\n`);
   }
 
   printNextSteps() {

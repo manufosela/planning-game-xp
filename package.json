@@ -58,6 +58,7 @@
     "migrate:tasks:help": "node scripts/migrate-tasks-to-new-year.js --help",
     "setup": "node scripts/setup.cjs",
     "setup:app-admin": "node scripts/setup-app-admin.cjs",
+    "setup:mcp": "node scripts/setup-mcp.cjs",
     "verify-setup": "node scripts/verify-setup.cjs",
     "instance:select": "node scripts/instance-manager.cjs select",
     "instance:verify": "node scripts/instance-manager.cjs verify",
