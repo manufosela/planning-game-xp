@@ -28,11 +28,16 @@ Necesario para el envio de emails via Microsoft Graph:
 
 ### Variables de entorno (functions/.env)
 
-Variables locales no-secret: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `SHAREPOINT_*`, `DEMO_MODE`, etc. Ver `ENV_VARIABLES.md` para la lista completa.
+Variables locales no-secret: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `SHAREPOINT_*`, `DEMO_MODE`, `MS_EMAIL_ENABLED`, etc. Ver `ENV_VARIABLES.md` para la lista completa.
+
+| Variable | Default | Descripcion |
+|----------|---------|-------------|
+| `DEMO_MODE` | `false` | Activa modo demo (auto-allow users, disable emails/IA) |
+| `MS_EMAIL_ENABLED` | `true` | Set to `false` for instances without Microsoft Auth. Skips MS secrets and email functions. |
 
 ## Funciones Disponibles
 
-### Emails Programados (requieren MS Graph, desactivadas en DEMO_MODE)
+### Emails Programados (requieren MS Graph, desactivadas en DEMO_MODE o MS_EMAIL_ENABLED=false)
 
 | Funcion | Tipo | Schedule | Descripcion |
 |---------|------|----------|-------------|

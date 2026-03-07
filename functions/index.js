@@ -71,6 +71,25 @@ function readDemoMode() {
 }
 const DEMO_MODE = readDemoMode();
 
+/**
+ * Read MS_EMAIL_ENABLED from env or functions/.env.
+ * Defaults to true for backwards compatibility.
+ * Set MS_EMAIL_ENABLED=false in instances that don't use Microsoft Auth.
+ */
+function readMsEmailEnabled() {
+  const envVal = (process.env.MS_EMAIL_ENABLED || '').toString().trim().toLowerCase();
+  if (envVal === 'false') return false;
+  if (envVal) return true;
+  // Fallback: read from functions/.env file directly
+  try {
+    const envContent = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
+    const match = envContent.match(/^MS_EMAIL_ENABLED\s*=\s*(.+)$/m);
+    if (match) return match[1].trim().toLowerCase() !== 'false';
+  } catch (_) { /* .env not found, MS email enabled by default */ }
+  return true;
+}
+const MS_EMAIL_ENABLED = readMsEmailEnabled();
+
 // normalizeEmail, extractEmails → shared/email-utils.cjs
 
 // Initialize Firebase Admin
@@ -99,15 +118,17 @@ const ALLOWED_SIGNUP_EMAIL_DOMAINS = (process.env.PUBLIC_ALLOWED_EMAIL_DOMAINS |
   .map(d => d.trim())
   .filter(Boolean);
 
-// Define secrets for Azure AD / IA configuration (skipped in DEMO_MODE)
+// Define secrets (skipped in DEMO_MODE; MS secrets also skipped when MS_EMAIL_ENABLED=false)
 let msClientId, msClientSecret, msTenantId, msFromEmail, msAlertEmail;
 let IA_GLOBAL_ENABLE, IA_API_KEY, CREATE_CARD_API_KEY;
 if (!DEMO_MODE) {
-  msClientId = defineSecret("MS_CLIENT_ID");
-  msClientSecret = defineSecret("MS_CLIENT_SECRET");
-  msTenantId = defineSecret("MS_TENANT_ID");
-  msFromEmail = defineSecret("MS_FROM_EMAIL");
-  msAlertEmail = defineSecret("MS_ALERT_EMAIL");
+  if (MS_EMAIL_ENABLED) {
+    msClientId = defineSecret("MS_CLIENT_ID");
+    msClientSecret = defineSecret("MS_CLIENT_SECRET");
+    msTenantId = defineSecret("MS_TENANT_ID");
+    msFromEmail = defineSecret("MS_FROM_EMAIL");
+    msAlertEmail = defineSecret("MS_ALERT_EMAIL");
+  }
   IA_GLOBAL_ENABLE = defineSecret("IA_GLOBAL_ENABLE");
   IA_API_KEY = defineSecret("IA_API_KEY");
   CREATE_CARD_API_KEY = defineSecret("CREATE_CARD_API_KEY");
@@ -115,22 +136,24 @@ if (!DEMO_MODE) {
 
 // getMsalConfig, getGraphAccessToken, sendEmail → shared/ms-graph.cjs
 // Thin wrappers that resolve secrets and inject deps.
+// Only available when MS_EMAIL_ENABLED=true (and not DEMO_MODE).
 
-function getGraphAccessToken() {
-  return _getGraphAccessToken({
+let getGraphAccessToken, sendEmail;
+if (MS_EMAIL_ENABLED && !DEMO_MODE) {
+  getGraphAccessToken = () => _getGraphAccessToken({
     msClientId: msClientId.value(),
     msClientSecret: msClientSecret.value(),
     msTenantId: msTenantId.value(),
     logger
   });
-}
 
-function sendEmail(accessToken, toEmails, subject, htmlContent) {
-  return _sendEmail(accessToken, toEmails, subject, htmlContent, {
-    msFromEmail: msFromEmail.value(),
-    msAlertEmail: msAlertEmail.value(),
-    logger
-  });
+  sendEmail = (accessToken, toEmails, subject, htmlContent) => _sendEmail(
+    accessToken, toEmails, subject, htmlContent, {
+      msFromEmail: msFromEmail.value(),
+      msAlertEmail: msAlertEmail.value(),
+      logger
+    }
+  );
 }
 
 // generateEmailTemplate, analyzeTasks, analyzeAllPendingTasks, addTaskToUserMap,
@@ -141,10 +164,9 @@ function sendEmail(accessToken, toEmails, subject, htmlContent) {
 // sendWeeklyTaskSummary -> handlers/weekly-email.js
 
 /**
- * Scheduled function - runs every Monday at 9:00 AM in European region
- * Skipped in DEMO_MODE (no Microsoft secrets available)
+ * Email functions - Skipped in DEMO_MODE or when MS_EMAIL_ENABLED=false
  */
-if (!DEMO_MODE) {
+if (!DEMO_MODE && MS_EMAIL_ENABLED) {
 
 // weeklyTaskSummary, testWeeklyTaskSummary -> handlers/weekly-email.js
 const weeklyEmailDeps = () => ({
@@ -225,7 +247,7 @@ exports.testHourlyDigest = onRequest({
     res.status(500).json({ error: error.message });
   }
 });
-} // end if (!DEMO_MODE) — email functions
+} // end if (!DEMO_MODE && MS_EMAIL_ENABLED) — email functions
 
 // ============================================================================
 // DEMO CLEANUP - Remove inactive demo users and their data
