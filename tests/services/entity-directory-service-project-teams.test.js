@@ -1,12 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../public/firebase-config.js', () => ({
-  database: {},
-  ref: vi.fn((db, path) => ({ db, path })),
-  get: vi.fn(),
-  set: vi.fn(),
-  onValue: vi.fn(() => () => {})
+const mockGetAllUsers = vi.fn().mockResolvedValue(null);
+const mockGetAllTeams = vi.fn().mockResolvedValue(null);
+const mockGetTrashUsers = vi.fn().mockResolvedValue(null);
+const mockProjectGet = vi.fn().mockResolvedValue(null);
+
+vi.mock('../../public/js/services/dal-service.js', () => ({
+  dalService: {
+    entities: {
+      getAllUsers: (...args) => mockGetAllUsers(...args),
+      getAllTeams: (...args) => mockGetAllTeams(...args),
+      getTrashUsers: (...args) => mockGetTrashUsers(...args),
+      subscribeToTeams: vi.fn(),
+      subscribeToUsers: vi.fn(),
+      getUser: vi.fn().mockResolvedValue(null),
+      setUser: vi.fn().mockResolvedValue(undefined),
+      updateUser: vi.fn().mockResolvedValue(undefined)
+    },
+    projects: {
+      get: (...args) => mockProjectGet(...args)
+    }
+  }
 }));
+
+vi.mock('../../public/firebase-config.js', () => ({}));
 
 vi.mock('../../public/js/config/developer-directory.js', () => ({
   developerDirectory: []
@@ -17,8 +34,8 @@ vi.mock('../../public/js/utils/email-sanitizer.js', () => ({
 }));
 
 import { entityDirectoryService } from '@/services/entity-directory-service.js';
-import { get } from '../../public/firebase-config.js';
 
+// createSnapshot kept for backward compatibility with test patterns
 const createSnapshot = (value) => ({
   exists: () => value !== null && value !== undefined,
   val: () => value
@@ -59,7 +76,10 @@ function resetService() {
   entityDirectoryService._nextDeveloperId = 1;
   entityDirectoryService._nextStakeholderId = 1;
   entityDirectoryService._listeners = [];
-  get.mockReset();
+  mockGetAllUsers.mockReset().mockResolvedValue(null);
+  mockGetAllTeams.mockReset().mockResolvedValue(null);
+  mockGetTrashUsers.mockReset().mockResolvedValue(null);
+  mockProjectGet.mockReset().mockResolvedValue(null);
 }
 
 describe('entityDirectoryService - Project Teams (getProjectDeveloperIds / getProjectDevelopers)', () => {
@@ -933,16 +953,9 @@ describe('entityDirectoryService - Project Teams (integration scenarios)', () =>
       }
     ]);
 
-    get.mockImplementation(async (refObj) => {
-      const store = {
-        '/users': usersData,
-        '/data/teams': null,
-        '/data/developers': null,
-        '/data/stakeholders': null,
-        '/trash/users': null
-      };
-      return createSnapshot(store[refObj.path] ?? null);
-    });
+    mockGetAllUsers.mockResolvedValue(usersData);
+    mockGetAllTeams.mockResolvedValue(null);
+    mockGetTrashUsers.mockResolvedValue(null);
 
     await entityDirectoryService.init();
 
@@ -1110,13 +1123,8 @@ describe('entityDirectoryService - Project-level fallback (when /users/ has no p
       ]);
       entityDirectoryService._processUsers(usersData);
 
-      // Mock Firebase read for project-level developers
-      get.mockImplementation(async (refObj) => {
-        if (refObj.path === '/projects/PlanningGame/developers') {
-          return createSnapshot(['dev_001', 'dev_002']);
-        }
-        return createSnapshot(null);
-      });
+      // Mock project data with developers array
+      mockProjectGet.mockResolvedValue({ developers: ['dev_001', 'dev_002'] });
 
       const ids = await entityDirectoryService.getProjectDeveloperIds('PlanningGame');
       expect(ids).toContain('dev_001');
@@ -1135,14 +1143,14 @@ describe('entityDirectoryService - Project-level fallback (when /users/ has no p
 
       const ids = await entityDirectoryService.getProjectDeveloperIds('PlanningGame');
       expect(ids).toEqual(['dev_001']);
-      // get should NOT have been called since /users/ had results
-      expect(get).not.toHaveBeenCalled();
+      // projectGet should NOT have been called since /users/ had results
+      expect(mockProjectGet).not.toHaveBeenCalled();
     });
 
     it('should return empty array when both /users/ and project-level have no developers', async () => {
       entityDirectoryService._processUsers({});
 
-      get.mockImplementation(async () => createSnapshot(null));
+      mockProjectGet.mockResolvedValue(null);
 
       const ids = await entityDirectoryService.getProjectDeveloperIds('PlanningGame');
       expect(ids).toEqual([]);
@@ -1154,12 +1162,7 @@ describe('entityDirectoryService - Project-level fallback (when /users/ has no p
       ]);
       entityDirectoryService._processUsers(usersData);
 
-      get.mockImplementation(async (refObj) => {
-        if (refObj.path === '/projects/PlanningGame/developers') {
-          return createSnapshot({ dev_001: 'Alice', dev_003: 'Charlie' });
-        }
-        return createSnapshot(null);
-      });
+      mockProjectGet.mockResolvedValue({ developers: { dev_001: 'Alice', dev_003: 'Charlie' } });
 
       const ids = await entityDirectoryService.getProjectDeveloperIds('PlanningGame');
       expect(ids).toContain('dev_001');
@@ -1174,12 +1177,7 @@ describe('entityDirectoryService - Project-level fallback (when /users/ has no p
       ]);
       entityDirectoryService._processUsers(usersData);
 
-      get.mockImplementation(async (refObj) => {
-        if (refObj.path === '/projects/PlanningGame/developers') {
-          return createSnapshot(['dev_001']);
-        }
-        return createSnapshot(null);
-      });
+      mockProjectGet.mockResolvedValue({ developers: ['dev_001'] });
 
       await entityDirectoryService.getProjectDeveloperIds('PlanningGame');
       expect(warnSpy).toHaveBeenCalledWith(
@@ -1194,7 +1192,7 @@ describe('entityDirectoryService - Project-level fallback (when /users/ has no p
 
       const ids = await entityDirectoryService.getProjectDeveloperIds('');
       expect(ids).toEqual([]);
-      expect(get).not.toHaveBeenCalled();
+      expect(mockProjectGet).not.toHaveBeenCalled();
     });
   });
 
@@ -1206,12 +1204,7 @@ describe('entityDirectoryService - Project-level fallback (when /users/ has no p
       ]);
       entityDirectoryService._processUsers(usersData);
 
-      get.mockImplementation(async (refObj) => {
-        if (refObj.path === '/projects/PlanningGame/stakeholders') {
-          return createSnapshot(['stk_001', 'stk_002']);
-        }
-        return createSnapshot(null);
-      });
+      mockProjectGet.mockResolvedValue({ stakeholders: ['stk_001', 'stk_002'] });
 
       const ids = await entityDirectoryService.getProjectStakeholderIds('PlanningGame');
       expect(ids).toContain('stk_001');
@@ -1230,13 +1223,13 @@ describe('entityDirectoryService - Project-level fallback (when /users/ has no p
 
       const ids = await entityDirectoryService.getProjectStakeholderIds('PlanningGame');
       expect(ids).toEqual(['stk_001']);
-      expect(get).not.toHaveBeenCalled();
+      expect(mockProjectGet).not.toHaveBeenCalled();
     });
 
     it('should return empty array when both /users/ and project-level have no stakeholders', async () => {
       entityDirectoryService._processUsers({});
 
-      get.mockImplementation(async () => createSnapshot(null));
+      mockProjectGet.mockResolvedValue(null);
 
       const ids = await entityDirectoryService.getProjectStakeholderIds('PlanningGame');
       expect(ids).toEqual([]);
@@ -1248,12 +1241,7 @@ describe('entityDirectoryService - Project-level fallback (when /users/ has no p
       ]);
       entityDirectoryService._processUsers(usersData);
 
-      get.mockImplementation(async (refObj) => {
-        if (refObj.path === '/projects/PlanningGame/stakeholders') {
-          return createSnapshot({ stk_001: 'Alice', stk_003: 'Charlie' });
-        }
-        return createSnapshot(null);
-      });
+      mockProjectGet.mockResolvedValue({ stakeholders: { stk_001: 'Alice', stk_003: 'Charlie' } });
 
       const ids = await entityDirectoryService.getProjectStakeholderIds('PlanningGame');
       expect(ids).toContain('stk_001');
@@ -1268,12 +1256,7 @@ describe('entityDirectoryService - Project-level fallback (when /users/ has no p
       ]);
       entityDirectoryService._processUsers(usersData);
 
-      get.mockImplementation(async (refObj) => {
-        if (refObj.path === '/projects/PlanningGame/stakeholders') {
-          return createSnapshot(['stk_001']);
-        }
-        return createSnapshot(null);
-      });
+      mockProjectGet.mockResolvedValue({ stakeholders: ['stk_001'] });
 
       await entityDirectoryService.getProjectStakeholderIds('PlanningGame');
       expect(warnSpy).toHaveBeenCalledWith(
@@ -1288,7 +1271,7 @@ describe('entityDirectoryService - Project-level fallback (when /users/ has no p
 
       const ids = await entityDirectoryService.getProjectStakeholderIds(null);
       expect(ids).toEqual([]);
-      expect(get).not.toHaveBeenCalled();
+      expect(mockProjectGet).not.toHaveBeenCalled();
     });
   });
 });

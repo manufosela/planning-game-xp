@@ -10,7 +10,7 @@
  * /data/teams/{teamId} = { name }
  */
 
-import { database, ref, get, set, onValue } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
 import { developerDirectory } from '../config/developer-directory.js';
 import { decodeEmailFromFirebase } from '../utils/email-sanitizer.js';
 
@@ -87,23 +87,21 @@ class EntityDirectoryService {
 
   async _loadFromFirebase() {
     try {
-      // /data/developers and /data/stakeholders are deprecated — only read /users and /data/teams
-      const [usersSnap, teamsSnap, trashSnap] = await Promise.all([
-        get(ref(database, '/users')),
-        get(ref(database, '/data/teams')),
-        get(ref(database, '/trash/users')).catch(() => null)
+      const [usersData, teamsData, trashData] = await Promise.all([
+        dalService.entities.getAllUsers(),
+        dalService.entities.getAllTeams(),
+        dalService.entities.getTrashUsers().catch(() => null)
       ]);
 
       // Teams must be processed first so stakeholders can reference them
-      if (teamsSnap.exists()) {
-        this._processTeams(teamsSnap.val());
+      if (teamsData) {
+        this._processTeams(teamsData);
       }
 
-      if (usersSnap.exists()) {
-        this._processUsers(usersSnap.val());
+      if (usersData) {
+        this._processUsers(usersData);
       }
 
-      const trashData = trashSnap?.exists?.() ? trashSnap.val() : null;
       this._mergeTrashUsers(trashData);
     } catch (error) {
       // Silently ignore initialization errors
@@ -339,19 +337,17 @@ class EntityDirectoryService {
 
   _setupRealtimeListeners() {
     // Listener para teams
-    const teamsRef = ref(database, '/data/teams');
-    onValue(teamsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        this._processTeams(snapshot.val());
+    dalService.entities.subscribeToTeams((teamsData) => {
+      if (teamsData) {
+        this._processTeams(teamsData);
         this._notifyListeners('teams');
       }
     });
 
     // Listener para /users/ (centralized model — replaces /data/developers + /data/stakeholders + /projects listeners)
-    const usersRef = ref(database, '/users');
-    onValue(usersRef, (snapshot) => {
-      if (snapshot.exists()) {
-        this._processUsers(snapshot.val());
+    dalService.entities.subscribeToUsers((usersData) => {
+      if (usersData) {
+        this._processUsers(usersData);
         this._notifyListeners('developers');
         this._notifyListeners('stakeholders');
         this._notifyListeners('projects');
@@ -516,9 +512,7 @@ class EntityDirectoryService {
     }
     if (!encodedEmail) throw new Error('Cannot save developer without email');
 
-    const userRef = ref(database, `/users/${encodedEmail}`);
-    const existingSnap = await get(userRef);
-    const existing = existingSnap.exists() ? existingSnap.val() : {};
+    const existing = await dalService.entities.getUser(encodedEmail) || {};
 
     const updated = {
       ...existing,
@@ -528,7 +522,7 @@ class EntityDirectoryService {
       developerId: id
     };
 
-    await set(userRef, updated);
+    await dalService.entities.setUser(encodedEmail, updated);
 
     // Update local cache
     const entity = { id, email, emails: [email], name, active };
@@ -551,7 +545,7 @@ class EntityDirectoryService {
 
     const encodedEmail = this._findUserByDevId(id);
     if (encodedEmail) {
-      await set(ref(database, `/users/${encodedEmail}/developerId`), null);
+      await dalService.entities.updateUser(encodedEmail, { developerId: null });
 
       // Update cached user
       const user = this._users.get(encodedEmail);
@@ -772,9 +766,7 @@ class EntityDirectoryService {
     }
     if (!encodedEmail) throw new Error('Cannot save stakeholder without email');
 
-    const userRef = ref(database, `/users/${encodedEmail}`);
-    const existingSnap = await get(userRef);
-    const existing = existingSnap.exists() ? existingSnap.val() : {};
+    const existing = await dalService.entities.getUser(encodedEmail) || {};
 
     const updated = {
       ...existing,
@@ -788,7 +780,7 @@ class EntityDirectoryService {
       updated.teamId = data.teamId;
     }
 
-    await set(userRef, updated);
+    await dalService.entities.setUser(encodedEmail, updated);
 
     // Update local cache
     const entity = { id, email, name, active, teamId: data.teamId || null };
@@ -811,7 +803,7 @@ class EntityDirectoryService {
 
     const encodedEmail = this._findUserByStkId(id);
     if (encodedEmail) {
-      await set(ref(database, `/users/${encodedEmail}/stakeholderId`), null);
+      await dalService.entities.updateUser(encodedEmail, { stakeholderId: null });
 
       // Update cached user
       const user = this._users.get(encodedEmail);
@@ -879,17 +871,17 @@ class EntityDirectoryService {
 
     if (ids.length > 0) return ids;
 
-    // Fallback: read from /projects/{projectId}/developers (project-level array)
+    // Fallback: read from project data
     try {
-      const snapshot = await get(ref(database, `/projects/${projectId}/developers`));
-      if (snapshot.exists()) {
-        const data = snapshot.val();
+      const project = await dalService.projects.get(projectId);
+      if (project?.developers) {
+        const data = project.developers;
         const projectIds = Array.isArray(data) ? data : Object.keys(data);
-        console.warn(`[EntityDirectoryService] No /users/ project assignments found for "${projectId}" developers. Using /projects/${projectId}/developers as source.`);
+        console.warn(`[EntityDirectoryService] No /users/ project assignments found for "${projectId}" developers. Using project data as source.`);
         return projectIds.filter(id => typeof id === 'string' && id.startsWith('dev_'));
       }
     } catch (error) {
-      console.warn(`[EntityDirectoryService] Failed to read /projects/${projectId}/developers:`, error.message);
+      console.warn(`[EntityDirectoryService] Failed to read project "${projectId}" developers:`, error.message);
     }
 
     return [];
@@ -924,17 +916,17 @@ class EntityDirectoryService {
 
     if (ids.length > 0) return ids;
 
-    // Fallback: read from /projects/{projectId}/stakeholders (project-level array)
+    // Fallback: read from project data
     try {
-      const snapshot = await get(ref(database, `/projects/${projectId}/stakeholders`));
-      if (snapshot.exists()) {
-        const data = snapshot.val();
+      const project = await dalService.projects.get(projectId);
+      if (project?.stakeholders) {
+        const data = project.stakeholders;
         const projectIds = Array.isArray(data) ? data : Object.keys(data);
-        console.warn(`[EntityDirectoryService] No /users/ project assignments found for "${projectId}" stakeholders. Using /projects/${projectId}/stakeholders as source.`);
+        console.warn(`[EntityDirectoryService] No /users/ project assignments found for "${projectId}" stakeholders. Using project data as source.`);
         return projectIds.filter(id => typeof id === 'string' && id.startsWith('stk_'));
       }
     } catch (error) {
-      console.warn(`[EntityDirectoryService] Failed to read /projects/${projectId}/stakeholders:`, error.message);
+      console.warn(`[EntityDirectoryService] Failed to read project "${projectId}" stakeholders:`, error.message);
     }
 
     return [];
@@ -958,7 +950,7 @@ class EntityDirectoryService {
    */
   async setUserProjectRole(email, projectId, role, value) {
     const encodedEmail = encodeEmailForFirebase(normalizeEmail(email));
-    await set(ref(database, `/users/${encodedEmail}/projects/${projectId}/${role}`), value);
+    await dalService.entities.updateUser(encodedEmail, { [`projects/${projectId}/${role}`]: value });
   }
 
   /**

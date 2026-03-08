@@ -57,4 +57,16 @@ export class RtdbEntityRepository extends EntityRepository {
   subscribeToStakeholders(callback) {
     return this._repo.subscribe(EntityRepository.stakeholdersPath, callback);
   }
+
+  subscribeToTeams(callback) {
+    return this._repo.subscribe(EntityRepository.teamsPath, callback);
+  }
+
+  subscribeToUsers(callback) {
+    return this._repo.subscribe(EntityRepository.usersPath, callback);
+  }
+
+  async getTrashUsers() {
+    return this._repo.read(EntityRepository.trashUsersPath);
+  }
 }

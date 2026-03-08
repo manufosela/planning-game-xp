@@ -1,20 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../public/firebase-config.js', () => ({
-  database: {},
-  ref: vi.fn((db, path) => ({ db, path })),
-  get: vi.fn(),
-  set: vi.fn(),
-  onValue: vi.fn(() => () => {})
+const mockGetAllUsers = vi.fn();
+const mockGetAllTeams = vi.fn();
+const mockGetTrashUsers = vi.fn();
+
+vi.mock('../../public/js/services/dal-service.js', () => ({
+  dalService: {
+    entities: {
+      getAllUsers: (...args) => mockGetAllUsers(...args),
+      getAllTeams: (...args) => mockGetAllTeams(...args),
+      getTrashUsers: (...args) => mockGetTrashUsers(...args),
+      subscribeToTeams: vi.fn(),
+      subscribeToUsers: vi.fn(),
+      updateUser: vi.fn().mockResolvedValue(undefined)
+    },
+    projects: {
+      get: vi.fn().mockResolvedValue(null)
+    }
+  }
 }));
 
-import { entityDirectoryService } from '@/services/entity-directory-service.js';
-import { get } from '../../public/firebase-config.js';
+vi.mock('../../public/firebase-config.js', () => ({}));
 
-const createSnapshot = (value) => ({
-  exists: () => value !== null,
-  val: () => value
-});
+import { entityDirectoryService } from '@/services/entity-directory-service.js';
 
 describe('entityDirectoryService init refresh', () => {
   beforeEach(() => {
@@ -23,29 +31,25 @@ describe('entityDirectoryService init refresh', () => {
     entityDirectoryService._developers.clear();
     entityDirectoryService._stakeholders.clear();
     entityDirectoryService._users.clear();
-    get.mockReset();
+    vi.clearAllMocks();
   });
 
   it('should refresh data when init was empty and refreshIfEmpty is true', async () => {
-    const store = {
-      '/users': null,
-      '/data/teams': null,
-      '/trash/users': null
-    };
-
-    get.mockImplementation(async (refObj) => createSnapshot(store[refObj.path] ?? null));
+    mockGetAllUsers.mockResolvedValue(null);
+    mockGetAllTeams.mockResolvedValue(null);
+    mockGetTrashUsers.mockResolvedValue(null);
 
     await entityDirectoryService.init();
     expect(entityDirectoryService.getDeveloper('dev_001')).toBeNull();
 
     // Simulate user appearing in /users (the centralized model)
-    store['/users'] = {
+    mockGetAllUsers.mockResolvedValue({
       'user|example!com': {
         email: 'user@example.com',
         name: 'User Example',
         developerId: 'dev_001'
       }
-    };
+    });
 
     await entityDirectoryService.init({ refreshIfEmpty: true });
 

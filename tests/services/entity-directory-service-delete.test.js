@@ -1,15 +1,24 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const mockSet = vi.fn().mockResolvedValue(undefined);
-const mockRef = vi.fn().mockReturnValue('mock-ref');
+const mockUpdateUser = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('../../public/firebase-config.js', () => ({
-  database: {},
-  ref: (...args) => mockRef(...args),
-  get: vi.fn().mockResolvedValue({ exists: () => false, val: () => null }),
-  set: (...args) => mockSet(...args),
-  onValue: vi.fn()
+vi.mock('../../public/js/services/dal-service.js', () => ({
+  dalService: {
+    entities: {
+      updateUser: (...args) => mockUpdateUser(...args),
+      getAllUsers: vi.fn().mockResolvedValue(null),
+      getAllTeams: vi.fn().mockResolvedValue(null),
+      getTrashUsers: vi.fn().mockResolvedValue(null),
+      subscribeToTeams: vi.fn(),
+      subscribeToUsers: vi.fn()
+    },
+    projects: {
+      get: vi.fn().mockResolvedValue(null)
+    }
+  }
 }));
+
+vi.mock('../../public/firebase-config.js', () => ({}));
 
 describe('EntityDirectoryService delete methods', () => {
   let service;
@@ -17,7 +26,6 @@ describe('EntityDirectoryService delete methods', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    // Re-import to get fresh singleton (use dynamic import with cache bust)
     const module = await import('../../public/js/services/entity-directory-service.js');
     service = module.entityDirectoryService;
 
@@ -83,7 +91,7 @@ describe('EntityDirectoryService delete methods', () => {
     it('should remove developer from cache and Firebase', async () => {
       await service.deleteDeveloper('dev_001');
 
-      expect(mockSet).toHaveBeenCalledWith('mock-ref', null);
+      expect(mockUpdateUser).toHaveBeenCalledWith('alice|example!com', { developerId: null });
       expect(service._developers.has('dev_001')).toBe(false);
       expect(service.getDeveloper('dev_001')).toBeNull();
     });
@@ -120,7 +128,7 @@ describe('EntityDirectoryService delete methods', () => {
     it('should do nothing if developer does not exist', async () => {
       await service.deleteDeveloper('dev_999');
 
-      expect(mockSet).not.toHaveBeenCalled();
+      expect(mockUpdateUser).not.toHaveBeenCalled();
     });
   });
 
@@ -128,7 +136,7 @@ describe('EntityDirectoryService delete methods', () => {
     it('should remove stakeholder from cache and Firebase', async () => {
       await service.deleteStakeholder('stk_001');
 
-      expect(mockSet).toHaveBeenCalledWith('mock-ref', null);
+      expect(mockUpdateUser).toHaveBeenCalledWith('carol|example!com', { stakeholderId: null });
       expect(service._stakeholders.has('stk_001')).toBe(false);
       expect(service.getStakeholder('stk_001')).toBeNull();
     });
@@ -157,7 +165,7 @@ describe('EntityDirectoryService delete methods', () => {
     it('should do nothing if stakeholder does not exist', async () => {
       await service.deleteStakeholder('stk_999');
 
-      expect(mockSet).not.toHaveBeenCalled();
+      expect(mockUpdateUser).not.toHaveBeenCalled();
     });
   });
 });

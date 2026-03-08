@@ -121,6 +121,32 @@ export class EntityRepository {
     throw new Error('Not implemented: subscribeToStakeholders()');
   }
 
+  /**
+   * Subscribe to teams changes.
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
+   */
+  subscribeToTeams(callback) {
+    throw new Error('Not implemented: subscribeToTeams()');
+  }
+
+  /**
+   * Subscribe to users directory changes.
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
+   */
+  subscribeToUsers(callback) {
+    throw new Error('Not implemented: subscribeToUsers()');
+  }
+
+  /**
+   * Get all trash users.
+   * @returns {Promise<Object|null>}
+   */
+  async getTrashUsers() {
+    throw new Error('Not implemented: getTrashUsers()');
+  }
+
   static get developersPath() { return '/data/developers'; }
   static get stakeholdersPath() { return '/data/stakeholders'; }
   static get teamsPath() { return '/data/teams'; }
@@ -129,4 +155,5 @@ export class EntityRepository {
   static buildDeveloperPath(developerId) { return `/data/developers/${developerId}`; }
   static buildStakeholderPath(stakeholderId) { return `/data/stakeholders/${stakeholderId}`; }
   static buildUserPath(encodedEmail) { return `/users/${encodedEmail}`; }
+  static get trashUsersPath() { return '/trash/users'; }
 }
