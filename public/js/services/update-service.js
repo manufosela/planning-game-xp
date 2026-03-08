@@ -1,389 +1,110 @@
 /**
- * Update Service - Maneja las actualizaciones automáticas de la aplicación
- * Soporta actualizaciones modulares sin afectar configuraciones del cliente
+ * Update Service - Checks for new versions of Planning Game
+ * Fetches latest-version.json from GitHub Releases and compares with local version.
+ * Opt-out: set checkUpdates=false in CLIENT_CONFIG.updates to disable.
  */
+import { version as currentVersion } from '../version.js';
 import { CLIENT_CONFIG } from '../config/client-config.js';
+
+const LATEST_VERSION_URL = 'https://github.com/manufosela/planning-game-xp/releases/latest/download/latest-version.json';
+const CHECK_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+const DISMISSED_KEY = 'pg-update-dismissed-version';
 
 export class UpdateService {
   constructor() {
-    this.currentVersion = null;
-    this.updateCheckInterval = null;
-    this.updateInProgress = false;
-    this.backupCreated = false;
+    this.currentVersion = currentVersion;
+    this.latestVersion = null;
+    this.latestInfo = null;
+    this.lastCheck = null;
+    this._checkInterval = null;
     this._initPromise = null;
-
-    // Configuración por defecto
-    this.config = {
-      checkInterval: 24 * 60 * 60 * 1000, // 24 horas
-      autoCheck: true,
-      autoDownload: false,
-      autoInstall: false,
-      backupBeforeUpdate: true,
-      updateServer: CLIENT_CONFIG?.updateServer || 'https://api.planninggame.com',
-      maxRetries: 3
-    };
   }
 
   async init() {
     if (this._initPromise) return this._initPromise;
-
     this._initPromise = this._doInit();
     return this._initPromise;
   }
 
   async _doInit() {
-    try {
-      await this.loadCurrentVersion();
+    const updatesEnabled = CLIENT_CONFIG?.updates?.enabled !== false;
+    if (!updatesEnabled) return;
 
-      if (this.config.autoCheck) {
-        this.startUpdateChecker();
-      }
-    } catch (error) {
-      // Silent initialization failure
+    // Check on init, then every 24h
+    await this.checkForUpdates();
+    this._checkInterval = setInterval(() => this.checkForUpdates(), CHECK_INTERVAL);
+  }
+
+  stopChecker() {
+    if (this._checkInterval) {
+      clearInterval(this._checkInterval);
+      this._checkInterval = null;
     }
   }
-  
-  async loadCurrentVersion() {
-    try {
-      // Intentar cargar desde manifest local
-      const response = await fetch('/update-manifest.json');
-      if (response.ok) {
-        const manifest = await response.json();
-        this.currentVersion = manifest.version;
-      } else {
-        // Fallback al package.json version
-        this.currentVersion = '1.0.0'; // Default
-      }
-} catch (error) {
-this.currentVersion = '1.0.0';
-    }
-  }
-  
-  startUpdateChecker() {
-    if (this.updateCheckInterval) {
-      clearInterval(this.updateCheckInterval);
-    }
-    
-    // Check immediately, then at intervals
-    this.checkForUpdates();
-    
-    this.updateCheckInterval = setInterval(() => {
-      this.checkForUpdates();
-    }, this.config.checkInterval);
-}
-  
-  stopUpdateChecker() {
-    if (this.updateCheckInterval) {
-      clearInterval(this.updateCheckInterval);
-      this.updateCheckInterval = null;
-}
-  }
-  
+
   async checkForUpdates() {
     try {
-const response = await fetch(`${this.config.updateServer}/updates/check`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          currentVersion: this.currentVersion,
-          instanceId: CLIENT_CONFIG?.instanceId,
-          type: CLIENT_CONFIG?.type
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Update check failed: ${response.status}`);
-      }
-      
-      const updateInfo = await response.json();
-      
-      if (updateInfo.available) {
-// Emit update available event
+      const response = await fetch(LATEST_VERSION_URL, { cache: 'no-store' });
+      if (!response.ok) return null;
+
+      const info = await response.json();
+      this.latestVersion = info.version;
+      this.latestInfo = info;
+      this.lastCheck = new Date().toISOString();
+
+      if (this._isNewer(info.version, this.currentVersion)) {
+        // Don't notify if user already dismissed this version
+        const dismissed = localStorage.getItem(DISMISSED_KEY);
+        if (dismissed === info.version) return null;
+
         document.dispatchEvent(new CustomEvent('update-available', {
-          detail: updateInfo
+          detail: {
+            currentVersion: this.currentVersion,
+            version: info.version,
+            date: info.date,
+            changelog: info.changelog,
+            repoUrl: info.repoUrl,
+            releaseUrl: info.releaseUrl
+          }
         }));
-        
-        if (this.config.autoDownload) {
-          await this.downloadUpdate(updateInfo);
-        }
-        
-        return updateInfo;
-      } else {
-return null;
+        return info;
       }
-      
-    } catch (error) {
-return null;
-    }
-  }
-  
-  async downloadUpdate(updateInfo) {
-    try {
-      if (this.updateInProgress) {
-return false;
-      }
-      
-      this.updateInProgress = true;
-// Emit download started event
-      document.dispatchEvent(new CustomEvent('update-download-started', {
-        detail: updateInfo
-      }));
-      
-      const response = await fetch(updateInfo.downloadUrl);
-      if (!response.ok) {
-        throw new Error(`Download failed: ${response.status}`);
-      }
-      
-      const updateBlob = await response.blob();
-      
-      // Store in IndexedDB or similar for later installation
-      await this.storeUpdate(updateInfo, updateBlob);
-// Emit download completed event
-      document.dispatchEvent(new CustomEvent('update-download-completed', {
-        detail: updateInfo
-      }));
-      
-      if (this.config.autoInstall) {
-        await this.installUpdate(updateInfo);
-      }
-      
-      return true;
-      
-    } catch (error) {
-// Emit download failed event
-      document.dispatchEvent(new CustomEvent('update-download-failed', {
-        detail: { updateInfo, error: error.message }
-      }));
-      
-      return false;
-    } finally {
-      this.updateInProgress = false;
-    }
-  }
-  
-  async installUpdate(updateInfo) {
-    try {
-      if (this.updateInProgress) {
-return false;
-      }
-      
-      this.updateInProgress = true;
-// Emit installation started event
-      document.dispatchEvent(new CustomEvent('update-installation-started', {
-        detail: updateInfo
-      }));
-      
-      // Create backup if enabled
-      if (this.config.backupBeforeUpdate && !this.backupCreated) {
-        await this.createBackup();
-      }
-      
-      // Get stored update
-      const updateBlob = await this.getStoredUpdate(updateInfo.version);
-      if (!updateBlob) {
-        throw new Error('Update package not found');
-      }
-      
-      // Extract and apply update
-      await this.applyUpdate(updateBlob, updateInfo);
-      
-      // Update current version
-      this.currentVersion = updateInfo.version;
-      await this.saveCurrentVersion();
-// Emit installation completed event
-      document.dispatchEvent(new CustomEvent('update-installation-completed', {
-        detail: updateInfo
-      }));
-      
-      // Clear caches
-      await this.clearCaches();
-      
-      // Notify user to reload
-      document.dispatchEvent(new CustomEvent('update-reload-required', {
-        detail: updateInfo
-      }));
-      
-      return true;
-      
-    } catch (error) {
-// Attempt rollback
-      await this.rollback();
-      
-      // Emit installation failed event
-      document.dispatchEvent(new CustomEvent('update-installation-failed', {
-        detail: { updateInfo, error: error.message }
-      }));
-      
-      return false;
-    } finally {
-      this.updateInProgress = false;
-    }
-  }
-  
-  async createBackup() {
-    try {
-// Simple backup - store current version info
-      const backup = {
-        version: this.currentVersion,
-        timestamp: Date.now(),
-        url: window.location.href
-      };
-      
-      localStorage.setItem('planning-game-backup', JSON.stringify(backup));
-      this.backupCreated = true;
-} catch (error) {
-throw error;
-    }
-  }
-  
-  async rollback() {
-    try {
-const backup = localStorage.getItem('planning-game-backup');
-      if (!backup) {
-return false;
-      }
-      
-      const backupData = JSON.parse(backup);
-// In a real implementation, this would restore files
-      // For now, we just reset the version
-      this.currentVersion = backupData.version;
-return true;
-      
-    } catch (error) {
-return false;
-    }
-  }
-  
-  async storeUpdate(updateInfo, updateBlob) {
-    // Store in IndexedDB for offline installation
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open('PlanningGameUpdates', 1);
-      
-      request.onerror = () => reject(request.error);
-      
-      request.onsuccess = () => {
-        const db = request.result;
-        const transaction = db.transaction(['updates'], 'readwrite');
-        const store = transaction.objectStore('updates');
-        
-        store.put({
-          version: updateInfo.version,
-          data: updateBlob,
-          info: updateInfo,
-          timestamp: Date.now()
-        });
-        
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-      };
-      
-      request.onupgradeneeded = () => {
-        const db = request.result;
-        db.createObjectStore('updates', { keyPath: 'version' });
-      };
-    });
-  }
-  
-  async getStoredUpdate(version) {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open('PlanningGameUpdates', 1);
-      
-      request.onerror = () => reject(request.error);
-      
-      request.onsuccess = () => {
-        const db = request.result;
-        const transaction = db.transaction(['updates'], 'readonly');
-        const store = transaction.objectStore('updates');
-        const getRequest = store.get(version);
-        
-        getRequest.onsuccess = () => {
-          resolve(getRequest.result?.data);
-        };
-        
-        getRequest.onerror = () => reject(getRequest.error);
-      };
-    });
-  }
-  
-  async applyUpdate(updateBlob, updateInfo) {
-    // In a real implementation, this would:
-    // 1. Extract the ZIP file
-    // 2. Validate the contents
-    // 3. Replace core files (excluding config files)
-    // 4. Update the service worker
-    
-    
-    // Mock delay for demonstration
-    await new Promise(resolve => setTimeout(resolve, 2000));
-}
-  
-  async saveCurrentVersion() {
-    try {
-      const manifest = {
-        version: this.currentVersion,
-        updatedAt: new Date().toISOString()
-      };
-      
-      localStorage.setItem('planning-game-version', JSON.stringify(manifest));
-    } catch (error) {
-      // Silently ignore manifest save errors
+      return null;
+    } catch {
+      return null;
     }
   }
 
-  async clearCaches() {
-    try {
-      // Clear service worker caches
-      if ('caches' in window) {
-        const cacheNames = await caches.keys();
-        await Promise.all(
-          cacheNames.map(cacheName => caches.delete(cacheName))
-        );
-      }
+  dismissVersion(version) {
+    localStorage.setItem(DISMISSED_KEY, version);
+  }
 
-      // Clear browser cache for static assets
-      if ('serviceWorker' in navigator) {
-        const registration = await navigator.serviceWorker.ready;
-        await registration.update();
-      }
-    } catch (error) {
-      // Silently ignore cache clear errors
+  /**
+   * Compare semver strings. Returns true if latest > current.
+   */
+  _isNewer(latest, current) {
+    if (!latest || !current) return false;
+    const l = latest.split('.').map(Number);
+    const c = current.split('.').map(Number);
+    for (let i = 0; i < Math.max(l.length, c.length); i++) {
+      const lv = l[i] || 0;
+      const cv = c[i] || 0;
+      if (lv > cv) return true;
+      if (lv < cv) return false;
     }
+    return false;
   }
-  
-  // Public API methods
-  async manualUpdateCheck() {
-    return await this.checkForUpdates();
-  }
-  
-  async manualInstall(updateInfo) {
-    return await this.installUpdate(updateInfo);
-  }
-  
-  getUpdateStatus() {
+
+  getStatus() {
     return {
       currentVersion: this.currentVersion,
-      updateInProgress: this.updateInProgress,
-      autoCheck: this.config.autoCheck,
-      lastCheck: this.lastCheck
+      latestVersion: this.latestVersion,
+      lastCheck: this.lastCheck,
+      updateAvailable: this.latestVersion ? this._isNewer(this.latestVersion, this.currentVersion) : false
     };
-  }
-  
-  setConfig(newConfig) {
-    this.config = { ...this.config, ...newConfig };
-    
-    if (newConfig.autoCheck !== undefined) {
-      if (newConfig.autoCheck) {
-        this.startUpdateChecker();
-      } else {
-        this.stopUpdateChecker();
-      }
-    }
   }
 }
 
-// Create singleton instance
+// Singleton
 export const updateService = new UpdateService();
-// Initialize asynchronously (non-blocking)
 updateService.init();

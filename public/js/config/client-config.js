@@ -62,14 +62,9 @@ export const CLIENT_CONFIG = {
     custom: []
   },
   
-  // Configuración de actualizaciones
+  // Configuración de actualizaciones (set enabled: false to opt-out)
   updates: {
-    enabled: true,
-    server: 'https://api.planninggame.com',
-    channel: 'stable', // 'stable' | 'beta' | 'alpha'
-    autoCheck: true,
-    autoDownload: false,
-    autoInstall: false
+    enabled: true
   },
   
   // Configuración de límites y quotas
