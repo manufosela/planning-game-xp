@@ -163,9 +163,52 @@ export class DocsRepository {
     throw new Error('Not implemented: removeAdr()');
   }
 
+  // ==================== Global (non-project-scoped) docs ====================
+
+  /** Get all global docs (no projectId scoping). */
+  async getAllDocsGlobal() { throw new Error('Not implemented: getAllDocsGlobal()'); }
+
+  /** Get a single global doc. */
+  async getDocGlobal(docId) { throw new Error('Not implemented: getDocGlobal()'); }
+
+  /** Create a global doc. Returns generated ID. */
+  async createDocGlobal(data) { throw new Error('Not implemented: createDocGlobal()'); }
+
+  /** Set a global doc. */
+  async setDocGlobal(docId, data) { throw new Error('Not implemented: setDocGlobal()'); }
+
+  /** Remove a global doc. */
+  async removeDocGlobal(docId) { throw new Error('Not implemented: removeDocGlobal()'); }
+
+  /** Get all global sections. */
+  async getAllSectionsGlobal() { throw new Error('Not implemented: getAllSectionsGlobal()'); }
+
+  /** Set a global section. */
+  async setSectionGlobal(sectionId, data) { throw new Error('Not implemented: setSectionGlobal()'); }
+
+  /** Remove a global section. */
+  async removeSectionGlobal(sectionId) { throw new Error('Not implemented: removeSectionGlobal()'); }
+
+  /** Set doc trash entry. */
+  async setDocTrash(docId, data) { throw new Error('Not implemented: setDocTrash()'); }
+
+  /** Get all history entries for a doc. */
+  async getDocHistory(docId) { throw new Error('Not implemented: getDocHistory()'); }
+
+  /** Push a history entry for a doc. */
+  async pushDocHistory(docId, data) { throw new Error('Not implemented: pushDocHistory()'); }
+
+  /** Get a specific history entry. */
+  async getDocHistoryEntry(docId, entryId) { throw new Error('Not implemented: getDocHistoryEntry()'); }
+
+  /** Subscribe to a global doc (or all global docs if docId is null). */
+  subscribeToDocGlobal(docId, callback) { throw new Error('Not implemented: subscribeToDocGlobal()'); }
+
   static get docsBasePath() { return '/docs'; }
   static get sectionsBasePath() { return '/doc-sections'; }
   static get adrsBasePath() { return '/adrs'; }
+  static get docsTrashPath() { return '/docs-trash'; }
+  static get docsHistoryPath() { return '/docs-history'; }
 
   static buildDocsPath(projectId) { return `/docs/${projectId}`; }
   static buildDocPath(projectId, docId) { return `/docs/${projectId}/${docId}`; }
@@ -173,4 +216,9 @@ export class DocsRepository {
   static buildSectionPath(projectId, sectionId) { return `/doc-sections/${projectId}/${sectionId}`; }
   static buildAdrsPath(projectId) { return `/adrs/${projectId}`; }
   static buildAdrPath(projectId, adrId) { return `/adrs/${projectId}/${adrId}`; }
+  static buildDocGlobalPath(docId) { return `/docs/${docId}`; }
+  static buildSectionGlobalPath(sectionId) { return `/doc-sections/${sectionId}`; }
+  static buildDocTrashPath(docId) { return `/docs-trash/${docId}`; }
+  static buildDocHistoryPath(docId) { return `/docs-history/${docId}`; }
+  static buildDocHistoryEntryPath(docId, entryId) { return `/docs-history/${docId}/${entryId}`; }
 }
