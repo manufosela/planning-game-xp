@@ -5,7 +5,7 @@ import { ProjectFormStyles } from './project-form-styles.js';
 import { iaAvailabilityService } from '../services/ia-availability-service.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
 import { globalConfigService } from '../services/global-config-service.js';
-import { database, ref, get, set } from '../../firebase-config.js';
+import { dalService } from '../services/dal-service.js';
 import { toFirebaseKey } from '../utils/firebase-key-utils.js';
 import { encodeEmailForFirebase } from '../utils/email-sanitizer.js';
 import './ColorTabs.js';
@@ -796,43 +796,31 @@ export class ProjectForm extends LitElement {
 
     try {
       // Load uploaders
-      const uploadersSnap = await get(ref(database, `/data/appUploaders/${this.originalProjectName}`));
-      if (uploadersSnap.exists()) {
-        const data = uploadersSnap.val();
-        this.appUploaders = Object.keys(data)
-          .filter(key => data[key] === true)
-          .map(key => ({
-            key,
-            email: this._decodeFirebaseKey(key)
-          }));
+      const uploadersData = await dalService.appDistribution.listAppUploaders(this.originalProjectName);
+      if (uploadersData) {
+        this.appUploaders = Object.keys(uploadersData)
+          .filter(key => uploadersData[key] === true)
+          .map(key => ({ key, email: this._decodeFirebaseKey(key) }));
       } else {
         this.appUploaders = [];
       }
 
       // Load approvers (appAdmins per project)
-      const approversSnap = await get(ref(database, `/data/appAdmins/${this.originalProjectName}`));
-      if (approversSnap.exists()) {
-        const data = approversSnap.val();
-        this.appApprovers = Object.keys(data)
-          .filter(key => data[key] === true)
-          .map(key => ({
-            key,
-            email: this._decodeFirebaseKey(key)
-          }));
+      const approversData = await dalService.appDistribution.listAppAdminsByProject(this.originalProjectName);
+      if (approversData) {
+        this.appApprovers = Object.keys(approversData)
+          .filter(key => approversData[key] === true)
+          .map(key => ({ key, email: this._decodeFirebaseKey(key) }));
       } else {
         this.appApprovers = [];
       }
 
       // Load beta users
-      const betaSnap = await get(ref(database, `/data/betaUsers/${this.originalProjectName}`));
-      if (betaSnap.exists()) {
-        const data = betaSnap.val();
-        this.betaUsers = Object.keys(data)
-          .filter(key => data[key] === true)
-          .map(key => ({
-            key,
-            email: this._decodeFirebaseKey(key)
-          }));
+      const betaData = await dalService.appDistribution.listBetaUsers(this.originalProjectName);
+      if (betaData) {
+        this.betaUsers = Object.keys(betaData)
+          .filter(key => betaData[key] === true)
+          .map(key => ({ key, email: this._decodeFirebaseKey(key) }));
       } else {
         this.betaUsers = [];
       }
@@ -865,7 +853,7 @@ export class ProjectForm extends LitElement {
 
     try {
       const encodedEmail = encodeEmailForFirebase(email);
-      await set(ref(database, `/data/appUploaders/${this.originalProjectName}/${encodedEmail}`), true);
+      await dalService.appDistribution.setAppUploader(this.originalProjectName, encodedEmail, true);
       this.appUploaders = [...this.appUploaders, { key: encodedEmail, email }];
       this.selectedUploaderId = '';
       this._showNotification(`${developer.name} added as uploader`, 'success');
@@ -880,7 +868,7 @@ export class ProjectForm extends LitElement {
    */
   async _removeUploader(encodedKey) {
     try {
-      await set(ref(database, `/data/appUploaders/${this.originalProjectName}/${encodedKey}`), null);
+      await dalService.appDistribution.setAppUploader(this.originalProjectName, encodedKey, null);
       this.appUploaders = this.appUploaders.filter(u => u.key !== encodedKey);
       this._showNotification('Uploader removed', 'success');
     } catch (error) {
@@ -906,7 +894,7 @@ export class ProjectForm extends LitElement {
 
     try {
       const encodedEmail = encodeEmailForFirebase(email);
-      await set(ref(database, `/data/appAdmins/${this.originalProjectName}/${encodedEmail}`), true);
+      await dalService.appDistribution.setAppAdminByProject(this.originalProjectName, encodedEmail, true);
       this.appApprovers = [...this.appApprovers, { key: encodedEmail, email }];
       this.selectedApproverId = '';
       this._showNotification(`${developer.name} added as approver`, 'success');
@@ -921,7 +909,7 @@ export class ProjectForm extends LitElement {
    */
   async _removeApprover(encodedKey) {
     try {
-      await set(ref(database, `/data/appAdmins/${this.originalProjectName}/${encodedKey}`), null);
+      await dalService.appDistribution.setAppAdminByProject(this.originalProjectName, encodedKey, null);
       this.appApprovers = this.appApprovers.filter(a => a.key !== encodedKey);
       this._showNotification('Approver removed', 'success');
     } catch (error) {
@@ -947,7 +935,7 @@ export class ProjectForm extends LitElement {
 
     try {
       const encodedEmail = encodeEmailForFirebase(email);
-      await set(ref(database, `/data/betaUsers/${this.originalProjectName}/${encodedEmail}`), true);
+      await dalService.appDistribution.setBetaUser(this.originalProjectName, encodedEmail, true);
       this.betaUsers = [...this.betaUsers, { key: encodedEmail, email }];
       this.selectedBetaId = '';
       this._showNotification(`${stakeholder.name} added as beta user`, 'success');
@@ -962,7 +950,7 @@ export class ProjectForm extends LitElement {
    */
   async _removeBetaUser(encodedKey) {
     try {
-      await set(ref(database, `/data/betaUsers/${this.originalProjectName}/${encodedKey}`), null);
+      await dalService.appDistribution.setBetaUser(this.originalProjectName, encodedKey, null);
       this.betaUsers = this.betaUsers.filter(u => u.key !== encodedKey);
       this._showNotification('Beta user removed', 'success');
     } catch (error) {

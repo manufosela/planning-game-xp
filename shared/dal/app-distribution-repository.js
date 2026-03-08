@@ -33,12 +33,20 @@ export class AppDistributionRepository {
   async setAppMetadata(projectId, fileKey, data) { throw new Error('Not implemented'); }
   subscribeToAppMetadata(projectId, callback) { throw new Error('Not implemented'); }
 
-  // User permissions
+  // User permissions (single user checks)
   async getUserAppPermission(encodedEmail, projectId, permission) { throw new Error('Not implemented'); }
   async getAppUploader(projectId, encodedEmail) { throw new Error('Not implemented'); }
+  async setAppUploader(projectId, encodedEmail, value) { throw new Error('Not implemented'); }
   async getAppAdmin(encodedEmail) { throw new Error('Not implemented'); }
   async setAppAdmin(encodedEmail, value) { throw new Error('Not implemented'); }
   async getBetaUser(projectId, encodedEmail) { throw new Error('Not implemented'); }
+  async setBetaUser(projectId, encodedEmail, value) { throw new Error('Not implemented'); }
+
+  // User permissions (list all for a project)
+  async listAppUploaders(projectId) { throw new Error('Not implemented'); }
+  async listAppAdminsByProject(projectId) { throw new Error('Not implemented'); }
+  async setAppAdminByProject(projectId, encodedEmail, value) { throw new Error('Not implemented'); }
+  async listBetaUsers(projectId) { throw new Error('Not implemented'); }
 
   // Public sharing
   async createPublicShare(shareId, data) { throw new Error('Not implemented'); }

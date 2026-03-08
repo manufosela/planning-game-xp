@@ -63,6 +63,10 @@ export class RtdbAppDistributionRepository extends AppDistributionRepository {
     return this._repo.read(`/data/appUploaders/${projectId}/${encodedEmail}`);
   }
 
+  async setAppUploader(projectId, encodedEmail, value) {
+    return this._repo.write(`/data/appUploaders/${projectId}/${encodedEmail}`, value);
+  }
+
   async getAppAdmin(encodedEmail) {
     return this._repo.read(`/data/appAdmins/${encodedEmail}`);
   }
@@ -73,6 +77,27 @@ export class RtdbAppDistributionRepository extends AppDistributionRepository {
 
   async getBetaUser(projectId, encodedEmail) {
     return this._repo.read(`/data/betaUsers/${projectId}/${encodedEmail}`);
+  }
+
+  async setBetaUser(projectId, encodedEmail, value) {
+    return this._repo.write(`/data/betaUsers/${projectId}/${encodedEmail}`, value);
+  }
+
+  // List all permissions for a project
+  async listAppUploaders(projectId) {
+    return this._repo.read(`/data/appUploaders/${projectId}`);
+  }
+
+  async listAppAdminsByProject(projectId) {
+    return this._repo.read(`/data/appAdmins/${projectId}`);
+  }
+
+  async setAppAdminByProject(projectId, encodedEmail, value) {
+    return this._repo.write(`/data/appAdmins/${projectId}/${encodedEmail}`, value);
+  }
+
+  async listBetaUsers(projectId) {
+    return this._repo.read(`/data/betaUsers/${projectId}`);
   }
 
   // Public sharing
