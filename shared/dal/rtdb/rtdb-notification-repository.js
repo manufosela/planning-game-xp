@@ -58,6 +58,17 @@ export class RtdbNotificationRepository extends NotificationRepository {
     return this._repo.read(NotificationRepository.tokensPath);
   }
 
+  async setNotification(userKey, notificationId, data) {
+    await this._repo.write(
+      NotificationRepository.buildNotificationPath(userKey, notificationId),
+      data
+    );
+  }
+
+  async getAllNotificationsRoot() {
+    return this._repo.read(NotificationRepository.notificationsPath);
+  }
+
   subscribeToNotifications(userKey, callback) {
     return this._repo.subscribe(NotificationRepository.buildNotificationsPath(userKey), callback);
   }

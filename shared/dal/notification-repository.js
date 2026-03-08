@@ -109,6 +109,25 @@ export class NotificationRepository {
   }
 
   /**
+   * Set (overwrite) a specific notification by ID.
+   * @param {string} userKey
+   * @param {string} notificationId
+   * @param {Object} data
+   * @returns {Promise<void>}
+   */
+  async setNotification(userKey, notificationId, data) {
+    throw new Error('Not implemented: setNotification()');
+  }
+
+  /**
+   * Get all notifications for all users (root level).
+   * @returns {Promise<Object|null>} Map of userKey -> { notificationId -> data }
+   */
+  async getAllNotificationsRoot() {
+    throw new Error('Not implemented: getAllNotificationsRoot()');
+  }
+
+  /**
    * Subscribe to notifications for a user.
    * @param {string} userKey
    * @param {Function} callback

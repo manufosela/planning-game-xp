@@ -1,6 +1,6 @@
-import { ref, push, set, onValue, serverTimestamp, query, orderByChild, get } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
 import { getMessaging, getToken, onMessage, isSupported as isMessagingSupported } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js';
-import { database, app, vapidKey } from '../../firebase-config.js';
+import { app, vapidKey } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
 import { sanitizeEmailForFirebase } from '../utils/email-sanitizer.js';
 import { entityDirectoryService } from './entity-directory-service.js';
 
@@ -88,10 +88,10 @@ class PushNotificationService {
 
     async saveUserToken(userEmail, token) {
         try {
-            const userTokenRef = ref(database, `userTokens/${this.sanitizeEmail(userEmail)}`);
-            await set(userTokenRef, {
+            const sanitizedEmail = this.sanitizeEmail(userEmail);
+            await dalService.notifications.setToken(sanitizedEmail, {
                 token: token,
-                timestamp: serverTimestamp(),
+                timestamp: Date.now(),
                 email: userEmail,
                 lastUpdated: Date.now()
             });
@@ -107,82 +107,74 @@ class PushNotificationService {
 
     async createNotification(userEmail, notification) {
         try {
-            const notificationsRef = ref(database, `notifications/${this.sanitizeEmail(userEmail)}`);
-            const newNotificationRef = push(notificationsRef);
-            
+            const sanitizedEmail = this.sanitizeEmail(userEmail);
+
             // Calcular fecha de expiración (7 días desde ahora)
             const now = Date.now();
             const expiryDate = now + (7 * 24 * 60 * 60 * 1000); // 7 días en milisegundos
-            
+
             const notificationData = {
-                id: newNotificationRef.key,
                 title: notification.title,
                 message: notification.message,
                 type: notification.type || 'info',
                 read: false,
-                timestamp: serverTimestamp(),
-                createdAt: now, // Timestamp local para cálculos
-                expiryDate: expiryDate, // Fecha de expiración
+                timestamp: now,
+                createdAt: now,
+                expiryDate: expiryDate,
                 data: notification.data || {},
                 projectId: notification.projectId || null,
                 taskId: notification.taskId || null,
                 bugId: notification.bugId || null
             };
 
-            await set(newNotificationRef, notificationData);
-            
+            const notificationId = await dalService.notifications.addNotification(sanitizedEmail, notificationData);
+            notificationData.id = notificationId;
+
             // Enviar push notification si el usuario no está activo
             if (!this.isUserActive()) {
                 await this.sendPushNotification(userEmail, notificationData);
             }
-return notificationData;
+            return notificationData;
         } catch (error) {
-throw error;
+            throw error;
         }
     }
 
     async subscribeToNotifications(userEmail, callback) {
         try {
             const sanitizedEmail = this.sanitizeEmail(userEmail);
-            const notificationsRef = ref(database, `notifications/${sanitizedEmail}`);
-            const notificationsQuery = query(notificationsRef, orderByChild('timestamp'));
 
-            const unsubscribe = onValue(notificationsQuery, (snapshot) => {
+            const unsubscribe = dalService.notifications.subscribeToNotifications(sanitizedEmail, (data) => {
                 const notifications = [];
                 const now = Date.now();
-                
-                if (snapshot.exists()) {
-                    snapshot.forEach((childSnapshot) => {
-                        const notification = {
-                            ...childSnapshot.val(),
-                            id: childSnapshot.key
-                        };
-                        
+
+                if (data) {
+                    for (const [key, value] of Object.entries(data)) {
+                        const notification = { ...value, id: key };
+
                         // Filtrar notificaciones expiradas
-                        // Si no tiene expiryDate (notificaciones antiguas), se mantienen
-                        // Si tiene expiryDate, verificar que no haya expirado
                         if (!notification.expiryDate || notification.expiryDate > now) {
                             notifications.push(notification);
                         }
-                    });
+                    }
                 }
-                
+
                 // Ordenar por timestamp descendente (más recientes primero)
                 notifications.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
                 callback(notifications);
             });
 
-            this.userNotificationRefs.set(userEmail, { ref: notificationsRef, unsubscribe });
+            this.userNotificationRefs.set(userEmail, { unsubscribe });
             return unsubscribe;
         } catch (error) {
-throw error;
+            throw error;
         }
     }
 
     async markAsRead(userEmail, notificationId) {
         try {
-            const notificationRef = ref(database, `notifications/${this.sanitizeEmail(userEmail)}/${notificationId}/read`);
-            await set(notificationRef, true);
+            const sanitizedEmail = this.sanitizeEmail(userEmail);
+            await dalService.notifications.markAsRead(sanitizedEmail, notificationId);
         } catch (error) {
             // Silently ignore - notification will show as unread
         }
@@ -190,26 +182,18 @@ throw error;
 
     async markAllAsRead(userEmail) {
         try {
-            const notificationsRef = ref(database, `notifications/${this.sanitizeEmail(userEmail)}`);
-            const snapshot = await new Promise((resolve) => {
-                onValue(notificationsRef, resolve, { onlyOnce: true });
-            });
+            const sanitizedEmail = this.sanitizeEmail(userEmail);
+            const notifications = await dalService.notifications.getNotifications(sanitizedEmail);
 
-            if (snapshot.exists()) {
-                const updates = {};
-                snapshot.forEach((childSnapshot) => {
-                    if (!childSnapshot.val().read) {
-                        updates[`${childSnapshot.key}/read`] = true;
+            if (notifications) {
+                const promises = [];
+                for (const [key, value] of Object.entries(notifications)) {
+                    if (!value.read) {
+                        promises.push(dalService.notifications.markAsRead(sanitizedEmail, key));
                     }
-                });
-
-                if (Object.keys(updates).length > 0) {
-                    await Promise.all(
-                        Object.entries(updates).map(([path, value]) => {
-                            const updateRef = ref(database, `notifications/${this.sanitizeEmail(userEmail)}/${path}`);
-                            return set(updateRef, value);
-                        })
-                    );
+                }
+                if (promises.length > 0) {
+                    await Promise.all(promises);
                 }
             }
         } catch (error) {
@@ -219,21 +203,19 @@ throw error;
 
     async clearReadNotifications(userEmail) {
         try {
-            const notificationsRef = ref(database, `notifications/${this.sanitizeEmail(userEmail)}`);
-            const snapshot = await new Promise((resolve) => {
-                onValue(notificationsRef, resolve, { onlyOnce: true });
-            });
+            const sanitizedEmail = this.sanitizeEmail(userEmail);
+            const notifications = await dalService.notifications.getNotifications(sanitizedEmail);
 
-            if (snapshot.exists()) {
+            if (notifications) {
                 const promises = [];
-                snapshot.forEach((childSnapshot) => {
-                    if (childSnapshot.val().read) {
-                        const childRef = ref(database, `notifications/${this.sanitizeEmail(userEmail)}/${childSnapshot.key}`);
-                        promises.push(set(childRef, null));
+                for (const [key, value] of Object.entries(notifications)) {
+                    if (value.read) {
+                        promises.push(dalService.notifications.removeNotification(sanitizedEmail, key));
                     }
-                });
-
-                await Promise.all(promises);
+                }
+                if (promises.length > 0) {
+                    await Promise.all(promises);
+                }
             }
         } catch (error) {
             // Silently ignore clear errors
@@ -243,45 +225,39 @@ throw error;
     async clearExpiredNotifications(userEmail) {
         try {
             const now = Date.now();
-            const notificationsRef = ref(database, `notifications/${this.sanitizeEmail(userEmail)}`);
-            const snapshot = await new Promise((resolve) => {
-                onValue(notificationsRef, resolve, { onlyOnce: true });
-            });
+            const sanitizedEmail = this.sanitizeEmail(userEmail);
+            const notifications = await dalService.notifications.getNotifications(sanitizedEmail);
 
-            if (snapshot.exists()) {
+            if (notifications) {
                 const promises = [];
                 let expiredCount = 0;
-                
-                snapshot.forEach((childSnapshot) => {
-                    const notification = childSnapshot.val();
-                    // Eliminar notificaciones que tengan expiryDate y hayan expirado
-                    if (notification.expiryDate && notification.expiryDate <= now) {
-                        const childRef = ref(database, `notifications/${this.sanitizeEmail(userEmail)}/${childSnapshot.key}`);
-                        promises.push(set(childRef, null));
+
+                for (const [key, value] of Object.entries(notifications)) {
+                    if (value.expiryDate && value.expiryDate <= now) {
+                        promises.push(dalService.notifications.removeNotification(sanitizedEmail, key));
                         expiredCount++;
                     }
-                });
+                }
 
                 if (promises.length > 0) {
                     await Promise.all(promises);
-}
-                
+                }
+
                 return expiredCount;
             }
-            
+
             return 0;
         } catch (error) {
-return 0;
+            return 0;
         }
     }
 
     async clearAllExpiredNotifications() {
         try {
             const now = Date.now();
-            const notificationsRootRef = ref(database, 'notifications');
-            const snapshot = await get(notificationsRootRef);
-            
-            if (!snapshot.exists()) {
+            const allNotifications = await dalService.notifications.getAllNotificationsRoot();
+
+            if (!allNotifications) {
                 return 0;
             }
 
@@ -289,29 +265,25 @@ return 0;
             const promises = [];
 
             // Iterar por cada usuario
-            snapshot.forEach((userSnapshot) => {
-                const userEmail = userSnapshot.key;
-                
+            for (const [userKey, userNotifications] of Object.entries(allNotifications)) {
+                if (!userNotifications || typeof userNotifications !== 'object') continue;
+
                 // Iterar por cada notificación del usuario
-                userSnapshot.forEach((notificationSnapshot) => {
-                    const notification = notificationSnapshot.val();
-                    
-                    // Verificar si la notificación ha expirado
+                for (const [notifId, notification] of Object.entries(userNotifications)) {
                     if (notification.expiryDate && notification.expiryDate <= now) {
-                        const notificationRef = ref(database, `notifications/${userEmail}/${notificationSnapshot.key}`);
-                        promises.push(set(notificationRef, null));
+                        promises.push(dalService.notifications.removeNotification(userKey, notifId));
                         totalExpired++;
                     }
-                });
-            });
+                }
+            }
 
             if (promises.length > 0) {
                 await Promise.all(promises);
-}
-            
+            }
+
             return totalExpired;
         } catch (error) {
-return 0;
+            return 0;
         }
     }
 
@@ -529,24 +501,22 @@ throw error;
     async createExpiredTestNotification(userEmail = null) {
         const testEmail = userEmail || window.currentUser?.email;
         if (!testEmail) {
-return;
+            return;
         }
 
         try {
-            const notificationsRef = ref(database, `notifications/${this.sanitizeEmail(testEmail)}`);
-            const newNotificationRef = push(notificationsRef);
-            
+            const sanitizedEmail = this.sanitizeEmail(testEmail);
+
             // Crear una notificación con fecha de expiración en el pasado
             const now = Date.now();
             const expiredDate = now - (24 * 60 * 60 * 1000); // Expirada hace 1 día
-            
+
             const notificationData = {
-                id: newNotificationRef.key,
                 title: 'Notificación Expirada (Test)',
                 message: 'Esta notificación está expirada y debería ser filtrada',
                 type: 'info',
                 read: false,
-                timestamp: serverTimestamp(),
+                timestamp: now,
                 createdAt: expiredDate,
                 expiryDate: now - 1000, // Expirada hace 1 segundo
                 data: {
@@ -555,15 +525,17 @@ return;
                 }
             };
 
-            await set(newNotificationRef, notificationData);
-// Verificar que la limpieza funciona
+            const notificationId = await dalService.notifications.addNotification(sanitizedEmail, notificationData);
+            notificationData.id = notificationId;
+
+            // Verificar que la limpieza funciona
             setTimeout(async () => {
                 await this.clearExpiredNotifications(testEmail);
-}, 2000);
-            
+            }, 2000);
+
             return notificationData;
         } catch (error) {
-throw error;
+            throw error;
         }
     }
 
