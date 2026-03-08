@@ -10,6 +10,7 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
     <div class="wip-tabs">
       <button class="tab-button active" data-tab="wip">WIP actual</button>
       <button class="tab-button" data-tab="backlog">Backlog por developer</button>
+      <button class="tab-button" data-tab="analytics">Resumen de trabajo</button>
     </div>
     <div id="tab-wip" class="tab-panel">
       <div id="wipContent" class="wip-list">Cargando...</div>
@@ -20,13 +21,26 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
       </div>
       <div id="backlogContent" class="backlog-list">Cargando...</div>
     </div>
+    <div id="tab-analytics" class="tab-panel hidden">
+      <div class="analytics-controls">
+        <label for="analytics-period">Período:</label>
+        <select id="analytics-period">
+          <option value="year">Año completo</option>
+          <option value="month">Último mes</option>
+          <option value="week">Última semana</option>
+        </select>
+        <label for="analytics-year">Año:</label>
+        <select id="analytics-year"></select>
+      </div>
+      <div id="analyticsContent" class="analytics-list">Selecciona un período para ver estadísticas.</div>
+    </div>
   </section>
 
 
 <script type="module">
   import { database, ref, onValue, get, set } from '/firebase-config.js';
   import { isCurrentUserSuperAdmin, normalizeEmail as normalizeEmailSafe } from '/js/utils/super-admin-check.js';
-  import { getWorkdaysDuration } from '/js/utils/workday-utils.js';
+  import { getWorkdaysDuration, calculateWorkdays } from '/js/utils/workday-utils.js';
   import { entityDirectoryService } from '/js/services/entity-directory-service.js';
   import { developerBacklogService } from '/js/services/developer-backlog-service.js';
   import { FirebaseService } from '/js/services/firebase-service.js';
@@ -39,9 +53,11 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
   // DOM elements
   const wipContent = document.getElementById('wipContent');
   const backlogContent = document.getElementById('backlogContent');
+  const analyticsContent = document.getElementById('analyticsContent');
   const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
   const tabWip = document.getElementById('tab-wip');
   const tabBacklog = document.getElementById('tab-backlog');
+  const tabAnalytics = document.getElementById('tab-analytics');
   let loadingLayer = null;
 
   // State
@@ -97,12 +113,17 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
     tabButtons.forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === activeTab);
     });
+
+    tabWip.classList.add('hidden');
+    tabBacklog.classList.add('hidden');
+    tabAnalytics.classList.add('hidden');
+
     if (activeTab === 'backlog') {
       tabBacklog.classList.remove('hidden');
-      tabWip.classList.add('hidden');
-      // No auto-sync - user can click "Sincronizar Backlogs" button manually
+    } else if (activeTab === 'analytics') {
+      tabAnalytics.classList.remove('hidden');
+      loadAnalytics();
     } else {
-      tabBacklog.classList.add('hidden');
       tabWip.classList.remove('hidden');
     }
 
@@ -120,7 +141,7 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
   // Restore tab and developer from URL on page load
   function restoreTabFromUrl() {
     const urlState = URLStateManager.getState();
-    if (urlState.tab && (urlState.tab === 'wip' || urlState.tab === 'backlog')) {
+    if (urlState.tab && ['wip', 'backlog', 'analytics'].includes(urlState.tab)) {
       updateTabs(urlState.tab, false); // Don't update URL again
     }
     if (urlState.developer) {
@@ -130,7 +151,7 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
 
   // Listen for browser back/forward navigation
   URLStateManager.onPopState((state) => {
-    if (state.tab && (state.tab === 'wip' || state.tab === 'backlog')) {
+    if (state.tab && ['wip', 'backlog', 'analytics'].includes(state.tab)) {
       updateTabs(state.tab, false);
     }
     if (state.tab === 'backlog' && state.developer) {
@@ -1368,6 +1389,240 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
     });
   }
 
+  // ==================== WORK ANALYTICS ====================
+
+  let analyticsLoaded = false;
+  let analyticsData = []; // { developer, devId, projectId, cardId, title, cardType, startDate, endDate, workdays }
+
+  async function loadAnalytics() {
+    if (analyticsLoaded) {
+      renderAnalytics();
+      return;
+    }
+
+    analyticsContent.innerHTML = '<div class="analytics-loading">Cargando datos de todos los proyectos...</div>';
+
+    try {
+      const projectsSnap = await get(ref(database, '/projects'));
+      if (!projectsSnap.exists()) {
+        analyticsContent.innerHTML = '<div class="analytics-empty">No hay proyectos disponibles.</div>';
+        return;
+      }
+
+      const projects = Object.keys(projectsSnap.val());
+      const completedStatuses = ['Done', 'Done&Validated'];
+      const bugClosedStatuses = ['Fixed', 'Verified', 'Closed', 'Cerrado'];
+      const allEntries = [];
+
+      for (const projectId of projects) {
+        // Load tasks
+        const tasksSnap = await get(ref(database, `/cards/${projectId}/TASKS_${projectId}`));
+        if (tasksSnap.exists()) {
+          Object.entries(tasksSnap.val()).forEach(([fbId, task]) => {
+            if (task.deletedAt || !completedStatuses.includes(task.status)) return;
+            if (!task.endDate) return;
+            const devId = task.developer || '';
+            const devName = entityDirectoryService.resolveDeveloperName(devId) || devId || 'Sin asignar';
+            const startDate = task.startDate ? new Date(task.startDate) : null;
+            const endDate = new Date(task.endDate);
+            const workdays = (startDate && endDate >= startDate) ? calculateWorkdays(startDate, endDate) : 0;
+
+            allEntries.push({
+              developer: devName,
+              devId,
+              projectId,
+              cardId: task.cardId || fbId,
+              title: task.title || 'Sin título',
+              cardType: 'task',
+              startDate: task.startDate || '',
+              endDate: task.endDate,
+              workdays,
+              devPoints: Number(task.devPoints) || 0,
+              businessPoints: Number(task.businessPoints) || 0
+            });
+          });
+        }
+
+        // Load bugs
+        const bugsSnap = await get(ref(database, `/cards/${projectId}/BUGS_${projectId}`));
+        if (bugsSnap.exists()) {
+          Object.entries(bugsSnap.val()).forEach(([fbId, bug]) => {
+            if (bug.deletedAt || !bugClosedStatuses.includes(bug.status)) return;
+            if (!bug.endDate) return;
+            const devId = bug.developer || '';
+            const devName = entityDirectoryService.resolveDeveloperName(devId) || devId || 'Sin asignar';
+            const bugStart = bug.startDate || bug.registerDate || '';
+            const startDate = bugStart ? new Date(bugStart) : null;
+            const endDate = new Date(bug.endDate);
+            const workdays = (startDate && endDate >= startDate) ? calculateWorkdays(startDate, endDate) : 0;
+
+            allEntries.push({
+              developer: devName,
+              devId,
+              projectId,
+              cardId: bug.cardId || fbId,
+              title: bug.title || 'Sin título',
+              cardType: 'bug',
+              startDate: bugStart,
+              endDate: bug.endDate,
+              workdays,
+              devPoints: 0,
+              businessPoints: 0
+            });
+          });
+        }
+      }
+
+      analyticsData = allEntries;
+      analyticsLoaded = true;
+
+      // Populate year selector
+      const yearSelect = document.getElementById('analytics-year');
+      const years = new Set(allEntries.map(e => new Date(e.endDate).getFullYear()));
+      years.add(new Date().getFullYear());
+      const sortedYears = Array.from(years).sort((a, b) => b - a);
+      yearSelect.innerHTML = sortedYears.map(y =>
+        `<option value="${y}" ${y === new Date().getFullYear() ? 'selected' : ''}>${y}</option>`
+      ).join('');
+
+      // Attach change listeners
+      document.getElementById('analytics-period').addEventListener('change', renderAnalytics);
+      yearSelect.addEventListener('change', renderAnalytics);
+
+      renderAnalytics();
+    } catch (error) {
+      console.error('Error loading analytics:', error);
+      analyticsContent.innerHTML = '<div class="analytics-empty">Error cargando datos.</div>';
+    }
+  }
+
+  function renderAnalytics() {
+    const period = document.getElementById('analytics-period').value;
+    const selectedYear = Number(document.getElementById('analytics-year').value);
+
+    // Filter by period
+    const now = new Date();
+    let filteredData = analyticsData.filter(e => {
+      const endDate = new Date(e.endDate);
+      if (endDate.getFullYear() !== selectedYear) return false;
+
+      if (period === 'week') {
+        const weekAgo = new Date(now);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return endDate >= weekAgo;
+      }
+      if (period === 'month') {
+        const monthAgo = new Date(now);
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        return endDate >= monthAgo;
+      }
+      return true; // year
+    });
+
+    // Aggregate by developer
+    const byDev = new Map();
+    filteredData.forEach(entry => {
+      const key = entry.devId || entry.developer;
+      if (!byDev.has(key)) {
+        byDev.set(key, { developer: entry.developer, devId: entry.devId, tasks: [], totalWorkdays: 0, totalDevPoints: 0, projects: new Set() });
+      }
+      const dev = byDev.get(key);
+      dev.tasks.push(entry);
+      dev.totalWorkdays += entry.workdays;
+      dev.totalDevPoints += entry.devPoints;
+      dev.projects.add(entry.projectId);
+    });
+
+    // Sort by tasks completed descending
+    const devRows = Array.from(byDev.values()).sort((a, b) => b.tasks.length - a.tasks.length);
+
+    if (devRows.length === 0) {
+      analyticsContent.innerHTML = '<div class="analytics-empty">No hay datos para el período seleccionado.</div>';
+      return;
+    }
+
+    // Totals
+    const totalTasks = filteredData.length;
+    const totalWorkdays = filteredData.reduce((s, e) => s + e.workdays, 0);
+    const avgWorkdays = totalTasks > 0 ? (totalWorkdays / totalTasks).toFixed(1) : 0;
+    const totalBugs = filteredData.filter(e => e.cardType === 'bug').length;
+
+    let html = `
+      <div class="analytics-summary">
+        <div class="analytics-stat"><span class="stat-value">${totalTasks}</span><span class="stat-label">Completadas</span></div>
+        <div class="analytics-stat"><span class="stat-value">${totalBugs}</span><span class="stat-label">Bugs resueltos</span></div>
+        <div class="analytics-stat"><span class="stat-value">${avgWorkdays}</span><span class="stat-label">Promedio (días lab.)</span></div>
+        <div class="analytics-stat"><span class="stat-value">${devRows.length}</span><span class="stat-label">Developers</span></div>
+      </div>
+      <table class="analytics-table">
+        <thead>
+          <tr>
+            <th>Developer</th>
+            <th>Completadas</th>
+            <th>Bugs</th>
+            <th>Dev Points</th>
+            <th>Días lab. total</th>
+            <th>Promedio</th>
+            <th>Proyectos</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    devRows.forEach(dev => {
+      const avgDays = dev.tasks.length > 0 ? (dev.totalWorkdays / dev.tasks.length).toFixed(1) : '-';
+      const bugs = dev.tasks.filter(t => t.cardType === 'bug').length;
+      const devKey = (dev.devId || dev.developer).replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      html += `
+        <tr class="analytics-dev-row" data-dev="${devKey}">
+          <td class="dev-name-cell"><button class="analytics-expand-btn" data-target="${devKey}">▶</button> ${dev.developer}</td>
+          <td>${dev.tasks.length}</td>
+          <td>${bugs}</td>
+          <td>${dev.totalDevPoints}</td>
+          <td>${dev.totalWorkdays.toFixed(1)}</td>
+          <td>${avgDays}</td>
+          <td>${Array.from(dev.projects).join(', ')}</td>
+        </tr>
+        <tr class="analytics-detail-row hidden" id="detail-${devKey}">
+          <td colspan="7">
+            <table class="analytics-detail-table">
+              <thead><tr><th>ID</th><th>Título</th><th>Tipo</th><th>Proyecto</th><th>Inicio</th><th>Fin</th><th>Días lab.</th></tr></thead>
+              <tbody>
+                ${dev.tasks.sort((a, b) => new Date(b.endDate) - new Date(a.endDate)).map(t => `
+                  <tr>
+                    <td>${t.cardId}</td>
+                    <td class="task-title-cell">${t.title}</td>
+                    <td>${t.cardType}</td>
+                    <td>${t.projectId}</td>
+                    <td>${t.startDate ? new Date(t.startDate).toLocaleDateString('es') : '-'}</td>
+                    <td>${new Date(t.endDate).toLocaleDateString('es')}</td>
+                    <td>${t.workdays.toFixed(1)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      `;
+    });
+
+    html += '</tbody></table>';
+    analyticsContent.innerHTML = html;
+
+    // Attach expand/collapse handlers
+    analyticsContent.querySelectorAll('.analytics-expand-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.target;
+        const detailRow = document.getElementById(`detail-${target}`);
+        if (detailRow) {
+          detailRow.classList.toggle('hidden');
+          btn.textContent = detailRow.classList.contains('hidden') ? '▶' : '▼';
+        }
+      });
+    });
+  }
+
   // Init
   async function init() {
     // Inicializar el servicio de directorio
@@ -1762,6 +2017,123 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
   @media (max-width: 820px) {
     .wip-container { padding: 1rem; }
     .wip-table th, .wip-table td { padding: 0.6rem 0.5rem; font-size: 0.85rem; }
+  }
+
+  /* Analytics tab */
+  .analytics-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+  .analytics-controls label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-secondary, #666);
+  }
+  .analytics-controls select {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border-default, #d1d5db);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #333);
+  }
+  .analytics-summary {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+  }
+  .analytics-stat {
+    flex: 1;
+    min-width: 120px;
+    background: var(--bg-secondary, #f9fafb);
+    border: 1px solid var(--border-default, #e5e7eb);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    text-align: center;
+  }
+  .stat-value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary, #1a1a2e);
+  }
+  .stat-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-secondary, #666);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .analytics-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .analytics-table th,
+  .analytics-table td {
+    padding: 0.5rem 0.6rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-default, #e5e7eb);
+  }
+  .analytics-table th {
+    background: var(--bg-secondary, #f9fafb);
+    font-weight: 600;
+    color: var(--text-secondary, #666);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    position: sticky;
+    top: 0;
+  }
+  .analytics-dev-row {
+    cursor: pointer;
+  }
+  .analytics-dev-row:hover {
+    background: var(--bg-hover, #f1f5f9);
+  }
+  .analytics-expand-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 0 0.3rem;
+    color: var(--text-secondary, #666);
+  }
+  .dev-name-cell {
+    font-weight: 600;
+  }
+  .analytics-detail-row td {
+    padding: 0;
+    background: var(--bg-subtle, #fafafa);
+  }
+  .analytics-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    margin: 0.5rem 0;
+  }
+  .analytics-detail-table th,
+  .analytics-detail-table td {
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid var(--border-default, #f0f0f0);
+  }
+  .analytics-detail-table th {
+    background: var(--bg-tertiary, #e5e7eb);
+    font-size: 0.75rem;
+  }
+  .task-title-cell {
+    max-width: 250px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .analytics-loading, .analytics-empty {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-secondary, #94a3b8);
   }
 </style>
 
