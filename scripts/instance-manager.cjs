@@ -29,6 +29,7 @@ const { execSync } = require('child_process');
 const ROOT_DIR = path.join(__dirname, '..');
 const INSTANCES_DIR = path.join(ROOT_DIR, 'planning-game-instances');
 const LAST_INSTANCE_FILE = path.join(ROOT_DIR, '.last-instance');
+const DEV_PORT_FILE = path.join(ROOT_DIR, '.dev-port');
 
 /**
  * Files symlinked from instance to project root.
@@ -193,6 +194,25 @@ function checkDevServerConflict(targetInstance) {
     // Port not in use, no conflict
     return null;
   }
+}
+
+function cleanDevPortFile() {
+  try { fs.unlinkSync(DEV_PORT_FILE); } catch { /* does not exist */ }
+}
+
+/**
+ * Find the next available port starting from basePort.
+ */
+function findAvailablePort(basePort = 4321) {
+  for (let port = basePort; port < basePort + 20; port++) {
+    try {
+      execSync(`lsof -ti:${port}`, { stdio: 'pipe' });
+      // Port in use, try next
+    } catch {
+      return port;
+    }
+  }
+  return basePort + 20;
 }
 
 /**
@@ -413,10 +433,12 @@ async function cmdSelect() {
     const name = instances[0];
     const conflict = checkDevServerConflict(name);
     if (conflict) {
-      console.error(`\nError: Dev server running on port 4321 with instance "${conflict}".`);
-      console.error(`Cannot switch to "${name}" while another instance is serving.`);
-      console.error('Stop the running dev server first, then try again.\n');
-      process.exit(1);
+      const port = findAvailablePort(4322);
+      console.warn(`\n  Warning: Dev server running on port 4321 with instance "${conflict}".`);
+      console.warn(`  Switching to "${name}" — Astro will use port ${port}.\n`);
+      fs.writeFileSync(DEV_PORT_FILE, String(port));
+    } else {
+      cleanDevPortFile();
     }
     const projectId = getProjectIdFromFirebaserc(path.join(INSTANCES_DIR, name));
     console.log(`\nUsing instance: ${name} (${projectId || 'no project ID'})`);
@@ -476,10 +498,12 @@ async function cmdSelect() {
 
   const conflict = checkDevServerConflict(selected);
   if (conflict) {
-    console.error(`\nError: Dev server running on port 4321 with instance "${conflict}".`);
-    console.error(`Cannot switch to "${selected}" while another instance is serving.`);
-    console.error('Stop the running dev server first, then try again.\n');
-    process.exit(1);
+    const port = findAvailablePort(4322);
+    console.warn(`\n  Warning: Dev server running on port 4321 with instance "${conflict}".`);
+    console.warn(`  Switching to "${selected}" — Astro will use port ${port}.\n`);
+    fs.writeFileSync(DEV_PORT_FILE, String(port));
+  } else {
+    cleanDevPortFile();
   }
 
   const projectId = getProjectIdFromFirebaserc(path.join(INSTANCES_DIR, selected));
@@ -538,6 +562,16 @@ function cmdUse(name) {
       console.error(`Available: ${instances.join(', ')}`);
     }
     process.exit(1);
+  }
+
+  const conflict = checkDevServerConflict(name);
+  if (conflict) {
+    const port = findAvailablePort(4322);
+    console.warn(`\n  Warning: Dev server running on port 4321 with instance "${conflict}".`);
+    console.warn(`  Switching to "${name}" — Astro will use port ${port}.\n`);
+    fs.writeFileSync(DEV_PORT_FILE, String(port));
+  } else {
+    cleanDevPortFile();
   }
 
   console.log(`\nActivating instance: ${name}\n`);
