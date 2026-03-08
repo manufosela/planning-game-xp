@@ -1,7 +1,9 @@
 /**
  * Documentation Service
- * Handles CRUD operations for documentation stored in Firebase Realtime Database
+ * Handles CRUD operations for documentation via DAL
  */
+
+import { dalService } from './dal-service.js';
 
 class DocsService {
   constructor() {
@@ -11,46 +13,31 @@ class DocsService {
   }
 
   /**
-   * Get Firebase modules dynamically
+   * Get Firebase Auth module (only for currentUser).
    */
-  async getFirebaseModules() {
+  async _getAuth() {
     const module = await import(
       /* @vite-ignore */ `${window.location.origin}/firebase-config.js`
     );
-    return {
-      database: module.database,
-      ref: module.ref,
-      get: module.get,
-      set: module.set,
-      push: module.push,
-      remove: module.remove,
-      onValue: module.onValue,
-      off: module.off,
-      auth: module.auth
-    };
+    return module.auth;
   }
 
   /**
-   * Get all documents from Firebase
+   * Get all documents
    * @returns {Promise<Array>} Array of documents
    */
   async getAllDocs() {
     try {
-      const { database, ref, get } = await this.getFirebaseModules();
-      const docsRef = ref(database, 'docs');
-      const snapshot = await get(docsRef);
+      const data = await dalService.docs.getAllDocsGlobal();
 
-      if (!snapshot.exists()) {
+      if (!data) {
         return [];
       }
 
-      const docs = [];
-      snapshot.forEach((child) => {
-        docs.push({
-          id: child.key,
-          ...child.val()
-        });
-      });
+      const docs = Object.entries(data).map(([key, val]) => ({
+        id: key,
+        ...val
+      }));
 
       // Sort by section and order
       docs.sort((a, b) => {
@@ -82,19 +69,13 @@ class DocsService {
     }
 
     try {
-      const { database, ref, get } = await this.getFirebaseModules();
-      const docRef = ref(database, `docs/${docId}`);
-      const snapshot = await get(docRef);
+      const data = await dalService.docs.getDocGlobal(docId);
 
-      if (!snapshot.exists()) {
+      if (!data) {
         return null;
       }
 
-      const doc = {
-        id: docId,
-        ...snapshot.val()
-      };
-
+      const doc = { id: docId, ...data };
       this.cache.set(docId, doc);
       return doc;
     } catch (error) {
@@ -120,7 +101,7 @@ class DocsService {
    */
   async saveDoc(doc) {
     try {
-      const { database, ref, set, push, get, auth } = await this.getFirebaseModules();
+      const auth = await this._getAuth();
       const currentUser = auth.currentUser;
 
       if (!currentUser) {
@@ -132,18 +113,8 @@ class DocsService {
       let docId = doc.id;
       let previousDoc = null;
 
-      if (isNew) {
-        // Create new document
-        const docsRef = ref(database, 'docs');
-        const newDocRef = push(docsRef);
-        docId = newDocRef.key;
-      } else {
-        // Get previous state for history
-        const docRef = ref(database, `docs/${docId}`);
-        const snapshot = await get(docRef);
-        if (snapshot.exists()) {
-          previousDoc = snapshot.val();
-        }
+      if (!isNew) {
+        previousDoc = await dalService.docs.getDocGlobal(docId);
       }
 
       const docData = {
@@ -159,15 +130,13 @@ class DocsService {
       if (isNew) {
         docData.createdAt = now;
         docData.createdBy = currentUser.email;
+        docId = await dalService.docs.createDocGlobal(docData);
       } else {
         // Preserve creation info
         docData.createdAt = previousDoc?.createdAt || now;
         docData.createdBy = previousDoc?.createdBy || currentUser.email;
+        await dalService.docs.setDocGlobal(docId, docData);
       }
-
-      // Save document
-      const docRef = ref(database, `docs/${docId}`);
-      await set(docRef, docData);
 
       // Save history
       await this.saveHistory(docId, docData, isNew ? 'create' : 'update', currentUser.email);
@@ -190,7 +159,7 @@ class DocsService {
    */
   async deleteDoc(docId) {
     try {
-      const { database, ref, set, get, remove, auth } = await this.getFirebaseModules();
+      const auth = await this._getAuth();
       const currentUser = auth.currentUser;
 
       if (!currentUser) {
@@ -198,18 +167,14 @@ class DocsService {
       }
 
       // Get document data before deletion
-      const docRef = ref(database, `docs/${docId}`);
-      const snapshot = await get(docRef);
+      const docData = await dalService.docs.getDocGlobal(docId);
 
-      if (!snapshot.exists()) {
+      if (!docData) {
         return false;
       }
 
-      const docData = snapshot.val();
-
       // Move to trash
-      const trashRef = ref(database, `docs-trash/${docId}`);
-      await set(trashRef, {
+      await dalService.docs.setDocTrash(docId, {
         ...docData,
         deletedAt: new Date().toISOString(),
         deletedBy: currentUser.email
@@ -219,7 +184,7 @@ class DocsService {
       await this.saveHistory(docId, docData, 'delete', currentUser.email);
 
       // Delete from main location
-      await remove(docRef);
+      await dalService.docs.removeDocGlobal(docId);
 
       // Remove from cache
       this.cache.delete(docId);
@@ -240,12 +205,7 @@ class DocsService {
    */
   async saveHistory(docId, docData, action, userEmail) {
     try {
-      const { database, ref, push, set } = await this.getFirebaseModules();
-
-      const historyRef = ref(database, `docs-history/${docId}`);
-      const newHistoryRef = push(historyRef);
-
-      await set(newHistoryRef, {
+      await dalService.docs.pushDocHistory(docId, {
         title: docData.title,
         content: docData.content,
         timestamp: new Date().toISOString(),
@@ -265,21 +225,16 @@ class DocsService {
    */
   async getDocHistory(docId) {
     try {
-      const { database, ref, get } = await this.getFirebaseModules();
-      const historyRef = ref(database, `docs-history/${docId}`);
-      const snapshot = await get(historyRef);
+      const data = await dalService.docs.getDocHistory(docId);
 
-      if (!snapshot.exists()) {
+      if (!data) {
         return [];
       }
 
-      const history = [];
-      snapshot.forEach((child) => {
-        history.push({
-          id: child.key,
-          ...child.val()
-        });
-      });
+      const history = Object.entries(data).map(([key, val]) => ({
+        id: key,
+        ...val
+      }));
 
       // Sort by timestamp descending (most recent first)
       history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -299,7 +254,7 @@ class DocsService {
    */
   async restoreFromHistory(docId, historyId) {
     try {
-      const { database, ref, get, auth } = await this.getFirebaseModules();
+      const auth = await this._getAuth();
       const currentUser = auth.currentUser;
 
       if (!currentUser) {
@@ -307,14 +262,11 @@ class DocsService {
       }
 
       // Get history entry
-      const historyRef = ref(database, `docs-history/${docId}/${historyId}`);
-      const snapshot = await get(historyRef);
+      const historyEntry = await dalService.docs.getDocHistoryEntry(docId, historyId);
 
-      if (!snapshot.exists()) {
+      if (!historyEntry) {
         throw new Error('History entry not found');
       }
-
-      const historyEntry = snapshot.val();
 
       // Get current document to preserve some fields
       const currentDoc = await this.getDoc(docId);
@@ -341,28 +293,23 @@ class DocsService {
    * @returns {Function} Unsubscribe function
    */
   subscribeToDoc(docId, callback) {
-    const { database, ref, onValue, off } = this.getFirebaseModules();
-
-    const path = docId ? `docs/${docId}` : 'docs';
-    const docRef = ref(database, path);
-
-    onValue(docRef, (snapshot) => {
+    return dalService.docs.subscribeToDocGlobal(docId, (data) => {
       if (docId) {
-        const doc = snapshot.exists() ? { id: docId, ...snapshot.val() } : null;
+        const doc = data ? { id: docId, ...data } : null;
         if (doc) this.cache.set(docId, doc);
         callback(doc);
       } else {
         const docs = [];
-        snapshot.forEach((child) => {
-          const doc = { id: child.key, ...child.val() };
-          docs.push(doc);
-          this.cache.set(doc.id, doc);
-        });
+        if (data) {
+          Object.entries(data).forEach(([key, val]) => {
+            const doc = { id: key, ...val };
+            docs.push(doc);
+            this.cache.set(doc.id, doc);
+          });
+        }
         callback(docs);
       }
     });
-
-    return () => off(docRef);
   }
 
   /**
@@ -385,26 +332,21 @@ class DocsService {
   }
 
   /**
-   * Get all sections from Firebase
+   * Get all sections
    * @returns {Promise<Array>} Array of sections sorted by order
    */
   async getAllSections() {
     try {
-      const { database, ref, get } = await this.getFirebaseModules();
-      const sectionsRef = ref(database, 'doc-sections');
-      const snapshot = await get(sectionsRef);
+      const data = await dalService.docs.getAllSectionsGlobal();
 
-      if (!snapshot.exists()) {
+      if (!data) {
         return [];
       }
 
-      const sections = [];
-      snapshot.forEach((child) => {
-        sections.push({
-          id: child.key,
-          ...child.val()
-        });
-      });
+      const sections = Object.entries(data).map(([key, val]) => ({
+        id: key,
+        ...val
+      }));
 
       // Sort by order
       sections.sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -423,7 +365,7 @@ class DocsService {
    */
   async saveSection(section) {
     try {
-      const { database, ref, set, push, auth } = await this.getFirebaseModules();
+      const auth = await this._getAuth();
       const currentUser = auth.currentUser;
 
       if (!currentUser) {
@@ -435,9 +377,8 @@ class DocsService {
       let sectionId = section.id;
 
       if (isNew) {
-        const sectionsRef = ref(database, 'doc-sections');
-        const newSectionRef = push(sectionsRef);
-        sectionId = newSectionRef.key;
+        // Generate a section ID based on slug
+        sectionId = `section_${this.slugify(section.name)}`;
       }
 
       const sectionData = {
@@ -453,8 +394,7 @@ class DocsService {
         sectionData.createdBy = currentUser.email;
       }
 
-      const sectionRef = ref(database, `doc-sections/${sectionId}`);
-      await set(sectionRef, sectionData);
+      await dalService.docs.setSectionGlobal(sectionId, sectionData);
 
       return { id: sectionId, ...sectionData };
     } catch (error) {
@@ -470,15 +410,14 @@ class DocsService {
    */
   async deleteSection(sectionId) {
     try {
-      const { database, ref, remove, auth } = await this.getFirebaseModules();
+      const auth = await this._getAuth();
       const currentUser = auth.currentUser;
 
       if (!currentUser) {
         throw new Error('User must be authenticated to delete sections');
       }
 
-      const sectionRef = ref(database, `doc-sections/${sectionId}`);
-      await remove(sectionRef);
+      await dalService.docs.removeSectionGlobal(sectionId);
 
       return true;
     } catch (error) {
@@ -536,7 +475,7 @@ class DocsService {
    */
   async migrateInitialSections() {
     try {
-      const { database, ref, set, auth } = await this.getFirebaseModules();
+      const auth = await this._getAuth();
       const currentUser = auth.currentUser;
 
       if (!currentUser) {
@@ -549,9 +488,7 @@ class DocsService {
 
       for (const section of initialSections) {
         const sectionId = `section_${section.slug}`;
-        const sectionRef = ref(database, `doc-sections/${sectionId}`);
-
-        await set(sectionRef, {
+        await dalService.docs.setSectionGlobal(sectionId, {
           ...section,
           createdAt: now,
           createdBy: currentUser.email,
@@ -822,7 +759,7 @@ Este documento describe una integración futura.
    */
   async migrateInitialDocs() {
     try {
-      const { database, ref, set, auth } = await this.getFirebaseModules();
+      const auth = await this._getAuth();
       const currentUser = auth.currentUser;
 
       if (!currentUser) {
@@ -836,9 +773,8 @@ Este documento describe una integración futura.
       for (let i = 0; i < initialDocs.length; i++) {
         const doc = initialDocs[i];
         const docId = `doc_${String(i + 1).padStart(3, '0')}`;
-        const docRef = ref(database, `docs/${docId}`);
 
-        await set(docRef, {
+        await dalService.docs.setDocGlobal(docId, {
           ...doc,
           createdAt: now,
           createdBy: currentUser.email,

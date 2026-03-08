@@ -69,4 +69,59 @@ export class RtdbDocsRepository extends DocsRepository {
   async removeAdr(projectId, adrId) {
     await this._repo.remove(DocsRepository.buildAdrPath(projectId, adrId));
   }
+
+  // ==================== Global (non-project-scoped) docs ====================
+
+  async getAllDocsGlobal() {
+    return this._repo.read(DocsRepository.docsBasePath);
+  }
+
+  async getDocGlobal(docId) {
+    return this._repo.read(DocsRepository.buildDocGlobalPath(docId));
+  }
+
+  async createDocGlobal(data) {
+    return this._repo.push(DocsRepository.docsBasePath, data);
+  }
+
+  async setDocGlobal(docId, data) {
+    await this._repo.write(DocsRepository.buildDocGlobalPath(docId), data);
+  }
+
+  async removeDocGlobal(docId) {
+    await this._repo.remove(DocsRepository.buildDocGlobalPath(docId));
+  }
+
+  async getAllSectionsGlobal() {
+    return this._repo.read(DocsRepository.sectionsBasePath);
+  }
+
+  async setSectionGlobal(sectionId, data) {
+    await this._repo.write(DocsRepository.buildSectionGlobalPath(sectionId), data);
+  }
+
+  async removeSectionGlobal(sectionId) {
+    await this._repo.remove(DocsRepository.buildSectionGlobalPath(sectionId));
+  }
+
+  async setDocTrash(docId, data) {
+    await this._repo.write(DocsRepository.buildDocTrashPath(docId), data);
+  }
+
+  async getDocHistory(docId) {
+    return this._repo.read(DocsRepository.buildDocHistoryPath(docId));
+  }
+
+  async pushDocHistory(docId, data) {
+    return this._repo.push(DocsRepository.buildDocHistoryPath(docId), data);
+  }
+
+  async getDocHistoryEntry(docId, entryId) {
+    return this._repo.read(DocsRepository.buildDocHistoryEntryPath(docId, entryId));
+  }
+
+  subscribeToDocGlobal(docId, callback) {
+    const path = docId ? DocsRepository.buildDocGlobalPath(docId) : DocsRepository.docsBasePath;
+    return this._repo.subscribe(path, callback);
+  }
 }
