@@ -75,6 +75,27 @@ export class RtdbCardRepository extends CardRepository {
     return this._repo.subscribe(path, callback);
   }
 
+  subscribeToSection(projectId, type, callback) {
+    const path = CardRepository.buildPath(projectId, type);
+    return this._repo.subscribe(path, callback);
+  }
+
+  async readTrashCard(projectId, sectionKey, firebaseId) {
+    return this._repo.read(`/trash/cards/${projectId}/${sectionKey}/${firebaseId}`);
+  }
+
+  async writeTrashCard(projectId, sectionKey, firebaseId, data) {
+    await this._repo.write(`/trash/cards/${projectId}/${sectionKey}/${firebaseId}`, data);
+  }
+
+  async removeTrashCard(projectId, sectionKey, firebaseId) {
+    await this._repo.remove(`/trash/cards/${projectId}/${sectionKey}/${firebaseId}`);
+  }
+
+  async removeFromView(viewType, projectId, firebaseId) {
+    await this._repo.remove(`/views/${viewType}/${projectId}/${firebaseId}`);
+  }
+
   /**
    * Apply in-memory filters to card data.
    * @param {Object} data - Map of firebaseId -> cardData

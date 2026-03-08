@@ -120,6 +120,62 @@ export class CardRepository {
   }
 
   /**
+   * Subscribe to real-time changes on all cards of a type in a project.
+   * @param {string} projectId
+   * @param {string} type - Card type
+   * @param {Function} callback - Called with cards data on each change
+   * @returns {Function} Unsubscribe function
+   */
+  subscribeToSection(projectId, type, callback) {
+    throw new Error('Not implemented: subscribeToSection()');
+  }
+
+  /**
+   * Read a card from the trash.
+   * @param {string} projectId
+   * @param {string} sectionKey - Section key in trash (e.g. "TASKS_ProjectName")
+   * @param {string} firebaseId
+   * @returns {Promise<Object|null>}
+   */
+  async readTrashCard(projectId, sectionKey, firebaseId) {
+    throw new Error('Not implemented: readTrashCard()');
+  }
+
+  /**
+   * Write a card to the trash.
+   * @param {string} projectId
+   * @param {string} sectionKey - Section key in trash
+   * @param {string} firebaseId
+   * @param {Object} data
+   * @returns {Promise<void>}
+   */
+  async writeTrashCard(projectId, sectionKey, firebaseId, data) {
+    throw new Error('Not implemented: writeTrashCard()');
+  }
+
+  /**
+   * Remove a card from the trash.
+   * @param {string} projectId
+   * @param {string} sectionKey - Section key in trash
+   * @param {string} firebaseId
+   * @returns {Promise<void>}
+   */
+  async removeTrashCard(projectId, sectionKey, firebaseId) {
+    throw new Error('Not implemented: removeTrashCard()');
+  }
+
+  /**
+   * Remove an orphan entry from a view.
+   * @param {string} viewType - e.g. 'task-list', 'bug-list'
+   * @param {string} projectId
+   * @param {string} firebaseId
+   * @returns {Promise<void>}
+   */
+  async removeFromView(viewType, projectId, firebaseId) {
+    throw new Error('Not implemented: removeFromView()');
+  }
+
+  /**
    * Build the section path for a card type in a project.
    * @param {string} projectId
    * @param {string} type

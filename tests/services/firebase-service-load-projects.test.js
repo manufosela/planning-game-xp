@@ -1,16 +1,29 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-const mockGet = vi.fn();
-const mockRef = vi.fn(() => 'mock-ref');
+const mockListProjects = vi.fn();
+const mockGetProject = vi.fn();
+const mockGetUserProjects = vi.fn();
+const mockGetDefaultProjects = vi.fn();
+const mockSetUserProjects = vi.fn();
+
+vi.mock('../../public/js/services/dal-service.js', () => ({
+  dalService: {
+    projects: {
+      listProjects: (...args) => mockListProjects(...args),
+      getProject: (...args) => mockGetProject(...args),
+    },
+    config: {
+      getUserProjects: (...args) => mockGetUserProjects(...args),
+      getDefaultProjects: (...args) => mockGetDefaultProjects(...args),
+      setUserProjects: (...args) => mockSetUserProjects(...args),
+    },
+  },
+}));
 
 vi.mock('../../public/firebase-config.js', () => ({
   database: {},
-  ref: (...args) => mockRef(...args),
-  get: (...args) => mockGet(...args),
-  push: vi.fn(),
-  set: vi.fn(),
+  ref: vi.fn(),
   onValue: vi.fn(),
-  update: vi.fn(),
   databaseFirestore: {},
   getDoc: vi.fn(),
   setDoc: vi.fn(),
@@ -69,9 +82,10 @@ describe('FirebaseService.loadProjects', () => {
     window.projects = {};
     window.isAppAdmin = false;
 
-    mockGet.mockReset();
-    mockRef.mockReset();
-    mockRef.mockReturnValue('mock-ref');
+    mockListProjects.mockReset();
+    mockGetProject.mockReset();
+    mockGetUserProjects.mockReset();
+    mockGetDefaultProjects.mockReset();
 
     const module = await import('../../public/js/services/firebase-service.js');
     FirebaseService = module.FirebaseService;
@@ -83,7 +97,7 @@ describe('FirebaseService.loadProjects', () => {
   });
 
   it('should return all projects when userEmail is null', async () => {
-    mockGet.mockResolvedValueOnce({ exists: () => true, val: () => allProjects });
+    mockListProjects.mockResolvedValueOnce(allProjects);
 
     await FirebaseService.loadProjects(null);
 
@@ -92,7 +106,7 @@ describe('FirebaseService.loadProjects', () => {
 
   it('should return all projects when window.isAppAdmin is true', async () => {
     window.isAppAdmin = true;
-    mockGet.mockResolvedValueOnce({ exists: () => true, val: () => allProjects });
+    mockListProjects.mockResolvedValueOnce(allProjects);
 
     await FirebaseService.loadProjects('regular@example.com');
 
@@ -100,30 +114,31 @@ describe('FirebaseService.loadProjects', () => {
   });
 
   it('should return all projects when userEmail is the superAdmin without calling getUserProjects', async () => {
-    mockGet.mockResolvedValueOnce({ exists: () => true, val: () => allProjects });
+    mockListProjects.mockResolvedValueOnce(allProjects);
 
     await FirebaseService.loadProjects('superadmin@example.com');
 
     expect(window.projects).toEqual(allProjects);
-    // Should only call get() once (for projects), NOT a second time for getUserProjects
-    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(mockListProjects).toHaveBeenCalledTimes(1);
+    expect(mockGetUserProjects).not.toHaveBeenCalled();
   });
 
   it('should return all projects when userEmail is the superAdmin (case insensitive)', async () => {
-    mockGet.mockResolvedValueOnce({ exists: () => true, val: () => allProjects });
+    mockListProjects.mockResolvedValueOnce(allProjects);
 
     await FirebaseService.loadProjects('SuperAdmin@Example.com');
 
     expect(window.projects).toEqual(allProjects);
-    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(mockListProjects).toHaveBeenCalledTimes(1);
   });
 
   it('should return filtered projects for regular user with specific assignments', async () => {
-    // First call: getUserProjects (returns user's project list)
-    mockGet.mockResolvedValueOnce({ exists: () => true, val: () => 'project-a,project-c' });
-    // Next calls: individual project loads
-    mockGet.mockResolvedValueOnce({ exists: () => true, val: () => allProjects['project-a'] });
-    mockGet.mockResolvedValueOnce({ exists: () => true, val: () => allProjects['project-c'] });
+    // getUserProjects returns the raw value from DB
+    mockGetUserProjects.mockResolvedValueOnce('project-a,project-c');
+    // Individual project loads
+    mockGetProject
+      .mockResolvedValueOnce(allProjects['project-a'])
+      .mockResolvedValueOnce(allProjects['project-c']);
 
     await FirebaseService.loadProjects('regular@example.com');
 
@@ -134,10 +149,10 @@ describe('FirebaseService.loadProjects', () => {
   });
 
   it('should return all projects for regular user with "All" assignment', async () => {
-    // First call: getUserProjects (returns "All")
-    mockGet.mockResolvedValueOnce({ exists: () => true, val: () => 'All' });
-    // Second call: load all projects
-    mockGet.mockResolvedValueOnce({ exists: () => true, val: () => allProjects });
+    // getUserProjects returns "All"
+    mockGetUserProjects.mockResolvedValueOnce('All');
+    // listProjects for "All" access
+    mockListProjects.mockResolvedValueOnce(allProjects);
 
     await FirebaseService.loadProjects('regular@example.com');
 
@@ -145,7 +160,7 @@ describe('FirebaseService.loadProjects', () => {
   });
 
   it('should return empty object when no projects exist in database', async () => {
-    mockGet.mockResolvedValueOnce({ exists: () => false, val: () => null });
+    mockListProjects.mockResolvedValueOnce(null);
 
     await FirebaseService.loadProjects(null);
 

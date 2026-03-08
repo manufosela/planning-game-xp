@@ -1,4 +1,7 @@
-import { database, ref, push, set, get, onValue, update, databaseFirestore, getDoc, setDoc, doc, runTransaction, auth, firebaseConfig, superAdminEmail } from '../../firebase-config.js';
+// Firebase SDK imports: only for getRef(), subscribeToPath(), subscribeToCards() and Firestore counters.
+// All other RTDB operations go through dalService.
+import { database, ref, onValue, databaseFirestore, getDoc, setDoc, doc, runTransaction, auth, firebaseConfig, superAdminEmail } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
 import { encodeEmailForFirebase, decodeEmailFromFirebase } from '../utils/email-sanitizer.js';
 import { sanitizeEmailForFirebase } from '../utils/email-sanitizer.js';
 import { permissionService } from './permission-service.js';
@@ -14,6 +17,30 @@ import { demoModeService } from './demo-mode-service.js';
 
 const normalizeEmail = (email) => (email || '').toString().trim().toLowerCase();
 const legacyEncodeEmail = (email) => normalizeEmail(email).replace(/[@.#$\[\]\/]/g, '_');
+
+/** Map card group (plural) to DAL type (singular). */
+const GROUP_TO_TYPE = {
+  tasks: 'task', bugs: 'bug', epics: 'epic',
+  sprints: 'sprint', proposals: 'proposal', qa: 'qa'
+};
+/** Map uppercase section key to DAL type. */
+const SECTION_TO_TYPE = {
+  TASKS: 'task', BUGS: 'bug', EPICS: 'epic',
+  SPRINTS: 'sprint', PROPOSALS: 'proposal', QA: 'qa'
+};
+const groupToType = (group) => GROUP_TO_TYPE[(group || '').toLowerCase()] || (group || '').toLowerCase();
+const sectionToType = (section) => SECTION_TO_TYPE[(section || '').toUpperCase()] || (section || '').toLowerCase();
+/** Inject firebaseId/id into card data from DAL result map. */
+const injectFirebaseIds = (data) => {
+  if (!data) return {};
+  Object.keys(data).forEach(key => {
+    if (data[key] && typeof data[key] === 'object') {
+      data[key].firebaseId = key;
+      if (!data[key].id) data[key].id = key;
+    }
+  });
+  return data;
+};
 
 export const FirebaseService = {
   /**
@@ -481,13 +508,13 @@ export const FirebaseService = {
   },
   async _fetchExistingWipEntries(developerKey, currentProjectId, currentTaskId) {
     try {
-      const snap = await get(ref(database, '/wip'));
-      if (!snap.exists()) return { closeByDeveloper: [], closeByTask: [] };
+      const allWip = await dalService.backlogs.getAllWip();
+      if (!allWip) return { closeByDeveloper: [], closeByTask: [] };
 
       const closeByDeveloper = [];
       const closeByTask = [];
 
-      Object.entries(snap.val() || {}).forEach(([storedKey, existingEntry]) => {
+      Object.entries(allWip).forEach(([storedKey, existingEntry]) => {
         if (!existingEntry || existingEntry.taskId === 'idle') return;
 
         // Con IDs estables (dev_XXX), la comparación es directa
@@ -523,14 +550,10 @@ export const FirebaseService = {
   },
   async _closeWipEntry(projectId, developerKey, entry, { forceToDo = true, endReason = 'switched' } = {}) {
     try {
-      const taskPath = `${this.getPathBySectionAndProjectId('tasks', entry.projectId || projectId)}/${entry.taskId}`;
-      const taskRef = ref(database, taskPath);
+      const taskProjectId = entry.projectId || projectId;
       let taskData = null;
       try {
-        const taskSnap = await get(taskRef);
-        if (taskSnap.exists()) {
-          taskData = taskSnap.val();
-        }
+        taskData = await dalService.cards.getCard(taskProjectId, 'task', entry.taskId);
       } catch (error) {
         console.warn('[FirebaseService] _closeWipEntry: Could not fetch task data:', error.message);
       }
@@ -539,12 +562,12 @@ export const FirebaseService = {
       const startedAt = entry.startedAt || taskData?.currentWip?.startedAt || endedAt;
       const durationMs = Math.max(0, new Date(endedAt) - new Date(startedAt));
 
-      // Guardar en /wipHistory/{devKey}/{timestamp}
+      // Guardar en /wipHistory/{devKey}
       const devId = entry.developer || taskData?.developer || developerKey;
       const historyEntry = {
         taskId: entry.taskId,
         taskTitle: entry.taskTitle || taskData?.title || entry.taskId,
-        projectId: entry.projectId || projectId,
+        projectId: taskProjectId,
         developer: devId,
         developerName: entry.developerName || taskData?.developerName || entityDirectoryService.getDeveloperDisplayName(devId),
         startedAt,
@@ -554,26 +577,19 @@ export const FirebaseService = {
         finalStatus: forceToDo ? 'To Do' : (taskData?.status || 'In Progress')
       };
 
-      const historyId = Date.now().toString();
-      await set(ref(database, `/wipHistory/${developerKey}/${historyId}`), historyEntry);
+      await dalService.backlogs.addWipHistory(developerKey, historyEntry);
 
-      // Update task to clear currentWip (wipHistory is stored separately in /wipHistory)
+      // Update task to clear currentWip
       if (taskData) {
         const updates = { currentWip: null };
         if (forceToDo) {
           updates.status = 'To Do';
         }
-        // Only update specific fields, not the whole task
-        const taskUpdatesRef = ref(database, taskPath);
-        const currentData = await get(taskUpdatesRef);
-        if (currentData.exists()) {
-          const cleanedTask = this.cleanCardBeforeSave({ ...currentData.val(), ...updates });
-          await set(taskRef, cleanedTask);
-        }
+        await dalService.cards.updateCard(taskProjectId, 'task', entry.taskId, updates);
       }
 
       // Limpiar entrada actual de /wip
-      await set(ref(database, `/wip/${developerKey}`), null);
+      await dalService.backlogs.removeWip(developerKey);
     } catch (error) {
       console.error('[FirebaseService] _closeWipEntry failed:', {
         projectId,
@@ -603,7 +619,6 @@ export const FirebaseService = {
       if (operations.closeCurrent) {
         const { projectId, developerKey, entry, endReason, finalStatus } = operations.closeCurrent;
         if (entry) {
-          // Guardar en /wipHistory antes de eliminar de /wip
           const endedAt = new Date().toISOString();
           const startedAt = entry.startedAt || endedAt;
           const durationMs = Math.max(0, new Date(endedAt) - new Date(startedAt));
@@ -621,20 +636,19 @@ export const FirebaseService = {
             finalStatus: finalStatus || 'Done&Validated'
           };
 
-          const historyId = Date.now().toString();
-          await set(ref(database, `/wipHistory/${developerKey}/${historyId}`), historyEntry);
+          await dalService.backlogs.addWipHistory(developerKey, historyEntry);
         }
-        await set(ref(database, `/wip/${developerKey}`), null);
+        await dalService.backlogs.removeWip(developerKey);
       }
 
       // Abrir WIP actual
       if (operations.openEntry) {
-        await set(ref(database, `/wip/${operations.openEntry.developerKey}`), operations.openEntry.entry);
+        await dalService.backlogs.setWip(operations.openEntry.developerKey, operations.openEntry.entry);
       }
 
       // Abrir WIP para CoDeveloper si existe
       if (operations.openCoDeveloperEntry) {
-        await set(ref(database, `/wip/${operations.openCoDeveloperEntry.developerKey}`), operations.openCoDeveloperEntry.entry);
+        await dalService.backlogs.setWip(operations.openCoDeveloperEntry.developerKey, operations.openCoDeveloperEntry.entry);
       }
 
       // Cambiar developer manteniendo In Progress: cerrar entrada previa sin tocar estado
@@ -644,7 +658,7 @@ export const FirebaseService = {
 
       // Cerrar WIP del CoDeveloper al salir de In Progress
       if (operations.closeCoDeveloperEntry) {
-        await set(ref(database, `/wip/${operations.closeCoDeveloperEntry.developerKey}`), null);
+        await dalService.backlogs.removeWip(operations.closeCoDeveloperEntry.developerKey);
       }
 
       // Backlog updates
@@ -769,8 +783,7 @@ export const FirebaseService = {
       return;
     }
 
-    let cardRef;
-    let cardPath;
+    const type = groupToType(card.group);
 
     // Determinar si es una tarjeta nueva o existente basándose en si tiene Firebase ID
     const isNewCard = !card.firebaseId && !card.id;
@@ -778,10 +791,8 @@ export const FirebaseService = {
     // Demo mode: enforce card count limit for new cards
     if (isNewCard && demoModeService.isDemo() && demoModeService.maxTasksPerProject > 0) {
       try {
-        const sectionPath = this.getCardPath(card);
-        const sectionRef = ref(database, sectionPath);
-        const snapshot = await get(sectionRef);
-        const currentCount = snapshot.exists() ? Object.keys(snapshot.val()).length : 0;
+        const existingCards = await dalService.cards.listCards(card.projectId, type);
+        const currentCount = Object.keys(existingCards || {}).length;
         if (currentCount >= demoModeService.maxTasksPerProject) {
           demoModeService.showLimitReached('tasks');
           return;
@@ -792,14 +803,9 @@ export const FirebaseService = {
     }
 
     if (isNewCard) {
-      // Nueva tarjeta: generar ID único de Firebase
-      cardPath = this.getCardPath(card);
-      cardRef = push(ref(database, cardPath));
-      card.id = cardRef.key;
-      card.firebaseId = cardRef.key;
+      // ID will be assigned after createCard
     } else {
       // Tarjeta existente: usar el Firebase ID existente
-      // Intentar obtener projectId de fuentes alternativas si no está en la card
       if (!card.projectId) {
         card.projectId = window.currentProjectId || new URLSearchParams(window.location.search).get('projectId');
         console.warn('[FirebaseService] projectId not in card, resolved from window/URL:', card.projectId);
@@ -829,9 +835,6 @@ export const FirebaseService = {
         });
         throw new Error(`Card ${card.cardId} is missing firebaseId. Run migration script to fix data.`);
       }
-
-      cardPath = `${this.getCardPath(card)}/${card.firebaseId}`;
-      cardRef = ref(database, cardPath);
     }
 
     try {
@@ -839,10 +842,7 @@ export const FirebaseService = {
       let previousState = null;
       if (!isNewCard) {
         try {
-          const previousSnapshot = await get(cardRef);
-          if (previousSnapshot.exists()) {
-            previousState = previousSnapshot.val();
-          }
+          previousState = await dalService.cards.getCard(card.projectId, type, card.firebaseId);
         } catch (err) {
           // Silently ignore - previous state unavailable
         }
@@ -875,13 +875,14 @@ export const FirebaseService = {
           (!cardToSave.priority || cardToSave.priority.trim() === '')) {
         cardToSave.priority = 'Not Evaluated';
       }
-      // Use update() for existing cards to preserve fields not loaded on the component
-      // (e.g. startDate, endDate, commits when editing only notes).
-      // Use set() for new cards to create the full entry.
+      // Use updateCard for existing cards to preserve fields not loaded on the component.
+      // Use createCard for new cards to create the full entry.
       if (isNewCard) {
-        await set(cardRef, cardToSave);
+        const result = await dalService.cards.createCard(card.projectId, type, cardToSave);
+        card.id = result.firebaseId;
+        card.firebaseId = result.firebaseId;
       } else {
-        await update(cardRef, cardToSave);
+        await dalService.cards.updateCard(card.projectId, type, card.firebaseId, cardToSave);
       }
 
       await this._executeWipOperations(wipOperations);
@@ -933,15 +934,15 @@ document.dispatchEvent(new CustomEvent('show-slide-notification', {
       return;
     }
 const userEmail = document.body.dataset.userEmail;
-    const cardPath = this.getCardPath(card);
-    const cardRef = ref(database, `${cardPath}/${card.id}`);
-    const trashRef = ref(database, `/trash/${cardPath}/${card.id}`);
+    const type = groupToType(card.group || card.cardType?.replace('-card', ''));
+    const firebaseId = card.firebaseId || card.id;
 try {
-      const cardData = (await get(cardRef)).val();
-      const { id } = card;
+      const cardData = await dalService.cards.getCard(card.projectId, type, firebaseId);
       if (cardData) {
-        await set(cardRef, null);
-        await set(trashRef, { ...cardData, deletedBy: userEmail, deletedAt: new Date().toISOString() });
+        await dalService.cards.deleteCard(card.projectId, type, firebaseId, {
+          deletedBy: userEmail,
+          deletedAt: new Date().toISOString()
+        });
 
         // Remove from developer backlog if card had a developer assigned
         if (cardData.developer) {
@@ -953,14 +954,13 @@ try {
           await developerBacklogService.removeItem(cardData.developer, cardKey);
         }
 
-        document.dispatchEvent(new CustomEvent('card-deleted', { bubbles: true, composed: true, detail: { id } }));
+        document.dispatchEvent(new CustomEvent('card-deleted', { bubbles: true, composed: true, detail: { id: firebaseId } }));
         document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { options: { message: 'Card deleted successfully!' } } }));
       } else {
         // Card doesn't exist in /cards/ - it's orphan data in optimized view
-        // Clean up the orphan entry from /views/
-        console.warn(`Card not found in /cards/, cleaning orphan from views: ${card.cardId || id}`);
-        await this._cleanupOrphanFromView(card, id);
-        document.dispatchEvent(new CustomEvent('card-deleted', { bubbles: true, composed: true, detail: { id } }));
+        console.warn(`Card not found in /cards/, cleaning orphan from views: ${card.cardId || firebaseId}`);
+        await this._cleanupOrphanFromView(card, firebaseId);
+        document.dispatchEvent(new CustomEvent('card-deleted', { bubbles: true, composed: true, detail: { id: firebaseId } }));
         document.dispatchEvent(new CustomEvent('show-slide-notification', {
           detail: { options: { message: 'Dato huérfano eliminado de la vista', type: 'warning' } }
         }));
@@ -987,12 +987,8 @@ try {
       return;
     }
 
-    const trashPath = `/trash/cards/${projectName}/${cardType}/${firebaseId}`;
-    const trashRef = ref(database, trashPath);
-
     try {
-      const snapshot = await get(trashRef);
-      const cardData = snapshot.val();
+      const cardData = await dalService.cards.readTrashCard(projectName, cardType, firebaseId);
       if (!cardData) {
         throw new Error('Card not found in trash');
       }
@@ -1015,16 +1011,15 @@ try {
 
       // Derive section from cardType key (e.g. "TASKS_ProjectName" → "TASKS")
       const section = cardType.replace(`_${projectName}`, '');
-      const cardsBasePath = this.getPathBySectionAndProjectId(section, projectName);
+      const type = sectionToType(section);
 
-      // Push with new firebaseId
-      const newRef = push(ref(database, cardsBasePath));
-      cardData.id = newRef.key;
-      cardData.firebaseId = newRef.key;
-      await set(newRef, cardData);
+      // Create new card via DAL (generates new firebaseId)
+      const result = await dalService.cards.createCard(projectName, type, cardData);
+      cardData.id = result.firebaseId;
+      cardData.firebaseId = result.firebaseId;
 
       // Remove from trash
-      await set(trashRef, null);
+      await dalService.cards.removeTrashCard(projectName, cardType, firebaseId);
 
       document.dispatchEvent(new CustomEvent('card-restored', { bubbles: true, composed: true, detail: { cardId: cardData.cardId } }));
       document.dispatchEvent(new CustomEvent('show-slide-notification', {
@@ -1073,11 +1068,7 @@ try {
     }
 
     try {
-      const fullViewPath = `/views/${viewPath}/${projectId}/${firebaseId}`;
-      console.log(`Removing orphan entry from Firebase view: ${fullViewPath}`);
-      const viewRef = ref(database, fullViewPath);
-      await set(viewRef, null);
-      console.log(`Successfully cleaned up orphan from view: ${card.cardId || firebaseId}`);
+      await dalService.cards.removeFromView(viewPath, projectId, firebaseId);
     } catch (error) {
       console.error(`Failed to cleanup orphan from view:`, error);
     }
@@ -1127,6 +1118,7 @@ try {
     try {
       // 1. Generar nuevo cardId para el proyecto destino
       const groupForId = section.toLowerCase().slice(0, -1); // TASKS -> task, BUGS -> bug
+      const type = sectionToType(section);
       const newCardId = await this.generateProjectSectionId(targetProjectId, groupForId);
 
       // 2. Preparar datos de la nueva card
@@ -1134,10 +1126,10 @@ try {
         ...card,
         cardId: newCardId,
         projectId: targetProjectId,
-        status: 'To Do', // Forzar status To Do al mover
-        sprint: '', // Limpiar sprint al mover
-        sprintId: '', // Limpiar sprintId
-        epic: '', // Limpiar epic al mover (diferente entre proyectos)
+        status: 'To Do',
+        sprint: '',
+        sprintId: '',
+        epic: '',
         movedFrom: {
           projectId: sourceProjectId,
           cardId: oldCardId,
@@ -1149,46 +1141,25 @@ try {
       // Eliminar campos que no deben copiarse
       delete newCardData.id;
       delete newCardData.firebaseId;
-      delete newCardData.history; // No copiar histórico al mover
+      delete newCardData.history;
 
-      // 3. Paths de Firebase
-      const sourcePath = `${this.getPathBySectionAndProjectId(section, sourceProjectId)}/${firebaseId}`;
-      const targetBasePath = this.getPathBySectionAndProjectId(section, targetProjectId);
-
-      // 4. Crear nueva card en proyecto destino
-      const targetRef = push(ref(database, targetBasePath));
-      const newFirebaseId = targetRef.key;
+      // 3. Crear nueva card en proyecto destino via DAL
+      const result = await dalService.cards.createCard(targetProjectId, type, newCardData);
+      const newFirebaseId = result.firebaseId;
       newCardData.id = newFirebaseId;
       newCardData.firebaseId = newFirebaseId;
 
-      await set(targetRef, newCardData);
-
-      // Nota: No se guarda histórico al mover - la card empieza "limpia" en el nuevo proyecto
-
-      // 5. Mover card original a trash (no eliminar directamente)
-      const sourceRef = ref(database, sourcePath);
-      const sourceSnapshot = await get(sourceRef);
-
-      if (sourceSnapshot.exists()) {
-        const sourceData = sourceSnapshot.val();
-        const trashPath = `/trash/cards/${sourceProjectId}/${section}_${sourceProjectId}/${firebaseId}`;
-        const trashRef = ref(database, trashPath);
-
-        await set(trashRef, {
-          ...sourceData,
-          movedTo: {
-            projectId: targetProjectId,
-            cardId: newCardId,
-            newFirebaseId: newFirebaseId
-          },
-          deletedBy: userEmail,
-          deletedAt: new Date().toISOString(),
-          deleteReason: 'moved_to_project'
-        });
-
-        // 7. Eliminar del origen
-        await set(sourceRef, null);
-      }
+      // 4. Mover card original a trash via DAL (delete reads, trashes, and removes)
+      await dalService.cards.deleteCard(sourceProjectId, type, firebaseId, {
+        movedTo: {
+          projectId: targetProjectId,
+          cardId: newCardId,
+          newFirebaseId
+        },
+        deletedBy: userEmail,
+        deletedAt: new Date().toISOString(),
+        deleteReason: 'moved_to_project'
+      });
 
       // 8. Emitir evento de actualización
       document.dispatchEvent(new CustomEvent('card-moved', {
@@ -1223,9 +1194,18 @@ try {
       document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { options: { message: 'You must be logged in to get data card' } } }));
       return;
     }
-    const cardsRef = ref(database, cardPath);
-    const cards = await get(cardsRef).then(this._processCardsSnapshot);
-    return cards;
+    // Parse path format: /cards/{projectId}/{SECTION}_{projectId}
+    const parts = cardPath.split('/').filter(Boolean);
+    if (parts.length === 3 && parts[0] === 'cards') {
+      const projectId = parts[1];
+      const section = parts[2].split('_')[0];
+      const type = sectionToType(section);
+      if (type) {
+        const data = await dalService.cards.listCards(projectId, type);
+        return injectFirebaseIds(data);
+      }
+    }
+    throw new Error(`getCards: unsupported path format: ${cardPath}`);
   },
   getCardPath(card) {
     const section = card.group.toUpperCase();
@@ -1357,10 +1337,9 @@ const updatedSprint = {
    * @throws {Error} - If project has no abbreviation configured
    */
   async getProjectAbbreviation(projectId) {
-    const projectRef = ref(database, `/projects/${projectId}/abbreviation`);
-    const snapshot = await get(projectRef);
-    if (snapshot.exists()) {
-      return snapshot.val();
+    const abbreviation = await dalService.projects.getProjectAbbreviation(projectId);
+    if (abbreviation) {
+      return abbreviation;
     }
     throw new Error(`El proyecto "${projectId}" no tiene abreviatura configurada. Un administrador debe añadir el campo 'abbreviation' en /projects/${projectId}`);
   },
@@ -1551,10 +1530,8 @@ throw new Error(`FALLO CRÍTICO: No se pudieron crear contadores para ${projectI
         const currentCounterValue = counterSnap.exists() ? (counterSnap.data().lastId || 0) : 0;
 
         // 2. Obtener todas las tarjetas de la sección para encontrar el cardId más alto
-        const sectionPath = this.getPathBySectionAndProjectId(section.toUpperCase(), projectId);
-        const cardsRef = ref(database, sectionPath);
-        const cardsSnap = await get(cardsRef);
-        const cardsData = cardsSnap.val() || {};
+        const type = groupToType(section);
+        const cardsData = (await dalService.cards.listCards(projectId, type)) || {};
 
         // 3. Extraer el número más alto de los cardIds existentes
         let maxIdFound = 0;
@@ -1621,6 +1598,19 @@ throw new Error(`FALLO CRÍTICO: No se pudieron crear contadores para ${projectI
   },
 
   subscribeToCards(cardPath, callback) {
+    // Parse path format: /cards/{projectId}/{SECTION}_{projectId}
+    const parts = cardPath.split('/').filter(Boolean);
+    if (parts.length === 3 && parts[0] === 'cards') {
+      const projectId = parts[1];
+      const section = parts[2].split('_')[0];
+      const type = sectionToType(section);
+      if (type) {
+        return dalService.cards.subscribeToSection(projectId, type, (data) => {
+          callback(data || {});
+        });
+      }
+    }
+    // Fallback for non-standard paths
     const cardsRef = ref(database, cardPath);
     return onValue(cardsRef, this._handleCardsSnapshot.bind(this, callback));
   },
@@ -1634,9 +1624,7 @@ throw new Error(`FALLO CRÍTICO: No se pudieron crear contadores para ${projectI
       document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { options: { message: 'Debes iniciar sesión para ver las suites' } } }));
       return {};
     }
-    const suitesRef = ref(database, `/data/suites/${projectId}/SUITES_${projectId}`);
-    const snapshot = await get(suitesRef);
-    return snapshot.val() || {};
+    return (await dalService.config.getSuites(projectId)) || {};
   },
   /**
    * Añade una nueva suite de QA para un proyecto.
@@ -1649,12 +1637,9 @@ throw new Error(`FALLO CRÍTICO: No se pudieron crear contadores para ${projectI
       document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { options: { message: 'Debes iniciar sesión para crear una suite' } } }));
       throw new Error('No autenticado');
     }
-    const suitesRef = ref(database, `/data/suites/${projectId}/SUITES_${projectId}`);
-    const newSuiteRef = push(suitesRef);
-    const suiteData = { name: suiteName };
-    await set(newSuiteRef, suiteData);
+    const suiteId = await dalService.config.addSuite(projectId, { name: suiteName });
     document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { options: { message: 'Suite creada correctamente' } } }));
-    return newSuiteRef.key;
+    return suiteId;
   },
   /**
    * Elimina una suite de QA para un proyecto.
@@ -1667,13 +1652,12 @@ throw new Error(`FALLO CRÍTICO: No se pudieron crear contadores para ${projectI
       document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { options: { message: 'Debes iniciar sesión para eliminar una suite' } } }));
       throw new Error('No autenticado');
     }
-    const suiteRef = ref(database, `/data/suites/${projectId}/SUITES_${projectId}/${suiteId}`);
     try {
-      await set(suiteRef, null);
+      await dalService.config.deleteSuite(projectId, suiteId);
       document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { options: { message: 'Suite eliminada correctamente' } } }));
       document.dispatchEvent(new CustomEvent('suite-deleted', { bubbles: true, composed: true, detail: { id: suiteId } }));
     } catch (error) {
-document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { options: { message: 'Error al eliminar la suite', type: 'error' } } }));
+      document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { options: { message: 'Error al eliminar la suite', type: 'error' } } }));
       throw error;
     }
   },
@@ -1687,9 +1671,8 @@ document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { op
       document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { options: { message: 'Debes iniciar sesión para ver las tarjetas QA' } } }));
       return {};
     }
-    const qaCardsRef = ref(database, `/cards/${projectId}/QA_${projectId}`);
-    const snapshot = await get(qaCardsRef);
-    return this._processCardsSnapshot(snapshot);
+    const data = await dalService.cards.listCards(projectId, 'qa');
+    return injectFirebaseIds(data);
   },
 
   // === MÉTODOS MIGRADOS DESDE FirebaseDataService ===
@@ -1711,8 +1694,8 @@ document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { op
    * @param {Object} data - Datos a actualizar
    */
   async updateCard(projectId, section, cardId, data) {
-    const cardPath = `/cards/${projectId}/${section.toUpperCase()}_${projectId}/${cardId}`;
-    await update(ref(database, cardPath), data);
+    const type = sectionToType(section);
+    await dalService.cards.updateCard(projectId, type, cardId, data);
   },
 
   /**
@@ -1739,18 +1722,16 @@ document.dispatchEvent(new CustomEvent('show-slide-notification', { detail: { op
       this.getBugPriorityList(),
       this.getStakeholders(projectId),
       (async () => {
-        const refAdmin = ref(database, '/data/userAdminEmails');
-        const snap = await get(refAdmin);
-        const val = snap.exists() ? snap.val() : [];
-        // Debug log removed
+        const val = await dalService.config.getUserAdminEmails();
+        if (!val) return [];
         if (Array.isArray(val)) return val;
-        if (val && typeof val === 'object') return Object.keys(val);
+        if (typeof val === 'object') return Object.keys(val);
         return [];
       })()
     ];
 
     const [statusTasksList, statusBugList, developerList, bugpriorityList, stakeholders, userAdminEmails] = await Promise.all(promises);
-return {
+    return {
       statusTasksList: this.sortStatusList(statusTasksList),
       statusBugList: this.sortStatusList(statusBugList),
       developerList,
@@ -1767,11 +1748,9 @@ return {
    */
   async getStatusList(cardType) {
     try {
-      const statusRef = ref(database, `/data/statusList/${cardType}`);
-      const snapshot = await get(statusRef);
-      return snapshot.exists() ? snapshot.val() : {};
+      return (await dalService.config.getStatusList(cardType)) || {};
     } catch (error) {
-return {};
+      return {};
     }
   },
 
@@ -1782,15 +1761,11 @@ return {};
    */
   async getDeveloperList(projectId) {
     try {
-      if (!projectId) {
-return {};
-      }
-
-      const devRef = ref(database, `/projects/${projectId}/developers`);
-      const snapshot = await get(devRef);
-      return snapshot.exists() ? snapshot.val() : {};
+      if (!projectId) return {};
+      const project = await dalService.projects.getProject(projectId);
+      return project?.developers || {};
     } catch (error) {
-return {};
+      return {};
     }
   },
 
@@ -1800,11 +1775,9 @@ return {};
    */
   async getBugPriorityList() {
     try {
-      const priorityRef = ref(database, '/data/bugpriorityList');
-      const snapshot = await get(priorityRef);
-      return snapshot.exists() ? snapshot.val() : {};
+      return (await dalService.config.getBugPriorityList()) || {};
     } catch (error) {
-return {};
+      return {};
     }
   },
 
@@ -1815,15 +1788,11 @@ return {};
    */
   async getStakeholders(projectId) {
     try {
-      if (!projectId) {
-return {};
-      }
-
-      const stakeholdersRef = ref(database, `/projects/${projectId}/stakeholders`);
-      const snapshot = await get(stakeholdersRef);
-      return snapshot.exists() ? snapshot.val() : {};
+      if (!projectId) return {};
+      const project = await dalService.projects.getProject(projectId);
+      return project?.stakeholders || {};
     } catch (error) {
-return {};
+      return {};
     }
   },
 
@@ -1834,9 +1803,7 @@ return {};
    */
   async getSprintList(projectId) {
     try {
-      const sprintRef = ref(database, `/cards/${projectId}/SPRINTS_${projectId}`);
-      const snapshot = await get(sprintRef);
-      const sprintData = snapshot.val() || {};
+      const sprintData = (await dalService.cards.listCards(projectId, 'sprint')) || {};
 
       const sprints = {};
       Object.values(sprintData).forEach(sprint => {
@@ -1847,7 +1814,7 @@ return {};
 
       return sprints;
     } catch (error) {
-return {};
+      return {};
     }
   },
 
@@ -1879,14 +1846,12 @@ return {};
    */
   async loadAllStatusLists() {
     try {
-      const statusRef = ref(database, '/data/statusList');
-      const statusSnap = await get(statusRef);
-      const statusLists = statusSnap.exists() ? statusSnap.val() : {};
+      const statusLists = (await dalService.config.getAllStatusLists()) || {};
       window.statusLists = statusLists;
       return statusLists;
     } catch (e) {
       window.statusLists = {};
-return {};
+      return {};
     }
   },
 
@@ -1912,15 +1877,14 @@ return {};
     if (!email) return;
 
     const encodedEmail = encodeEmailForFirebase(email);
-    const userRef = ref(database, `/data/projectsByUser/${encodedEmail}`);
 
     try {
-      const snapshot = await get(userRef);
+      const existing = await dalService.config.getUserProjects(encodedEmail);
 
-      if (!snapshot.exists()) {
+      if (!existing) {
         // New user - assign default projects
         const defaultProjects = await this.getDefaultProjects();
-        await set(userRef, defaultProjects);
+        await dalService.config.setUserProjects(encodedEmail, defaultProjects);
       }
     } catch (error) {
       // Silent fail - don't block login if registration fails
@@ -1936,18 +1900,16 @@ return {};
     if (!email) return null;
 
     const encodedEmail = encodeEmailForFirebase(email);
-    const userRef = ref(database, `/data/projectsByUser/${encodedEmail}`);
 
     try {
-      const snapshot = await get(userRef);
+      const value = await dalService.config.getUserProjects(encodedEmail);
 
-      if (!snapshot.exists()) {
+      if (!value) {
         // No entry - return default projects as array
         const defaults = await this.getDefaultProjects();
         return defaults.split(',').map(p => p.trim()).filter(p => p.length > 0);
       }
 
-      const value = snapshot.val();
       if (value === 'All') return null; // null = access to all projects
 
       return value.split(',').map(p => p.trim()).filter(p => p.length > 0);
@@ -1962,12 +1924,8 @@ return {};
    */
   async getDefaultProjects() {
     try {
-      const configRef = ref(database, '/data/config/defaultProjects');
-      const snapshot = await get(configRef);
-
-      if (snapshot.exists()) {
-        return snapshot.val();
-      }
+      const value = await dalService.config.getDefaultProjects();
+      if (value) return value;
     } catch (error) {
       // Fall through to default
     }
@@ -1983,8 +1941,7 @@ return {};
 
     // Admins need all projects
     if (!userEmail || window.isAppAdmin || isSuperAdmin) {
-      const projectsSnap = await get(ref(database, '/projects'));
-      window.projects = projectsSnap.exists() ? projectsSnap.val() : {};
+      window.projects = (await dalService.projects.listProjects()) || {};
       return;
     }
 
@@ -1993,16 +1950,15 @@ return {};
 
     // null = access to all (value "All" in Firebase)
     if (userProjects === null) {
-      const projectsSnap = await get(ref(database, '/projects'));
-      window.projects = projectsSnap.exists() ? projectsSnap.val() : {};
+      window.projects = (await dalService.projects.listProjects()) || {};
       return;
     }
 
     // Load only the user's specific projects in parallel
     const entries = await Promise.all(
       userProjects.map(async (projectId) => {
-        const snap = await get(ref(database, `/projects/${projectId}`));
-        return snap.exists() ? [projectId, snap.val()] : null;
+        const data = await dalService.projects.getProject(projectId);
+        return data ? [projectId, data] : null;
       })
     );
     window.projects = Object.fromEntries(entries.filter(Boolean));
@@ -2018,8 +1974,7 @@ return {};
     window.globalRelEmailUser = {};
 
     // Only bug priority list is needed on the critical path
-    const prioResult = await get(ref(database, '/data/bugpriorityList')).catch(() => null);
-    const bugPriorityObj = prioResult?.exists() ? prioResult.val() : {};
+    const bugPriorityObj = (await dalService.config.getBugPriorityList().catch(() => null)) || {};
     window.globalBugPriorityList = Object.entries(bugPriorityObj)
       .sort((a, b) => a[1] - b[1])
       .map(entry => entry[0]);
@@ -2051,50 +2006,6 @@ return {};
         window.globalRelEmailUser = relDecoded;
       }
     }).catch(() => {});
-  },
-
-  /**
-   * Accede a datos de usuario por email de forma segura
-   * @param {string} basePath - Ruta base en Firebase (ej. '/data/projectsByUser')  
-   * @param {string} userEmail - Email del usuario
-   * @returns {Promise<Object>} - Datos del usuario o objeto vacío
-   */
-  async getUserDataByEmail(basePath, userEmail) {
-    if (!userEmail || typeof userEmail !== 'string') {
-return {};
-    }
-
-    try {
-      // Use encoding for full email preservation when accessing user-specific data
-      const encodedEmail = encodeEmailForFirebase(userEmail);
-      const userRef = ref(database, `${basePath}/${encodedEmail}`);
-      const snapshot = await get(userRef);
-      return snapshot.exists() ? snapshot.val() : {};
-    } catch (error) {
-return {};
-    }
-  },
-
-  /**
-   * Guarda datos de usuario por email de forma segura
-   * @param {string} basePath - Ruta base en Firebase (ej. '/data/projectsByUser')
-   * @param {string} userEmail - Email del usuario  
-   * @param {Object} userData - Datos a guardar
-   * @returns {Promise<void>}
-   */
-  async setUserDataByEmail(basePath, userEmail, userData) {
-    if (!userEmail || typeof userEmail !== 'string') {
-throw new Error('Invalid user email');
-    }
-
-    try {
-      // Use encoding for full email preservation when storing user-specific data
-      const encodedEmail = encodeEmailForFirebase(userEmail);
-      const userRef = ref(database, `${basePath}/${encodedEmail}`);
-      await set(userRef, userData);
-} catch (error) {
-throw error;
-    }
   },
 
   // === PROPIEDADES DE CONFIGURACIÓN ===
@@ -2220,9 +2131,7 @@ return;
 
     try {
       await entityDirectoryService.waitForInit();
-      const projectRef = ref(database, `/projects/${projectId}`);
-      const projectSnapshot = await get(projectRef);
-      const projectData = projectSnapshot.exists() ? projectSnapshot.val() || {} : {};
+      const projectData = (await dalService.projects.getProject(projectId)) || {};
       const developers = normalizeProjectPeople(projectData.developers, { type: 'developer' })
         .map(entry => entry?.id || entry?.email || entry?.name || '')
         .filter(Boolean);
@@ -2235,12 +2144,12 @@ return;
 
       const isInDevelopers = developers.some(entry => entry === developerId || entry === normalizedEmail);
       if (isInDevelopers) {
-return;
+        return;
       }
 
       const isInStakeholders = stakeholders.some(entry => entry === stakeholderId || entry === normalizedEmail);
       if (isInStakeholders) {
-return;
+        return;
       }
 
       let targetStakeholderId = stakeholderId;
@@ -2248,21 +2157,22 @@ return;
         targetStakeholderId = await entityDirectoryService.findOrCreateStakeholder(normalizedEmail, null);
       }
       if (!targetStakeholderId) {
-return;
+        return;
       }
       const rawStakeholders = projectData.stakeholders;
 
+      let updatedStakeholders;
       if (Array.isArray(rawStakeholders)) {
-        if (!rawStakeholders.includes(targetStakeholderId)) {
-          await set(ref(database, `/projects/${projectId}/stakeholders`), [...rawStakeholders, targetStakeholderId]);
-        }
+        if (rawStakeholders.includes(targetStakeholderId)) return;
+        updatedStakeholders = [...rawStakeholders, targetStakeholderId];
       } else if (rawStakeholders && typeof rawStakeholders === 'object') {
         const updatedMap = { ...rawStakeholders };
         updatedMap[targetStakeholderId] = targetStakeholderId;
-        await set(ref(database, `/projects/${projectId}/stakeholders`), updatedMap);
+        updatedStakeholders = updatedMap;
       } else {
-        await set(ref(database, `/projects/${projectId}/stakeholders`), [targetStakeholderId]);
+        updatedStakeholders = [targetStakeholderId];
       }
+      await dalService.projects.updateProject(projectId, { stakeholders: updatedStakeholders });
 // Emitir evento para actualizar la UI si es necesario
       document.dispatchEvent(new CustomEvent('stakeholder-added', {
         detail: {

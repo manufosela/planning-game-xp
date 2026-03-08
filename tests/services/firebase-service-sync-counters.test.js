@@ -1,22 +1,36 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// Mocks for Firebase Realtime Database
-const mockGet = vi.fn();
-const mockRef = vi.fn(() => 'mock-ref');
+// Mocks for DAL service
+const mockGetProjectAbbreviation = vi.fn();
+const mockListCards = vi.fn();
 
-// Mocks for Firestore
+vi.mock('../../public/js/services/dal-service.js', () => ({
+  dalService: {
+    projects: {
+      getProjectAbbreviation: (...args) => mockGetProjectAbbreviation(...args),
+    },
+    cards: {
+      listCards: (...args) => mockListCards(...args),
+    },
+    backlogs: {
+      getAllWip: vi.fn().mockResolvedValue(null),
+      setWip: vi.fn().mockResolvedValue(undefined),
+      removeWip: vi.fn().mockResolvedValue(undefined),
+      addWipHistory: vi.fn().mockResolvedValue('history-1'),
+    },
+    config: {},
+  },
+}));
+
+// Mocks for Firestore (counters still use Firestore directly)
 const mockGetDoc = vi.fn();
 const mockSetDoc = vi.fn();
 const mockDoc = vi.fn(() => 'mock-doc-ref');
 
 vi.mock('../../public/firebase-config.js', () => ({
   database: {},
-  ref: (...args) => mockRef(...args),
-  get: (...args) => mockGet(...args),
-  push: vi.fn(),
-  set: vi.fn(),
+  ref: vi.fn(),
   onValue: vi.fn(),
-  update: vi.fn(),
   databaseFirestore: {},
   getDoc: (...args) => mockGetDoc(...args),
   setDoc: (...args) => mockSetDoc(...args),
@@ -66,41 +80,16 @@ describe('FirebaseService.syncProjectCounters', () => {
 
   beforeEach(async () => {
     vi.resetModules();
-    mockGet.mockReset();
-    mockRef.mockReset();
+    mockGetProjectAbbreviation.mockReset();
+    mockListCards.mockReset();
     mockGetDoc.mockReset();
     mockSetDoc.mockReset();
     mockDoc.mockReset();
-    mockRef.mockReturnValue('mock-ref');
     mockDoc.mockReturnValue('mock-doc-ref');
 
     const module = await import('../../public/js/services/firebase-service.js');
     FirebaseService = module.FirebaseService;
   });
-
-  const setupMocks = ({ abbreviation, counterValue, cards }) => {
-    // Mock getProjectAbbreviation - returns abbreviation from /projects/{projectId}/abbreviation
-    mockGet.mockImplementation((refPath) => {
-      // First call is for project abbreviation
-      if (mockGet.mock.calls.length === 1) {
-        return Promise.resolve({
-          exists: () => !!abbreviation,
-          val: () => abbreviation,
-        });
-      }
-      // Subsequent calls are for cards data
-      return Promise.resolve({
-        exists: () => !!cards,
-        val: () => cards || {},
-      });
-    });
-
-    // Mock Firestore getDoc for counter
-    mockGetDoc.mockResolvedValue({
-      exists: () => counterValue !== null,
-      data: () => (counterValue !== null ? { lastId: counterValue } : null),
-    });
-  };
 
   describe('validation', () => {
     it('should throw error when projectId is not provided', async () => {
@@ -125,20 +114,17 @@ describe('FirebaseService.syncProjectCounters', () => {
   describe('counter already synchronized', () => {
     it('should not update counter when already synchronized', async () => {
       // Counter is at 22, max cardId is also 22
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' }) // abbreviation
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc123': { cardId: 'DSR-TSK-0020' },
-            '-abc124': { cardId: 'DSR-TSK-0022' },
-            '-abc125': { cardId: 'DSR-TSK-0015' },
-          }),
+          '-abc123': { cardId: 'DSR-TSK-0020' },
+          '-abc124': { cardId: 'DSR-TSK-0022' },
+          '-abc125': { cardId: 'DSR-TSK-0015' },
         }) // tasks
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) }) // bugs
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) }) // epics
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) }) // proposals
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) }); // sprints
+        .mockResolvedValueOnce({}) // bugs
+        .mockResolvedValueOnce({}) // epics
+        .mockResolvedValueOnce({}) // proposals
+        .mockResolvedValueOnce({}); // sprints
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -159,18 +145,15 @@ describe('FirebaseService.syncProjectCounters', () => {
 
     it('should not update counter when counter is higher than max cardId', async () => {
       // Counter is at 30, max cardId is 22
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc123': { cardId: 'DSR-TSK-0022' },
-          }),
+          '-abc123': { cardId: 'DSR-TSK-0022' },
         })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -190,19 +173,16 @@ describe('FirebaseService.syncProjectCounters', () => {
   describe('counter out of sync', () => {
     it('should update counter when behind max cardId', async () => {
       // Counter is at 10, max cardId is 25
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc123': { cardId: 'DSR-TSK-0025' },
-            '-abc124': { cardId: 'DSR-TSK-0010' },
-          }),
+          '-abc123': { cardId: 'DSR-TSK-0025' },
+          '-abc124': { cardId: 'DSR-TSK-0010' },
         })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -227,18 +207,15 @@ describe('FirebaseService.syncProjectCounters', () => {
 
     it('should update counter when it does not exist (value 0)', async () => {
       // Counter does not exist (treated as 0), max cardId is 15
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc123': { cardId: 'DSR-TSK-0015' },
-          }),
+          '-abc123': { cardId: 'DSR-TSK-0015' },
         })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => false,
@@ -256,23 +233,17 @@ describe('FirebaseService.syncProjectCounters', () => {
     });
 
     it('should sync multiple sections that need update', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc1': { cardId: 'DSR-TSK-0050' },
-          }),
+          '-abc1': { cardId: 'DSR-TSK-0050' },
         }) // tasks - needs sync
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc2': { cardId: 'DSR-BUG-0030' },
-          }),
+          '-abc2': { cardId: 'DSR-BUG-0030' },
         }) // bugs - needs sync
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) }) // epics - no cards
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) }) // proposals - no cards
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) }); // sprints - no cards
+        .mockResolvedValueOnce({}) // epics - no cards
+        .mockResolvedValueOnce({}) // proposals - no cards
+        .mockResolvedValueOnce({}); // sprints - no cards
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -289,18 +260,15 @@ describe('FirebaseService.syncProjectCounters', () => {
 
   describe('dryRun mode', () => {
     it('should not update counter in dryRun mode', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc123': { cardId: 'DSR-TSK-0030' },
-          }),
+          '-abc123': { cardId: 'DSR-TSK-0030' },
         })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -323,23 +291,17 @@ describe('FirebaseService.syncProjectCounters', () => {
     });
 
     it('should report correct message in dryRun mode', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc1': { cardId: 'DSR-TSK-0020' },
-          }),
+          '-abc1': { cardId: 'DSR-TSK-0020' },
         })
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc2': { cardId: 'DSR-BUG-0015' },
-          }),
+          '-abc2': { cardId: 'DSR-BUG-0015' },
         })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -357,13 +319,13 @@ describe('FirebaseService.syncProjectCounters', () => {
 
   describe('section without cards', () => {
     it('should handle empty section with no cards', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
-        .mockResolvedValueOnce({ exists: () => false, val: () => null }) // tasks - no cards
-        .mockResolvedValueOnce({ exists: () => false, val: () => null }) // bugs
-        .mockResolvedValueOnce({ exists: () => false, val: () => null }) // epics
-        .mockResolvedValueOnce({ exists: () => false, val: () => null }) // proposals
-        .mockResolvedValueOnce({ exists: () => false, val: () => null }); // sprints
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
+        .mockResolvedValueOnce(null) // tasks - no cards
+        .mockResolvedValueOnce(null) // bugs
+        .mockResolvedValueOnce(null) // epics
+        .mockResolvedValueOnce(null) // proposals
+        .mockResolvedValueOnce(null); // sprints
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -383,19 +345,16 @@ describe('FirebaseService.syncProjectCounters', () => {
     });
 
     it('should handle section with only deleted cards', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc123': { cardId: 'DSR-TSK-0050', deletedAt: '2024-01-01' },
-            '-abc124': { cardId: 'DSR-TSK-0060', deletedAt: '2024-01-02' },
-          }),
+          '-abc123': { cardId: 'DSR-TSK-0050', deletedAt: '2024-01-01' },
+          '-abc124': { cardId: 'DSR-TSK-0060', deletedAt: '2024-01-02' },
         })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -414,18 +373,15 @@ describe('FirebaseService.syncProjectCounters', () => {
 
   describe('error handling', () => {
     it('should capture error for individual section and continue with others', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockRejectedValueOnce(new Error('Network error')) // tasks fails
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc1': { cardId: 'DSR-BUG-0020' },
-          }),
+          '-abc1': { cardId: 'DSR-BUG-0020' },
         }) // bugs works
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -445,7 +401,7 @@ describe('FirebaseService.syncProjectCounters', () => {
     });
 
     it('should throw error when project has no abbreviation', async () => {
-      mockGet.mockResolvedValueOnce({ exists: () => false, val: () => null });
+      mockGetProjectAbbreviation.mockResolvedValue(null);
 
       await expect(
         FirebaseService.syncProjectCounters('NonExistentProject')
@@ -455,19 +411,13 @@ describe('FirebaseService.syncProjectCounters', () => {
 
   describe('custom sections option', () => {
     it('should only sync specified sections', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc1': { cardId: 'DSR-TSK-0050' },
-          }),
+          '-abc1': { cardId: 'DSR-TSK-0050' },
         }) // tasks
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc2': { cardId: 'DSR-BUG-0030' },
-          }),
+          '-abc2': { cardId: 'DSR-BUG-0030' },
         }); // bugs
 
       mockGetDoc.mockResolvedValue({
@@ -484,13 +434,10 @@ describe('FirebaseService.syncProjectCounters', () => {
     });
 
     it('should handle single section option', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc1': { cardId: 'DSR-TSK-0050' },
-          }),
+          '-abc1': { cardId: 'DSR-TSK-0050' },
         });
 
       mockGetDoc.mockResolvedValue({
@@ -510,21 +457,18 @@ describe('FirebaseService.syncProjectCounters', () => {
 
   describe('cardId parsing', () => {
     it('should correctly parse cardIds with different formats', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'C4D' })
+      mockGetProjectAbbreviation.mockResolvedValue('C4D');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc1': { cardId: 'C4D-TSK-0001' },
-            '-abc2': { cardId: 'C4D-TSK-0100' },
-            '-abc3': { cardId: 'C4D-TSK-0099' },
-            '-abc4': { cardId: 'C4D-TSK-9999' },
-          }),
+          '-abc1': { cardId: 'C4D-TSK-0001' },
+          '-abc2': { cardId: 'C4D-TSK-0100' },
+          '-abc3': { cardId: 'C4D-TSK-0099' },
+          '-abc4': { cardId: 'C4D-TSK-9999' },
         })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -538,20 +482,17 @@ describe('FirebaseService.syncProjectCounters', () => {
     });
 
     it('should ignore cards without cardId', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc1': { cardId: 'DSR-TSK-0010' },
-            '-abc2': { title: 'Card without cardId' }, // No cardId
-            '-abc3': { cardId: null }, // Null cardId
-          }),
+          '-abc1': { cardId: 'DSR-TSK-0010' },
+          '-abc2': { title: 'Card without cardId' }, // No cardId
+          '-abc3': { cardId: null }, // Null cardId
         })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -565,21 +506,18 @@ describe('FirebaseService.syncProjectCounters', () => {
     });
 
     it('should ignore cards with non-matching cardId pattern', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc1': { cardId: 'DSR-TSK-0010' },
-            '-abc2': { cardId: 'OTHER-TSK-0050' }, // Wrong project prefix
-            '-abc3': { cardId: 'DSR-BUG-0030' }, // Wrong section type
-            '-abc4': { cardId: 'invalid-format' }, // Invalid format
-          }),
+          '-abc1': { cardId: 'DSR-TSK-0010' },
+          '-abc2': { cardId: 'OTHER-TSK-0050' }, // Wrong project prefix
+          '-abc3': { cardId: 'DSR-BUG-0030' }, // Wrong section type
+          '-abc4': { cardId: 'invalid-format' }, // Invalid format
         })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -595,18 +533,15 @@ describe('FirebaseService.syncProjectCounters', () => {
 
   describe('result structure', () => {
     it('should return correct result structure', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc1': { cardId: 'DSR-TSK-0020' },
-          }),
+          '-abc1': { cardId: 'DSR-TSK-0020' },
         })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
@@ -627,18 +562,15 @@ describe('FirebaseService.syncProjectCounters', () => {
     });
 
     it('should include correct section result fields', async () => {
-      mockGet
-        .mockResolvedValueOnce({ exists: () => true, val: () => 'DSR' })
+      mockGetProjectAbbreviation.mockResolvedValue('DSR');
+      mockListCards
         .mockResolvedValueOnce({
-          exists: () => true,
-          val: () => ({
-            '-abc1': { cardId: 'DSR-TSK-0020' },
-          }),
+          '-abc1': { cardId: 'DSR-TSK-0020' },
         })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, val: () => ({}) });
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
 
       mockGetDoc.mockResolvedValue({
         exists: () => true,
