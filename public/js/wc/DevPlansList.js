@@ -56,9 +56,12 @@ export class DevPlansList extends LitElement {
     }
   }
 
-  updated(changedProperties) {
+  async updated(changedProperties) {
     if (changedProperties.has('projectId') && this.projectId) {
       this.loadPlans();
+    }
+    if (this.currentView === 'detail' && this.selectedPlan?.content) {
+      await this._renderMarkdownContent();
     }
   }
 
@@ -101,7 +104,7 @@ export class DevPlansList extends LitElement {
   }
 
   _showForm(plan = null, aiPlan = null) {
-    this.formPlan = plan || aiPlan || { title: '', objective: '', status: 'draft', phases: [] };
+    this.formPlan = plan || aiPlan || { title: '', objective: '', content: '', phases: [] };
     this.isAiGenerated = !!aiPlan && !plan;
     this._phaseCounter = (this.formPlan.phases || []).length;
     this.formError = '';
@@ -130,10 +133,8 @@ export class DevPlansList extends LitElement {
       <table class="plans-table">
         <thead>
           <tr>
-            <th>Status</th>
             <th>Title</th>
-            <th>Phases</th>
-            <th>Tasks</th>
+            <th>Author</th>
             <th>Updated</th>
             <th>Actions</th>
           </tr>
@@ -146,36 +147,17 @@ export class DevPlansList extends LitElement {
   }
 
   _renderPlanRow(plan) {
-    const phaseCount = (plan.phases || []).length;
-    const completedPhases = (plan.phases || []).filter(p => p.status === 'completed').length;
-    const linkedTasks = [...new Set((plan.phases || []).flatMap(p => p.taskIds || []))];
-    const statusLabel = plan.status === 'accepted' ? 'Accepted' : 'Draft';
-    const statusClass = plan.status === 'accepted' ? 'plan-status-accepted' : 'plan-status-draft';
     const updatedDate = plan.updatedAt ? new Date(plan.updatedAt).toLocaleDateString('es-ES') : '';
-    const isDraft = plan.status !== 'accepted';
-    const genCount = (plan.generatedTasks || []).length;
+    const author = plan.createdBy || '';
 
     return html`
       <tr @click=${(e) => { if (!e.target.closest('.plan-action-btn')) this._showDetail(plan); }}>
-        <td><span class="plan-status-badge ${statusClass}">${statusLabel}</span></td>
         <td class="plan-title-cell" title=${plan.objective || ''}>${plan.title || 'Untitled'}</td>
-        <td class="plan-center-cell">${phaseCount > 0 ? `${completedPhases}/${phaseCount}` : '-'}</td>
-        <td class="plan-center-cell">${linkedTasks.length > 0 ? linkedTasks.length : '-'}</td>
+        <td class="plan-author-cell">${author}</td>
         <td class="plan-date-cell">${updatedDate}</td>
         <td class="plan-actions-cell">
           <button class="plan-action-btn" @click=${() => this._showDetail(plan)} title="View">👁</button>
-          ${isDraft ? html`
-            <button class="plan-action-btn" @click=${() => this._showForm(plan)} title="Edit">✏️</button>
-          ` : nothing}
-          ${!isDraft ? html`
-            ${genCount > 0 ? html`
-              <button class="plan-action-btn plan-generate-btn plan-generated-done"
-                @click=${() => this._handleRegenerate(plan)} title="Regenerate Tasks (${genCount} created)">🔄 ${genCount}</button>
-            ` : html`
-              <button class="plan-action-btn plan-generate-btn"
-                @click=${() => this._handleGenerate(plan)} title="Generate Tasks">⚡</button>
-            `}
-          ` : nothing}
+          <button class="plan-action-btn" @click=${() => this._showForm(plan)} title="Edit">✏️</button>
           <button class="plan-action-btn" @click=${() => this._handleDelete(plan)} title="Delete">🗑</button>
         </td>
       </tr>
@@ -188,12 +170,8 @@ export class DevPlansList extends LitElement {
     const plan = this.selectedPlan;
     if (!plan) return nothing;
 
-    const isAccepted = plan.status === 'accepted';
-    const statusLabel = isAccepted ? 'Accepted' : 'Draft';
-    const statusClass = isAccepted ? 'plan-status-accepted' : 'plan-status-draft';
     const createdDate = plan.createdAt ? new Date(plan.createdAt).toLocaleDateString('es-ES') : '';
     const updatedDate = plan.updatedAt ? new Date(plan.updatedAt).toLocaleDateString('es-ES') : '';
-    const baseUrl = window.location.origin;
     const genCount = (plan.generatedTasks || []).length;
 
     return html`
@@ -201,23 +179,11 @@ export class DevPlansList extends LitElement {
         <div class="plan-detail-header">
           <button class="plans-btn plans-btn-secondary" @click=${this._showList}>← Back</button>
           <div class="plan-detail-actions">
-            ${this.taskGenerating ? html`
-              <span class="plan-generating">Generating tasks...</span>
-            ` : !isAccepted ? html`
-              <button class="plans-btn plans-btn-primary" @click=${() => this._showForm(plan)}>Edit</button>
-              <button class="plans-btn plans-btn-accept" @click=${() => this._handleAccept(plan)}>Accept Plan</button>
-            ` : html`
-              ${genCount > 0 ? html`
-                <button class="plans-btn plans-btn-secondary" @click=${() => this._handleRegenerate(plan)}>🔄 Regenerate Tasks (${genCount} created)</button>
-              ` : html`
-                <button class="plans-btn plans-btn-generate" @click=${() => this._handleGenerate(plan)}>⚡ Generate Tasks</button>
-              `}
-            `}
+            <button class="plans-btn plans-btn-primary" @click=${() => this._showForm(plan)}>Edit</button>
           </div>
         </div>
         <div class="plan-detail-title-row">
           <h2>${plan.title}</h2>
-          <span class="plan-status-badge ${statusClass}">${statusLabel}</span>
         </div>
         ${plan.objective ? html`<p class="plan-detail-objective">${plan.objective}</p>` : nothing}
         <div class="plan-detail-meta">
@@ -225,6 +191,9 @@ export class DevPlansList extends LitElement {
           ${updatedDate ? html`<span>Updated: ${updatedDate}</span>` : nothing}
           ${plan.createdBy ? html`<span>By: ${plan.createdBy}</span>` : nothing}
         </div>
+        ${plan.content ? html`
+          <div class="plan-content-md" id="planContentRendered"></div>
+        ` : nothing}
         ${(plan.phases || []).length > 0 ? html`
           <div class="plan-phases">
             <h3>Phases (${plan.phases.length})</h3>
@@ -234,6 +203,17 @@ export class DevPlansList extends LitElement {
         ${genCount > 0 ? this._renderGeneratedTasks(plan) : nothing}
       </div>
     `;
+  }
+
+  async _renderMarkdownContent() {
+    const container = this.shadowRoot?.querySelector('#planContentRendered');
+    if (!container || !this.selectedPlan?.content) return;
+    try {
+      const { marked } = await import('https://cdn.jsdelivr.net/npm/marked@12.0.1/+esm');
+      container.innerHTML = marked.parse(this.selectedPlan.content);
+    } catch (err) {
+      container.textContent = this.selectedPlan.content;
+    }
   }
 
   _renderPhaseCard(phase, index, plan) {
@@ -350,14 +330,13 @@ export class DevPlansList extends LitElement {
       const plan = {
         title: generatedPlan.title || '',
         objective: generatedPlan.objective || '',
-        status: 'draft',
+        content: generatedPlan.content || '',
         phases: (generatedPlan.phases || []).map(p => ({
           name: p.name || '',
           description: p.description || '',
           tasks: p.tasks || [],
           epicIds: [],
-          taskIds: [],
-          status: 'pending'
+          taskIds: []
         })),
         _aiContext: context
       };
@@ -401,6 +380,10 @@ export class DevPlansList extends LitElement {
             <label>Objective</label>
             <textarea id="planObjective" rows="3" placeholder="What is the goal?">${plan.objective || ''}</textarea>
           </div>
+          <div class="plan-form-field">
+            <label>Content (Markdown)</label>
+            <textarea id="planContent" rows="15" placeholder="Write the plan details in Markdown...">${plan.content || ''}</textarea>
+          </div>
           <div class="plan-form-section">
             <div class="plan-form-section-header">
               <h3>Phases</h3>
@@ -425,7 +408,7 @@ export class DevPlansList extends LitElement {
             </div>
           ` : nothing}
           <div class="plan-form-actions">
-            <button type="submit" class="plans-btn plans-btn-primary">${isEdit ? 'Save Changes' : 'Save as Draft'}</button>
+            <button type="submit" class="plans-btn plans-btn-primary">${isEdit ? 'Save Changes' : 'Save Plan'}</button>
             ${isEdit ? html`<button type="button" class="plans-btn plans-btn-danger" @click=${() => this._handleDelete(plan)}>Delete</button>` : nothing}
           </div>
         </form>
@@ -516,6 +499,7 @@ export class DevPlansList extends LitElement {
     const root = this.shadowRoot;
     const title = root.querySelector('#planTitle')?.value.trim() || '';
     const objective = root.querySelector('#planObjective')?.value.trim() || '';
+    const content = root.querySelector('#planContent')?.value.trim() || '';
     const phases = [];
 
     root.querySelectorAll('.phase-row').forEach(row => {
@@ -544,7 +528,7 @@ export class DevPlansList extends LitElement {
       });
     });
 
-    return { title, objective, status: 'draft', phases };
+    return { title, objective, content, phases };
   }
 
   async _handleFormSubmit(e) {
@@ -609,14 +593,13 @@ export class DevPlansList extends LitElement {
       const newPlan = {
         title: generatedPlan.title || '',
         objective: generatedPlan.objective || '',
-        status: 'draft',
+        content: generatedPlan.content || '',
         phases: (generatedPlan.phases || []).map(p => ({
           name: p.name || '',
           description: p.description || '',
           tasks: p.tasks || [],
           epicIds: [],
-          taskIds: [],
-          status: 'pending'
+          taskIds: []
         })),
         _aiContext: extraContext,
         proposalId: this.formPlan?.proposalId || this.proposalId || undefined
@@ -631,20 +614,6 @@ export class DevPlansList extends LitElement {
   }
 
   // ── Actions ──
-
-  async _handleAccept(plan) {
-    if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('plan editing'); return; }
-    try {
-      await planService.accept(this.projectId, plan._id);
-      plan.status = 'accepted';
-      const cached = this.plans.find(p => p._id === plan._id);
-      if (cached) cached.status = 'accepted';
-      this.selectedPlan = { ...plan };
-      this.requestUpdate();
-    } catch (err) {
-      console.error('Error accepting plan:', err);
-    }
-  }
 
   async _handleDelete(plan) {
     if (demoModeService.isDemo()) { demoModeService.showFeatureDisabled('plan deletion'); return; }

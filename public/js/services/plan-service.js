@@ -5,10 +5,8 @@
  *
  * Structure:
  * /plans/{projectId}/{planId}/
- *   title, objective, status, phases[], generatedTasks[], createdAt, createdBy, updatedAt
+ *   title, objective, content (markdown), phases[], generatedTasks[], createdAt, createdBy, updatedAt
  */
-
-export const PLAN_STATUSES = ['draft', 'accepted'];
 
 class PlanService {
   constructor() {
@@ -66,14 +64,8 @@ class PlanService {
         this.cache.set(this._getCacheKey(projectId, plan._id), plan);
       });
 
-      // Sort: drafts first, then by updatedAt desc
-      plans.sort((a, b) => {
-        const order = { draft: 0, accepted: 1 };
-        const sa = order[a.status] ?? 99;
-        const sb = order[b.status] ?? 99;
-        if (sa !== sb) return sa - sb;
-        return (b.updatedAt || '').localeCompare(a.updatedAt || '');
-      });
+      // Sort by updatedAt desc (most recent first)
+      plans.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
 
       this.projectCache.set(projectId, plans);
       return plans;
@@ -152,7 +144,7 @@ class PlanService {
       const data = {
         title: plan.title || 'Untitled Plan',
         objective: plan.objective || '',
-        status: plan.status || previousData?.status || 'draft',
+        content: plan.content || previousData?.content || '',
         phases: plan.phases || [],
         updatedAt: now
       };
@@ -208,28 +200,6 @@ class PlanService {
       console.error('Error saving plan:', error);
       throw error;
     }
-  }
-
-  /**
-   * Accept a plan (change status to accepted)
-   * @param {string} projectId
-   * @param {string} planId
-   * @returns {Promise<void>}
-   */
-  async accept(projectId, planId) {
-    const { database, ref, set } = await this.getFirebaseModules();
-    const now = new Date().toISOString();
-    await set(ref(database, `plans/${projectId}/${planId}/status`), 'accepted');
-    await set(ref(database, `plans/${projectId}/${planId}/updatedAt`), now);
-
-    // Update cache
-    const cacheKey = this._getCacheKey(projectId, planId);
-    if (this.cache.has(cacheKey)) {
-      const cached = this.cache.get(cacheKey);
-      cached.status = 'accepted';
-      cached.updatedAt = now;
-    }
-    this.projectCache.delete(projectId);
   }
 
   /**

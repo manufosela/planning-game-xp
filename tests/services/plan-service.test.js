@@ -2,23 +2,6 @@
  * Tests for Plan Service
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PLAN_STATUSES } from '../../public/js/services/plan-service.js';
-
-describe('Plan Service constants', () => {
-  describe('PLAN_STATUSES', () => {
-    it('should include draft status', () => {
-      expect(PLAN_STATUSES).toContain('draft');
-    });
-
-    it('should include accepted status', () => {
-      expect(PLAN_STATUSES).toContain('accepted');
-    });
-
-    it('should have exactly 2 statuses', () => {
-      expect(PLAN_STATUSES).toHaveLength(2);
-    });
-  });
-});
 
 describe('Plan Service unit tests', () => {
   class MockPlanService {

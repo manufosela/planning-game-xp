@@ -642,4 +642,96 @@ export const DevPlansListStyles = css`
     color: var(--color-error, #dc3545);
     padding: 1rem;
   }
+
+  /* Markdown rendered content */
+  .plan-content-md {
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    line-height: 1.7;
+    color: var(--text-primary, #333);
+  }
+
+  .plan-content-md h1,
+  .plan-content-md h2,
+  .plan-content-md h3,
+  .plan-content-md h4 {
+    margin-top: 1.2em;
+    margin-bottom: 0.5em;
+    color: var(--text-primary, #1e293b);
+  }
+
+  .plan-content-md h1 { font-size: 1.4rem; }
+  .plan-content-md h2 { font-size: 1.2rem; }
+  .plan-content-md h3 { font-size: 1.05rem; }
+
+  .plan-content-md pre {
+    background: var(--hover-overlay, #f1f5f9);
+    padding: 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+  }
+
+  .plan-content-md code {
+    background: var(--hover-overlay, #f1f5f9);
+    padding: 0.15em 0.35em;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+
+  .plan-content-md pre code {
+    background: none;
+    padding: 0;
+  }
+
+  .plan-content-md ul,
+  .plan-content-md ol {
+    padding-left: 1.5em;
+  }
+
+  .plan-content-md blockquote {
+    border-left: 3px solid var(--primary-color, #3b82f6);
+    margin: 1em 0;
+    padding: 0.5em 1em;
+    color: var(--text-muted, #64748b);
+  }
+
+  .plan-content-md table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+  }
+
+  .plan-content-md th,
+  .plan-content-md td {
+    border: 1px solid var(--border-color, #e2e8f0);
+    padding: 0.5em 0.75em;
+    text-align: left;
+  }
+
+  .plan-content-md th {
+    background: var(--hover-overlay, #f1f5f9);
+    font-weight: 600;
+  }
+
+  .plan-author-cell {
+    font-size: 0.85rem;
+    color: var(--text-muted, #64748b);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Content textarea in form */
+  #planContent {
+    font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 200px;
+  }
 `;
