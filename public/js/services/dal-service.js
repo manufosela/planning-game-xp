@@ -29,6 +29,7 @@ import {
   registerDocsBackend,
   registerStateTransitionBackend,
   registerHistoryBackend,
+  registerAppDistributionBackend,
   createRepositories,
   createDualWriteRepositories,
   createReadSwitchRepositories,
@@ -47,7 +48,8 @@ import {
   RtdbConfigRepository,
   RtdbDocsRepository,
   RtdbStateTransitionRepository,
-  RtdbHistoryRepository
+  RtdbHistoryRepository,
+  RtdbAppDistributionRepository
 } from '../../../shared/dal/index.js';
 
 // DAL modes for the migration phases
@@ -111,6 +113,9 @@ class DalService {
       constructor() { super(rtdbBase); }
     });
     registerHistoryBackend('rtdb', class extends RtdbHistoryRepository {
+      constructor() { super(rtdbBase); }
+    });
+    registerAppDistributionBackend('rtdb', class extends RtdbAppDistributionRepository {
       constructor() { super(rtdbBase); }
     });
 
@@ -209,6 +214,12 @@ class DalService {
   get history() {
     this._ensureInitialized();
     return this._repos.history;
+  }
+
+  /** @returns {import('../../../shared/dal/app-distribution-repository.js').AppDistributionRepository} */
+  get appDistribution() {
+    this._ensureInitialized();
+    return this._repos.appDistribution;
   }
 
   /** @returns {string} Current DAL mode */

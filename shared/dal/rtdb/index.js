@@ -15,3 +15,4 @@ export { RtdbConfigRepository } from './rtdb-config-repository.js';
 export { RtdbDocsRepository } from './rtdb-docs-repository.js';
 export { RtdbStateTransitionRepository } from './rtdb-state-transition-repository.js';
 export { RtdbHistoryRepository } from './rtdb-history-repository.js';
+export { RtdbAppDistributionRepository } from './rtdb-app-distribution-repository.js';

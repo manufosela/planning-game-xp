@@ -1,7 +1,8 @@
 import { LitElement, html } from 'https://cdn.jsdelivr.net/npm/lit@3.0.2/+esm';
 import './FirebaseStorageUploader.js';
 import { AppManagerStyles } from './app-manager-styles.js';
-import { database, ref, set, get, push, runDbTransaction, auth, onValue } from '../../firebase-config.js';
+import { auth } from '../../firebase-config.js';
+import { dalService } from '../services/dal-service.js';
 import { toFirebaseKey } from '../utils/firebase-key-utils.js';
 import { encodeEmailForFirebase } from '../utils/email-sanitizer.js';
 import { flattenDownloadEvents, filterDownloadEvents, buildCountsByDate, buildRowsForCsv, buildCsv } from '../utils/download-stats-utils.js';
@@ -286,16 +287,14 @@ uploader.requestUpdate();
 
       let downloadStats = {};
       try {
-        const statsSnap = await get(ref(database, `/appDownloads/${this.projectId}`));
-        downloadStats = statsSnap.exists() ? statsSnap.val() || {} : {};
+        downloadStats = await dalService.appDistribution.getDownloadStats(this.projectId) || {};
       } catch (error) {
         // Ignore stats loading errors
       }
 
       let downloadEvents = {};
       try {
-        const eventsSnap = await get(ref(database, `/appDownloadEvents/${this.projectId}`));
-        downloadEvents = eventsSnap.exists() ? eventsSnap.val() || {} : {};
+        downloadEvents = await dalService.appDistribution.getDownloadEvents(this.projectId) || {};
       } catch (error) {
         // Ignore events loading errors
       }
@@ -363,8 +362,7 @@ this.showMessage('Error al descargar el archivo', 'error');
 
     try {
       const fileKey = toFirebaseKey(file.name);
-      const statsRef = ref(database, `/appDownloads/${this.projectId}/${fileKey}`);
-      await runDbTransaction(statsRef, (current) => {
+      await dalService.appDistribution.trackDownload(this.projectId, fileKey, (current) => {
         const next = current && typeof current === 'object' ? { ...current } : {};
         next.count = (Number(next.count) || 0) + 1;
         next.fileName = file.name;
@@ -379,10 +377,9 @@ this.showMessage('Error al descargar el archivo', 'error');
         source,
         downloadedBy: source === 'app' ? (this.userEmail || auth?.currentUser?.email || null) : null
       };
-      const eventRef = push(ref(database, `/appDownloadEvents/${this.projectId}/${fileKey}`));
-      await set(eventRef, eventData);
+      const eventKey = await dalService.appDistribution.pushDownloadEvent(this.projectId, fileKey, eventData);
 
-      this._applyDownloadEvent(fileKey, eventRef.key, eventData);
+      this._applyDownloadEvent(fileKey, eventKey, eventData);
     } catch (error) {
       // Silently ignore download tracking errors
     }
@@ -393,11 +390,11 @@ this.showMessage('Error al descargar el archivo', 'error');
     if (this._statsUnsubscribe) this._statsUnsubscribe();
     if (this._eventsUnsubscribe) this._eventsUnsubscribe();
 
-    this._statsUnsubscribe = onValue(ref(database, `/appDownloads/${this.projectId}`), (snapshot) => {
-      const stats = snapshot.exists() ? snapshot.val() || {} : {};
+    this._statsUnsubscribe = dalService.appDistribution.subscribeToDownloadStats(this.projectId, (stats) => {
+      const safeStats = stats || {};
       if (!Array.isArray(this.uploadedFiles)) return;
       this.uploadedFiles = this.uploadedFiles.map((file) => {
-        const fileStats = stats?.[file.fileKey] || {};
+        const fileStats = safeStats[file.fileKey] || {};
         return {
           ...file,
           downloadCount: Number(fileStats.count) || 0
@@ -405,8 +402,8 @@ this.showMessage('Error al descargar el archivo', 'error');
       });
     });
 
-    this._eventsUnsubscribe = onValue(ref(database, `/appDownloadEvents/${this.projectId}`), (snapshot) => {
-      this.downloadEvents = snapshot.exists() ? snapshot.val() || {} : {};
+    this._eventsUnsubscribe = dalService.appDistribution.subscribeToDownloadEvents(this.projectId, (events) => {
+      this.downloadEvents = events || {};
     });
   }
 
@@ -424,17 +421,15 @@ this.showMessage('Error al descargar el archivo', 'error');
       const encodedEmail = encodeEmailForFirebase(this.userEmail.toLowerCase().trim());
 
       // Check new /users/ path first
-      const usersPermRef = ref(database, `/users/${encodedEmail}/projects/${this.projectId}/appPermissions/upload`);
-      const usersSnap = await get(usersPermRef);
-      if (usersSnap.exists() && usersSnap.val() === true) {
+      const userPerm = await dalService.appDistribution.getUserAppPermission(encodedEmail, this.projectId, 'upload');
+      if (userPerm === true) {
         this.isAppUploader = true;
         return;
       }
 
       // Fallback to legacy path
-      const uploaderRef = ref(database, `/data/appUploaders/${this.projectId}/${encodedEmail}`);
-      const snapshot = await get(uploaderRef);
-      this.isAppUploader = snapshot.exists() && snapshot.val() === true;
+      const uploaderVal = await dalService.appDistribution.getAppUploader(this.projectId, encodedEmail);
+      this.isAppUploader = uploaderVal === true;
     } catch (error) {
       this.isAppUploader = false;
     }
@@ -473,12 +468,10 @@ this.showMessage('Error al descargar el archivo', 'error');
   async _ensureSuperAdminInAppAdmins() {
     try {
       const encodedEmail = encodeEmailForFirebase(this.userEmail.toLowerCase().trim());
-      const appAdminRef = ref(database, `/data/appAdmins/${encodedEmail}`);
-      const snapshot = await get(appAdminRef);
+      const isAdmin = await dalService.appDistribution.getAppAdmin(encodedEmail);
 
-      if (!snapshot.exists()) {
-        await set(appAdminRef, true);
-        // Also set isAppAdmin since we just added them
+      if (!isAdmin) {
+        await dalService.appDistribution.setAppAdmin(encodedEmail, true);
         this.isAppAdmin = true;
       }
     } catch (error) {
@@ -512,17 +505,15 @@ this.showMessage('Error al descargar el archivo', 'error');
       const encodedEmail = encodeEmailForFirebase(this.userEmail.toLowerCase().trim());
 
       // Check new /users/ path first
-      const usersPermRef = ref(database, `/users/${encodedEmail}/projects/${this.projectId}/appPermissions/view`);
-      const usersSnap = await get(usersPermRef);
-      if (usersSnap.exists() && usersSnap.val() === true) {
+      const viewPerm = await dalService.appDistribution.getUserAppPermission(encodedEmail, this.projectId, 'view');
+      if (viewPerm === true) {
         this.canSeeBeta = true;
         return;
       }
 
       // Fallback to legacy path
-      const betaUserRef = ref(database, `/data/betaUsers/${this.projectId}/${encodedEmail}`);
-      const snapshot = await get(betaUserRef);
-      this.canSeeBeta = snapshot.exists() && snapshot.val() === true;
+      const betaVal = await dalService.appDistribution.getBetaUser(this.projectId, encodedEmail);
+      this.canSeeBeta = betaVal === true;
     } catch (error) {
       this.canSeeBeta = false;
     }
@@ -535,8 +526,8 @@ this.showMessage('Error al descargar el archivo', 'error');
     if (!this.projectId) return;
 
     try {
-      const metadataSnap = await get(ref(database, `/appMetadata/${this.projectId}`));
-      this.appMetadata = metadataSnap.exists() ? metadataSnap.val() : {};
+      const data = await dalService.appDistribution.getAppMetadata(this.projectId);
+      this.appMetadata = data || {};
       this._metadataLoadFailed = Object.keys(this.appMetadata).length === 0;
     } catch (error) {
       console.warn(`[AppManager] Failed to load app metadata for project ${this.projectId}:`, error.message);
@@ -555,9 +546,8 @@ this.showMessage('Error al descargar el archivo', 'error');
     if (!this.projectId) return;
     if (this._metadataUnsubscribe) this._metadataUnsubscribe();
 
-    this._metadataUnsubscribe = onValue(ref(database, `/appMetadata/${this.projectId}`), (snapshot) => {
-      this.appMetadata = snapshot.exists() ? snapshot.val() : {};
-      // Clear warning if metadata arrives via real-time update
+    this._metadataUnsubscribe = dalService.appDistribution.subscribeToAppMetadata(this.projectId, (data) => {
+      this.appMetadata = data || {};
       if (Object.keys(this.appMetadata).length > 0) {
         this._metadataLoadFailed = false;
         this.metadataLoadFailed = false;
@@ -574,7 +564,7 @@ this.showMessage('Error al descargar el archivo', 'error');
     if (!this.projectId || !fileKey) return;
 
     try {
-      await set(ref(database, `/appMetadata/${this.projectId}/${fileKey}`), metadata);
+      await dalService.appDistribution.setAppMetadata(this.projectId, fileKey, metadata);
     } catch (error) {
       console.error('Error saving app metadata:', error);
       throw error;
@@ -1044,7 +1034,7 @@ this.showMessage('Error al eliminar el archivo', 'error');
         requiresPassword: true
       };
 
-      await set(ref(database, `/publicAppShares/${shareId}`), shareData);
+      await dalService.appDistribution.createPublicShare(shareId, shareData);
 
       const shareLink = `${window.location.origin}/app-share?shareId=${shareId}`;
       await this._copyToClipboard(shareLink);
@@ -1705,11 +1695,8 @@ this.showMessage('No se pudo generar el link compartido', 'error');
    * Save app metadata, creating entry if it doesn't exist (for legacy apps)
    */
   async _saveAppMetadata(fileKey, updates) {
-    const metadataRef = ref(database, `appMetadata/${this.projectId}/${fileKey}`);
-
     // Get current metadata or create defaults for legacy apps
-    const snapshot = await get(metadataRef);
-    let currentMetadata = snapshot.val();
+    let currentMetadata = await dalService.appDistribution.getAppMetadataEntry(this.projectId, fileKey);
 
     if (!currentMetadata) {
       // Legacy app: create default metadata structure
@@ -1732,7 +1719,7 @@ this.showMessage('No se pudo generar el link compartido', 'error');
       updatedBy: auth?.currentUser?.email || 'unknown'
     };
 
-    await set(metadataRef, updatedMetadata);
+    await dalService.appDistribution.setAppMetadata(this.projectId, fileKey, updatedMetadata);
   }
 
   /**
