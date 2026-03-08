@@ -22,6 +22,10 @@
         <span class="tab-icon">🧑‍💻</span>
         Developer Metrics
       </button>
+      <button class="tab-button" data-tab="evolution">
+        <span class="tab-icon">📉</span>
+        Temporal Evolution
+      </button>
     </div>
 
     <div class="year-selector-controls">
@@ -62,6 +66,16 @@
         <div id="developer-metrics-container">
           <div class="no-projects-message">
             Select up to 3 projects to view developer metrics
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="evolution-tab">
+      <div class="chart-container">
+        <div id="evolution-charts-container">
+          <div class="no-projects-message">
+            Select up to 3 projects to view temporal evolution charts
           </div>
         </div>
       </div>
@@ -533,6 +547,8 @@ this.innerHTML = '<p class="error">Error loading projects</p>';
         this.updateSprintCharts();
       } else if (this.activeTab === 'developer') {
         this.updateDeveloperMetrics();
+      } else if (this.activeTab === 'evolution') {
+        this.updateTemporalEvolution();
       }
     }
 
@@ -1089,6 +1105,216 @@ this.innerHTML = '<p class="error">Error loading projects</p>';
 container.innerHTML = '<div class="error-message">Error calculating developer metrics</div>';
       }
     }
+
+    // ==================== TEMPORAL EVOLUTION ====================
+
+    async updateTemporalEvolution() {
+      const container = document.getElementById('evolution-charts-container');
+      if (!container) return;
+
+      if (this.selectedProjects.length === 0) {
+        container.innerHTML = '<div class="no-projects-message">Select up to 3 projects to view temporal evolution charts</div>';
+        return;
+      }
+
+      container.innerHTML = '<div class="no-projects-message">Loading temporal data...</div>';
+
+      try {
+        const { database, ref, get } = await import('/firebase-config.js');
+        const selectedYear = this.selectedYear;
+        container.innerHTML = '';
+
+        for (const [index, project] of this.selectedProjects.entries()) {
+          const tasksRef = ref(database, `/cards/${project.id}/TASKS_${project.id}`);
+          const bugsRef = ref(database, `/cards/${project.id}/BUGS_${project.id}`);
+
+          const [tasksSnap, bugsSnap] = await Promise.all([get(tasksRef), get(bugsRef)]);
+          const allTasks = tasksSnap.exists() ? Object.values(tasksSnap.val()) : [];
+          const allBugs = bugsSnap.exists() ? Object.values(bugsSnap.val()) : [];
+
+          // Aggregate by month
+          const months = [];
+          for (let m = 0; m < 12; m++) {
+            months.push({ month: m, label: new Date(selectedYear, m).toLocaleString('es', { month: 'short' }), completedTasks: 0, resolvedBugs: 0, totalResolutionDays: 0, resolutionSamples: 0 });
+          }
+
+          const completedStatuses = ['Done', 'Done&Validated'];
+          allTasks.forEach(task => {
+            if (task.deletedAt) return;
+            if (!completedStatuses.includes(task.status)) return;
+            const endDate = task.endDate ? new Date(task.endDate) : null;
+            if (!endDate || endDate.getFullYear() !== selectedYear) return;
+            months[endDate.getMonth()].completedTasks++;
+
+            // Calculate resolution time
+            const startDate = task.startDate ? new Date(task.startDate) : null;
+            if (startDate && endDate >= startDate) {
+              const days = (endDate - startDate) / (1000 * 60 * 60 * 24);
+              months[endDate.getMonth()].totalResolutionDays += days;
+              months[endDate.getMonth()].resolutionSamples++;
+            }
+          });
+
+          const bugClosedStatuses = ['Fixed', 'Verified', 'Closed', 'Cerrado'];
+          allBugs.forEach(bug => {
+            if (bug.deletedAt) return;
+            if (!bugClosedStatuses.includes(bug.status)) return;
+            const endDate = bug.endDate ? new Date(bug.endDate) : null;
+            if (!endDate || endDate.getFullYear() !== selectedYear) return;
+            months[endDate.getMonth()].resolvedBugs++;
+
+            // Bug resolution time
+            const startDate = bug.startDate || bug.registerDate;
+            const start = startDate ? new Date(startDate) : null;
+            if (start && endDate >= start) {
+              const days = (endDate - start) / (1000 * 60 * 60 * 24);
+              months[endDate.getMonth()].totalResolutionDays += days;
+              months[endDate.getMonth()].resolutionSamples++;
+            }
+          });
+
+          // Calculate avg resolution per month
+          months.forEach(m => {
+            m.avgResolutionDays = m.resolutionSamples > 0 ? (m.totalResolutionDays / m.resolutionSamples) : 0;
+          });
+
+          // Only show months up to current month if selected year is current year
+          const now = new Date();
+          const maxMonth = selectedYear === now.getFullYear() ? now.getMonth() : 11;
+          const visibleMonths = months.slice(0, maxMonth + 1);
+
+          if (visibleMonths.every(m => m.completedTasks === 0 && m.resolvedBugs === 0)) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'chart-wrapper';
+            wrapper.innerHTML = `
+              <h3 class="chart-title" style="color: var(--project-color-${index + 1})">${project.name} (${selectedYear})</h3>
+              <div class="no-data-message">No completed tasks or resolved bugs in ${selectedYear}</div>
+            `;
+            container.appendChild(wrapper);
+            continue;
+          }
+
+          const wrapper = document.createElement('div');
+          wrapper.className = 'chart-wrapper';
+          wrapper.setAttribute('data-project-index', index);
+
+          const tasksChartSVG = this._renderLineChart(visibleMonths, 'completedTasks', 'Tasks Completed', '#6366f1');
+          const bugsChartSVG = this._renderLineChart(visibleMonths, 'resolvedBugs', 'Bugs Resolved', '#ef4444');
+          const avgTimeSVG = this._renderBarChart(visibleMonths, 'avgResolutionDays', 'Avg Resolution Time (days)', '#f59e0b');
+
+          wrapper.innerHTML = `
+            <h3 class="chart-title" style="color: var(--project-color-${index + 1})">${project.name} (${selectedYear})</h3>
+            <div class="evolution-charts-grid">
+              <div class="evolution-chart-card">
+                <h4 class="evolution-chart-subtitle">Tasks Completed per Month</h4>
+                ${tasksChartSVG}
+              </div>
+              <div class="evolution-chart-card">
+                <h4 class="evolution-chart-subtitle">Bugs Resolved per Month</h4>
+                ${bugsChartSVG}
+              </div>
+              <div class="evolution-chart-card">
+                <h4 class="evolution-chart-subtitle">Avg Resolution Time (days)</h4>
+                ${avgTimeSVG}
+              </div>
+            </div>
+          `;
+          container.appendChild(wrapper);
+        }
+      } catch (error) {
+        console.error('Error loading temporal evolution data:', error);
+        container.innerHTML = '<div class="error-message">Error loading temporal evolution data</div>';
+      }
+    }
+
+    _renderLineChart(months, dataKey, title, color) {
+      const W = 500, H = 200, PAD_L = 40, PAD_R = 10, PAD_T = 10, PAD_B = 30;
+      const chartW = W - PAD_L - PAD_R;
+      const chartH = H - PAD_T - PAD_B;
+      const values = months.map(m => m[dataKey]);
+      const maxVal = Math.max(...values, 1);
+      const stepX = months.length > 1 ? chartW / (months.length - 1) : chartW;
+
+      const points = values.map((v, i) => {
+        const x = PAD_L + (months.length > 1 ? i * stepX : chartW / 2);
+        const y = PAD_T + chartH - (v / maxVal) * chartH;
+        return `${x},${y}`;
+      });
+
+      const areaPoints = [...points, `${PAD_L + (months.length > 1 ? (months.length - 1) * stepX : chartW / 2)},${PAD_T + chartH}`, `${PAD_L},${PAD_T + chartH}`];
+
+      // Y-axis gridlines
+      const gridCount = 4;
+      const gridLines = Array.from({ length: gridCount + 1 }, (_, i) => {
+        const y = PAD_T + chartH - (i / gridCount) * chartH;
+        const val = Math.round((i / gridCount) * maxVal);
+        return `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="var(--border-color, #e5e7eb)" stroke-width="0.5"/>
+                <text x="${PAD_L - 5}" y="${y + 4}" text-anchor="end" fill="var(--text-secondary, #999)" font-size="10">${val}</text>`;
+      }).join('');
+
+      // X-axis labels
+      const labels = months.map((m, i) => {
+        const x = PAD_L + (months.length > 1 ? i * stepX : chartW / 2);
+        return `<text x="${x}" y="${H - 5}" text-anchor="middle" fill="var(--text-secondary, #999)" font-size="10">${m.label}</text>`;
+      }).join('');
+
+      // Data dots
+      const dots = values.map((v, i) => {
+        const x = PAD_L + (months.length > 1 ? i * stepX : chartW / 2);
+        const y = PAD_T + chartH - (v / maxVal) * chartH;
+        return `<circle cx="${x}" cy="${y}" r="3.5" fill="${color}" stroke="white" stroke-width="1.5"/>
+                <title>${months[i].label}: ${dataKey === 'avgResolutionDays' ? v.toFixed(1) : v}</title>`;
+      }).join('');
+
+      return `<svg viewBox="0 0 ${W} ${H}" class="evolution-svg">
+        ${gridLines}
+        <polygon points="${areaPoints.join(' ')}" fill="${color}" opacity="0.1"/>
+        <polyline points="${points.join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+        ${dots}
+        ${labels}
+      </svg>`;
+    }
+
+    _renderBarChart(months, dataKey, title, color) {
+      const W = 500, H = 200, PAD_L = 40, PAD_R = 10, PAD_T = 10, PAD_B = 30;
+      const chartW = W - PAD_L - PAD_R;
+      const chartH = H - PAD_T - PAD_B;
+      const values = months.map(m => m[dataKey]);
+      const maxVal = Math.max(...values, 1);
+      const barW = Math.min(30, (chartW / months.length) * 0.7);
+      const gap = chartW / months.length;
+
+      // Y-axis gridlines
+      const gridCount = 4;
+      const gridLines = Array.from({ length: gridCount + 1 }, (_, i) => {
+        const y = PAD_T + chartH - (i / gridCount) * chartH;
+        const val = ((i / gridCount) * maxVal).toFixed(1);
+        return `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="var(--border-color, #e5e7eb)" stroke-width="0.5"/>
+                <text x="${PAD_L - 5}" y="${y + 4}" text-anchor="end" fill="var(--text-secondary, #999)" font-size="10">${val}</text>`;
+      }).join('');
+
+      const bars = values.map((v, i) => {
+        const x = PAD_L + i * gap + (gap - barW) / 2;
+        const barH = maxVal > 0 ? (v / maxVal) * chartH : 0;
+        const y = PAD_T + chartH - barH;
+        return `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${color}" rx="3" opacity="0.8">
+                  <title>${months[i].label}: ${v.toFixed(1)} days</title>
+                </rect>`;
+      }).join('');
+
+      const labels = months.map((m, i) => {
+        const x = PAD_L + i * gap + gap / 2;
+        return `<text x="${x}" y="${H - 5}" text-anchor="middle" fill="var(--text-secondary, #999)" font-size="10">${m.label}</text>`;
+      }).join('');
+
+      return `<svg viewBox="0 0 ${W} ${H}" class="evolution-svg">
+        ${gridLines}
+        ${bars}
+        ${labels}
+      </svg>`;
+    }
+
+    // ==================== DEVELOPER METRICS ====================
 
     _buildDeveloperSummaryMetrics(projectData) {
       const metricsByDeveloper = new Map();
@@ -2801,6 +3027,42 @@ const emptyMessage = document.getElementById('developerSprintChartEmpty');
     font-weight: 600;
     color: var(--text-primary, #333);
     min-width: 32px;
+  }
+
+  /* Temporal evolution charts */
+  .evolution-charts-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .evolution-chart-card {
+    background: var(--bg-primary, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 8px;
+    padding: 1rem;
+  }
+
+  .evolution-chart-subtitle {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary, #1e293b);
+  }
+
+  .evolution-svg {
+    width: 100%;
+    height: auto;
+    max-height: 220px;
+  }
+
+  @media (min-width: 1024px) {
+    .evolution-charts-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .evolution-chart-card:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
   }
 
 </style>
