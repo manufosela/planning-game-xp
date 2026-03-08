@@ -8,7 +8,7 @@
 
 const { HttpsError } = require('firebase-functions/v2/https');
 const { generateCardId } = require('../shared/card-utils.cjs');
-const { extractKeywords, findBestEpicMatch } = require('../helpers/epic-inference');
+const { extractKeywords, findBestEpicMatch, extractPhaseKeywords } = require('../helpers/epic-inference');
 
 /**
  * Infer which epic to assign to each phase.
@@ -54,8 +54,7 @@ async function inferEpicsForPhases(db, projectId, phases, existingEpics, planTit
     return phaseEpicMap;
   }
 
-  // For larger plans, try to match each phase individually
-  const createdEpics = {};
+  // For larger plans, try to match each phase individually using phase name + task titles
   for (let i = 0; i < phases.length; i++) {
     const phase = phases[i];
     if (phase.epicIds && phase.epicIds.length > 0) {
@@ -63,16 +62,15 @@ async function inferEpicsForPhases(db, projectId, phases, existingEpics, planTit
       continue;
     }
 
-    const phaseKeywords = extractKeywords(phase.name);
+    // Use enriched keywords (phase name + task titles) for better matching
+    const phaseKeywords = extractPhaseKeywords(phase);
     const match = findBestEpicMatch(phaseKeywords, existingEpics);
     if (match) {
       phaseEpicMap[i] = match;
     } else {
-      // Use the plan-level epic (create once, reuse)
-      if (!createdEpics.plan) {
-        createdEpics.plan = bestMatch || await createEpicForPlan(db, projectId, planTitle, createdBy, now, firestore, logger);
-      }
-      phaseEpicMap[i] = createdEpics.plan;
+      // Create a phase-specific epic when no match found
+      const phaseTitle = phase.name || `${planTitle} - Phase ${i + 1}`;
+      phaseEpicMap[i] = await createEpicForPlan(db, projectId, phaseTitle, createdBy, now, firestore, logger);
     }
   }
 
@@ -379,15 +377,30 @@ async function handleRegenerateTasksFromPlan(request, deps) {
     phases: cleanedPhases
   });
 
-  // Now create new tasks
+  // Now create new tasks with re-inferred epics
   const phases = cleanedPhases;
   const createdTasks = [];
   const now = new Date().toISOString();
   const createdBy = request.auth?.token?.email || 'system';
 
+  // Re-run epic inference for regeneration
+  const epicsPath = `/cards/${projectId}/EPICS_${projectId}`;
+  const epicsSnap = await db.ref(epicsPath).once('value');
+  const epicsData = epicsSnap.val() || {};
+  const existingEpics = Object.entries(epicsData)
+    .filter(([, epic]) => !epic.deletedAt)
+    .map(([fbId, epic]) => ({
+      firebaseId: fbId,
+      cardId: epic.cardId || fbId,
+      title: (epic.title || '').toLowerCase()
+    }));
+
+  const phaseEpicMap = await inferEpicsForPhases(db, projectId, phases, existingEpics, plan.title, createdBy, now, firestore, logger);
+
   for (let phaseIndex = 0; phaseIndex < phases.length; phaseIndex++) {
     const phase = phases[phaseIndex];
     const phaseTasks = phase.tasks || [];
+    const epicId = phaseEpicMap[phaseIndex] || '';
 
     for (const task of phaseTasks) {
       if (!task.title) continue;
@@ -404,17 +417,17 @@ async function handleRegenerateTasksFromPlan(request, deps) {
         phase,
         phaseIndex,
         planId,
-        epicId: (phase.epicIds && phase.epicIds.length > 0) ? phase.epicIds[0] : '',
+        epicId,
         createdBy,
         now
       });
 
       await newCardRef.set(cardData);
-      createdTasks.push({ cardId, firebaseId, title: task.title.trim(), phaseIndex });
+      createdTasks.push({ cardId, firebaseId, title: task.title.trim(), phaseIndex, epic: epicId });
     }
   }
 
-  // Update plan with new generated tasks
+  // Update plan with new generated tasks (including inferred epics)
   const generatedTasksData = createdTasks.map(t => ({
     cardId: t.cardId,
     firebaseId: t.firebaseId,
@@ -425,9 +438,14 @@ async function handleRegenerateTasksFromPlan(request, deps) {
     const phaseTaskIds = createdTasks
       .filter(t => t.phaseIndex === i)
       .map(t => t.cardId);
+    const inferredEpic = phaseEpicMap[i];
+    const epicIds = inferredEpic
+      ? [...new Set([...(phase.epicIds || []), inferredEpic])]
+      : (phase.epicIds || []);
     return {
       ...phase,
-      taskIds: [...(phase.taskIds || []), ...phaseTaskIds]
+      taskIds: [...(phase.taskIds || []), ...phaseTaskIds],
+      epicIds
     };
   });
 

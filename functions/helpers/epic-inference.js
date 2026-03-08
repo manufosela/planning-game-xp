@@ -48,7 +48,23 @@ function findBestEpicMatch(keywords, existingEpics) {
   return bestEpic;
 }
 
+/**
+ * Extract combined keywords from a phase (name + task titles).
+ * Provides richer context for epic matching than phase name alone.
+ * @param {object} phase - Plan phase with name and tasks array
+ * @returns {string[]} Combined unique keywords
+ */
+function extractPhaseKeywords(phase) {
+  if (!phase) return [];
+  const nameKeywords = extractKeywords(phase.name || '');
+  const taskKeywords = (phase.tasks || [])
+    .flatMap(t => extractKeywords(t.title || ''));
+  // Deduplicate while preserving order (name keywords first)
+  return [...new Set([...nameKeywords, ...taskKeywords])];
+}
+
 module.exports = {
   extractKeywords,
-  findBestEpicMatch
+  findBestEpicMatch,
+  extractPhaseKeywords
 };

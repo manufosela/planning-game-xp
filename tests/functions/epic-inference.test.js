@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-const { extractKeywords, findBestEpicMatch } = await import('../../functions/helpers/epic-inference.js');
+const { extractKeywords, findBestEpicMatch, extractPhaseKeywords } = await import('../../functions/helpers/epic-inference.js');
 
 describe('Epic inference functions', () => {
   describe('extractKeywords', () => {
@@ -123,6 +123,83 @@ describe('Epic inference functions', () => {
       const keywords = ['notificacion', 'sistema'];
       const match = findBestEpicMatch(keywords, existingEpics);
       expect(match).toBe('PLN-PCS-0001');
+    });
+  });
+
+  describe('extractPhaseKeywords', () => {
+    it('should extract keywords from phase name', () => {
+      const phase = { name: 'Sistema de autenticación', tasks: [] };
+      const keywords = extractPhaseKeywords(phase);
+      expect(keywords).toContain('sistema');
+      expect(keywords).toContain('autenticación');
+    });
+
+    it('should include task title keywords', () => {
+      const phase = {
+        name: 'Backend',
+        tasks: [
+          { title: 'Crear endpoint de autenticación' },
+          { title: 'Validar tokens JWT' }
+        ]
+      };
+      const keywords = extractPhaseKeywords(phase);
+      expect(keywords).toContain('backend');
+      expect(keywords).toContain('endpoint');
+      expect(keywords).toContain('autenticación');
+      expect(keywords).toContain('tokens');
+      expect(keywords).toContain('jwt');
+    });
+
+    it('should deduplicate keywords', () => {
+      const phase = {
+        name: 'Sistema notificaciones',
+        tasks: [{ title: 'Configurar sistema notificaciones push' }]
+      };
+      const keywords = extractPhaseKeywords(phase);
+      const systemCount = keywords.filter(k => k === 'sistema').length;
+      expect(systemCount).toBe(1);
+    });
+
+    it('should handle empty phase', () => {
+      expect(extractPhaseKeywords(null)).toEqual([]);
+      expect(extractPhaseKeywords({})).toEqual([]);
+    });
+
+    it('should handle phase with no tasks', () => {
+      const phase = { name: 'Infraestructura' };
+      const keywords = extractPhaseKeywords(phase);
+      expect(keywords).toContain('infraestructura');
+    });
+
+    it('should prioritize name keywords (appear first)', () => {
+      const phase = {
+        name: 'Seguridad',
+        tasks: [{ title: 'Implementar firewall' }]
+      };
+      const keywords = extractPhaseKeywords(phase);
+      expect(keywords[0]).toBe('seguridad');
+    });
+
+    it('should improve epic matching with task context', () => {
+      const existingEpics = [
+        { cardId: 'EPC-001', title: 'sistema notificaciones push' },
+        { cardId: 'EPC-002', title: 'gestión usuarios permisos' }
+      ];
+
+      // Phase name alone ("Servicios") wouldn't match, but task titles add "notificaciones" and "push"
+      const phaseWithTasks = {
+        name: 'Servicios',
+        tasks: [
+          { title: 'Notificaciones push' },
+          { title: 'Sistema alertas' }
+        ]
+      };
+      const keywords = extractPhaseKeywords(phaseWithTasks);
+      // keywords: ['servicios', 'notificaciones', 'push', 'sistema', 'alertas']
+      // epic 'sistema notificaciones push' keywords: ['sistema', 'notificaciones', 'push']
+      // overlap: 3/5 = 60% > 40% threshold
+      const match = findBestEpicMatch(keywords, existingEpics);
+      expect(match).toBe('EPC-001');
     });
   });
 });
