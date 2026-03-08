@@ -11,14 +11,32 @@ export { BaseRepository } from './base-repository.js';
 export { CardRepository } from './card-repository.js';
 export { ProjectRepository } from './project-repository.js';
 export { CounterService } from './counter-service.js';
+export { EntityRepository } from './entity-repository.js';
+export { BacklogRepository } from './backlog-repository.js';
+export { NotificationRepository } from './notification-repository.js';
+export { PlanRepository } from './plan-repository.js';
+export { ConfigRepository } from './config-repository.js';
+export { DocsRepository } from './docs-repository.js';
 
 export {
   registerCardBackend,
   registerProjectBackend,
   registerCounterBackend,
+  registerEntityBackend,
+  registerBacklogBackend,
+  registerNotificationBackend,
+  registerPlanBackend,
+  registerConfigBackend,
+  registerDocsBackend,
   createCardRepository,
   createProjectRepository,
   createCounterService,
+  createEntityRepository,
+  createBacklogRepository,
+  createNotificationRepository,
+  createPlanRepository,
+  createConfigRepository,
+  createDocsRepository,
   createRepositories,
   createDualWriteRepositories,
   createReadSwitchRepositories,
@@ -43,7 +61,13 @@ export {
   RtdbProjectRepository,
   RtdbCounterService,
   createAdminCounterAdapter,
-  createClientCounterAdapter
+  createClientCounterAdapter,
+  RtdbEntityRepository,
+  RtdbBacklogRepository,
+  RtdbNotificationRepository,
+  RtdbPlanRepository,
+  RtdbConfigRepository,
+  RtdbDocsRepository
 } from './rtdb/index.js';
 
 // Firestore backend

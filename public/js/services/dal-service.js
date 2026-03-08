@@ -21,6 +21,12 @@ import {
   registerCardBackend,
   registerProjectBackend,
   registerCounterBackend,
+  registerEntityBackend,
+  registerBacklogBackend,
+  registerNotificationBackend,
+  registerPlanBackend,
+  registerConfigBackend,
+  registerDocsBackend,
   createRepositories,
   createDualWriteRepositories,
   createReadSwitchRepositories,
@@ -31,7 +37,13 @@ import {
   RtdbCardRepository,
   RtdbProjectRepository,
   RtdbCounterService,
-  createClientCounterAdapter
+  createClientCounterAdapter,
+  RtdbEntityRepository,
+  RtdbBacklogRepository,
+  RtdbNotificationRepository,
+  RtdbPlanRepository,
+  RtdbConfigRepository,
+  RtdbDocsRepository
 } from '../../../shared/dal/index.js';
 
 // DAL modes for the migration phases
@@ -71,6 +83,24 @@ class DalService {
       constructor() { super(rtdbBase); }
     });
     registerProjectBackend('rtdb', class extends RtdbProjectRepository {
+      constructor() { super(rtdbBase); }
+    });
+    registerEntityBackend('rtdb', class extends RtdbEntityRepository {
+      constructor() { super(rtdbBase); }
+    });
+    registerBacklogBackend('rtdb', class extends RtdbBacklogRepository {
+      constructor() { super(rtdbBase); }
+    });
+    registerNotificationBackend('rtdb', class extends RtdbNotificationRepository {
+      constructor() { super(rtdbBase); }
+    });
+    registerPlanBackend('rtdb', class extends RtdbPlanRepository {
+      constructor() { super(rtdbBase); }
+    });
+    registerConfigBackend('rtdb', class extends RtdbConfigRepository {
+      constructor() { super(rtdbBase); }
+    });
+    registerDocsBackend('rtdb', class extends RtdbDocsRepository {
       constructor() { super(rtdbBase); }
     });
 
@@ -121,6 +151,42 @@ class DalService {
   get counters() {
     this._ensureInitialized();
     return this._repos.counters;
+  }
+
+  /** @returns {import('../../../shared/dal/entity-repository.js').EntityRepository} */
+  get entities() {
+    this._ensureInitialized();
+    return this._repos.entities;
+  }
+
+  /** @returns {import('../../../shared/dal/backlog-repository.js').BacklogRepository} */
+  get backlogs() {
+    this._ensureInitialized();
+    return this._repos.backlogs;
+  }
+
+  /** @returns {import('../../../shared/dal/notification-repository.js').NotificationRepository} */
+  get notifications() {
+    this._ensureInitialized();
+    return this._repos.notifications;
+  }
+
+  /** @returns {import('../../../shared/dal/plan-repository.js').PlanRepository} */
+  get plans() {
+    this._ensureInitialized();
+    return this._repos.plans;
+  }
+
+  /** @returns {import('../../../shared/dal/config-repository.js').ConfigRepository} */
+  get config() {
+    this._ensureInitialized();
+    return this._repos.config;
+  }
+
+  /** @returns {import('../../../shared/dal/docs-repository.js').DocsRepository} */
+  get docs() {
+    this._ensureInitialized();
+    return this._repos.docs;
   }
 
   /** @returns {string} Current DAL mode */

@@ -25,6 +25,24 @@ const _projectBackends = {};
 /** @type {Object<string, Function>} Registry of backend constructors for CounterService */
 const _counterBackends = {};
 
+/** @type {Object<string, Function>} Registry of backend constructors for EntityRepository */
+const _entityBackends = {};
+
+/** @type {Object<string, Function>} Registry of backend constructors for BacklogRepository */
+const _backlogBackends = {};
+
+/** @type {Object<string, Function>} Registry of backend constructors for NotificationRepository */
+const _notificationBackends = {};
+
+/** @type {Object<string, Function>} Registry of backend constructors for PlanRepository */
+const _planBackends = {};
+
+/** @type {Object<string, Function>} Registry of backend constructors for ConfigRepository */
+const _configBackends = {};
+
+/** @type {Object<string, Function>} Registry of backend constructors for DocsRepository */
+const _docsBackends = {};
+
 /**
  * Register a CardRepository implementation for a backend.
  * @param {string} backendName - e.g., 'rtdb', 'firestore'
@@ -50,6 +68,36 @@ export function registerProjectBackend(backendName, RepositoryClass) {
  */
 export function registerCounterBackend(backendName, ServiceClass) {
   _counterBackends[backendName] = ServiceClass;
+}
+
+/** Register an EntityRepository implementation. */
+export function registerEntityBackend(backendName, RepositoryClass) {
+  _entityBackends[backendName] = RepositoryClass;
+}
+
+/** Register a BacklogRepository implementation. */
+export function registerBacklogBackend(backendName, RepositoryClass) {
+  _backlogBackends[backendName] = RepositoryClass;
+}
+
+/** Register a NotificationRepository implementation. */
+export function registerNotificationBackend(backendName, RepositoryClass) {
+  _notificationBackends[backendName] = RepositoryClass;
+}
+
+/** Register a PlanRepository implementation. */
+export function registerPlanBackend(backendName, RepositoryClass) {
+  _planBackends[backendName] = RepositoryClass;
+}
+
+/** Register a ConfigRepository implementation. */
+export function registerConfigBackend(backendName, RepositoryClass) {
+  _configBackends[backendName] = RepositoryClass;
+}
+
+/** Register a DocsRepository implementation. */
+export function registerDocsBackend(backendName, RepositoryClass) {
+  _docsBackends[backendName] = RepositoryClass;
 }
 
 /**
@@ -104,18 +152,76 @@ export function createCounterService(backend = 'firestore', options = {}) {
 }
 
 /**
+ * Create a repository for the specified backend from a registry.
+ * @param {Object} registry
+ * @param {string} name - Repository name for error messages
+ * @param {string} backend
+ * @param {Object} options
+ * @returns {Object}
+ */
+function _createFromRegistry(registry, name, backend, options = {}) {
+  const Constructor = registry[backend];
+  if (!Constructor) {
+    throw new Error(
+      `No ${name} registered for backend "${backend}". ` +
+      `Available: ${Object.keys(registry).join(', ') || 'none'}`
+    );
+  }
+  return new Constructor(options);
+}
+
+/** Create an EntityRepository for the specified backend. */
+export function createEntityRepository(backend, options = {}) {
+  return _createFromRegistry(_entityBackends, 'EntityRepository', backend, options);
+}
+
+/** Create a BacklogRepository for the specified backend. */
+export function createBacklogRepository(backend, options = {}) {
+  return _createFromRegistry(_backlogBackends, 'BacklogRepository', backend, options);
+}
+
+/** Create a NotificationRepository for the specified backend. */
+export function createNotificationRepository(backend, options = {}) {
+  return _createFromRegistry(_notificationBackends, 'NotificationRepository', backend, options);
+}
+
+/** Create a PlanRepository for the specified backend. */
+export function createPlanRepository(backend, options = {}) {
+  return _createFromRegistry(_planBackends, 'PlanRepository', backend, options);
+}
+
+/** Create a ConfigRepository for the specified backend. */
+export function createConfigRepository(backend, options = {}) {
+  return _createFromRegistry(_configBackends, 'ConfigRepository', backend, options);
+}
+
+/** Create a DocsRepository for the specified backend. */
+export function createDocsRepository(backend, options = {}) {
+  return _createFromRegistry(_docsBackends, 'DocsRepository', backend, options);
+}
+
+/**
  * Create all repositories for a given backend.
  * @param {string} backend - 'rtdb' or 'firestore'
  * @param {Object} options - Backend-specific options
  * @param {string} [counterBackend='firestore'] - Backend for counters
- * @returns {{cards: import('./card-repository.js').CardRepository, projects: import('./project-repository.js').ProjectRepository, counters: import('./counter-service.js').CounterService}}
  */
 export function createRepositories(backend, options = {}, counterBackend = 'firestore') {
-  return {
+  const repos = {
     cards: createCardRepository(backend, options),
     projects: createProjectRepository(backend, options),
     counters: createCounterService(counterBackend, options)
   };
+
+  // Add new repositories if their backends are registered
+  if (_entityBackends[backend]) repos.entities = createEntityRepository(backend, options);
+  if (_backlogBackends[backend]) repos.backlogs = createBacklogRepository(backend, options);
+  if (_notificationBackends[backend]) repos.notifications = createNotificationRepository(backend, options);
+  if (_planBackends[backend]) repos.plans = createPlanRepository(backend, options);
+  if (_configBackends[backend]) repos.config = createConfigRepository(backend, options);
+  if (_docsBackends[backend]) repos.docs = createDocsRepository(backend, options);
+
+  return repos;
 }
 
 /**
@@ -192,7 +298,11 @@ export function createFirestoreOnlyRepositories(firestoreOptions = {}, counterBa
  * Clear all registered backends (useful for testing).
  */
 export function clearRegisteredBackends() {
-  Object.keys(_cardBackends).forEach(k => delete _cardBackends[k]);
-  Object.keys(_projectBackends).forEach(k => delete _projectBackends[k]);
-  Object.keys(_counterBackends).forEach(k => delete _counterBackends[k]);
+  for (const registry of [
+    _cardBackends, _projectBackends, _counterBackends,
+    _entityBackends, _backlogBackends, _notificationBackends,
+    _planBackends, _configBackends, _docsBackends
+  ]) {
+    Object.keys(registry).forEach(k => delete registry[k]);
+  }
 }
