@@ -13,3 +13,4 @@ export { RtdbNotificationRepository } from './rtdb-notification-repository.js';
 export { RtdbPlanRepository } from './rtdb-plan-repository.js';
 export { RtdbConfigRepository } from './rtdb-config-repository.js';
 export { RtdbDocsRepository } from './rtdb-docs-repository.js';
+export { RtdbStateTransitionRepository } from './rtdb-state-transition-repository.js';
