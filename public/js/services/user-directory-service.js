@@ -1,4 +1,4 @@
-import { database, ref, onValue } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
 import { decodeEmailFromFirebase } from '../utils/email-sanitizer.js';
 import { normalizeDeveloperEntry } from '../utils/developer-normalizer.js';
 import { developerDirectory } from '../config/developer-directory.js';
@@ -24,22 +24,20 @@ class UserDirectoryService {
       return this._loadingPromise;
     }
 
-    this._loadingPromise = new Promise((resolve, reject) => {
-      const dirRef = ref(database, '/data/usersDirectory');
-      onValue(dirRef, (snapshot) => {
-        const raw = snapshot.val() || {};
-        this._process(raw);
+    this._loadingPromise = dalService.config.getUsersDirectory()
+      .then(raw => {
+        this._process(raw || {});
         this._loaded = true;
         this._loadingPromise = null;
-        resolve(this._byEmail);
-      }, (error) => {
+        return this._byEmail;
+      })
+      .catch(error => {
         this._byEmail = {};
         this._byAlias = {};
         this._loaded = false;
         this._loadingPromise = null;
-        reject(error);
-      }, { onlyOnce: true });
-    });
+        throw error;
+      });
 
     return this._loadingPromise;
   }

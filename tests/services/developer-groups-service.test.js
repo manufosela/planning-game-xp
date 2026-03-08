@@ -1,25 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const mockGet = vi.fn();
-const mockSet = vi.fn();
-const mockRef = vi.fn(() => 'mock-ref');
+const mockGetDeveloperGroups = vi.fn();
+const mockSetDeveloperGroups = vi.fn();
 
-vi.mock('../../public/firebase-config.js', () => ({
-  database: {},
-  ref: (...args) => mockRef(...args),
-  get: (...args) => mockGet(...args),
-  set: (...args) => mockSet(...args),
-  push: vi.fn(),
-  onValue: vi.fn(),
-  update: vi.fn(),
-  databaseFirestore: {},
-  getDoc: vi.fn(),
-  setDoc: vi.fn(),
-  doc: vi.fn(),
-  runTransaction: vi.fn(),
-  auth: { currentUser: { email: 'testuser@example.com' } },
-  firebaseConfig: {},
-  superAdminEmail: 'superadmin@example.com',
+vi.mock('../../public/js/services/dal-service.js', () => ({
+  dalService: {
+    config: {
+      getDeveloperGroups: (...args) => mockGetDeveloperGroups(...args),
+      setDeveloperGroups: (...args) => mockSetDeveloperGroups(...args),
+    },
+  },
 }));
 
 describe('DeveloperGroupsService', () => {
@@ -43,28 +33,26 @@ describe('DeveloperGroupsService', () => {
   beforeEach(async () => {
     vi.resetModules();
 
-    mockGet.mockReset();
-    mockSet.mockReset();
-    mockRef.mockReset();
-    mockRef.mockReturnValue('mock-ref');
+    mockGetDeveloperGroups.mockReset();
+    mockSetDeveloperGroups.mockReset();
 
     const module = await import('../../public/js/services/developer-groups-service.js');
     DeveloperGroupsService = module.DeveloperGroupsService;
   });
 
   describe('loadGroups', () => {
-    it('should load groups from /data/developerGroups', async () => {
-      mockGet.mockResolvedValueOnce({ exists: () => true, val: () => sampleGroups });
+    it('should load groups via DAL config', async () => {
+      mockGetDeveloperGroups.mockResolvedValueOnce(sampleGroups);
 
       const service = new DeveloperGroupsService();
       await service.loadGroups();
 
-      expect(mockRef).toHaveBeenCalledWith({}, '/data/developerGroups');
+      expect(mockGetDeveloperGroups).toHaveBeenCalledOnce();
       expect(service.getGroups()).toEqual(sampleGroups);
     });
 
     it('should handle empty/missing data', async () => {
-      mockGet.mockResolvedValueOnce({ exists: () => false, val: () => null });
+      mockGetDeveloperGroups.mockResolvedValueOnce(null);
 
       const service = new DeveloperGroupsService();
       await service.loadGroups();
@@ -72,8 +60,8 @@ describe('DeveloperGroupsService', () => {
       expect(service.getGroups()).toBeNull();
     });
 
-    it('should throw on Firebase error', async () => {
-      mockGet.mockRejectedValueOnce(new Error('Firebase error'));
+    it('should throw on DAL error', async () => {
+      mockGetDeveloperGroups.mockRejectedValueOnce(new Error('Firebase error'));
 
       const service = new DeveloperGroupsService();
 
@@ -83,7 +71,7 @@ describe('DeveloperGroupsService', () => {
 
   describe('getGroups', () => {
     it('should return loaded groups', async () => {
-      mockGet.mockResolvedValueOnce({ exists: () => true, val: () => sampleGroups });
+      mockGetDeveloperGroups.mockResolvedValueOnce(sampleGroups);
 
       const service = new DeveloperGroupsService();
       await service.loadGroups();
@@ -103,7 +91,7 @@ describe('DeveloperGroupsService', () => {
 
   describe('getDeveloperGroup', () => {
     it('should return group for a developer ID', async () => {
-      mockGet.mockResolvedValueOnce({ exists: () => true, val: () => sampleGroups });
+      mockGetDeveloperGroups.mockResolvedValueOnce(sampleGroups);
 
       const service = new DeveloperGroupsService();
       await service.loadGroups();
@@ -114,7 +102,7 @@ describe('DeveloperGroupsService', () => {
     });
 
     it('should return null for unclassified developer', async () => {
-      mockGet.mockResolvedValueOnce({ exists: () => true, val: () => sampleGroups });
+      mockGetDeveloperGroups.mockResolvedValueOnce(sampleGroups);
 
       const service = new DeveloperGroupsService();
       await service.loadGroups();
@@ -129,18 +117,17 @@ describe('DeveloperGroupsService', () => {
   });
 
   describe('saveGroups', () => {
-    it('should save groups to Firebase', async () => {
-      mockSet.mockResolvedValueOnce(undefined);
+    it('should save groups via DAL config', async () => {
+      mockSetDeveloperGroups.mockResolvedValueOnce(undefined);
 
       const service = new DeveloperGroupsService();
       await service.saveGroups(sampleGroups);
 
-      expect(mockRef).toHaveBeenCalledWith({}, '/data/developerGroups');
-      expect(mockSet).toHaveBeenCalledWith('mock-ref', sampleGroups);
+      expect(mockSetDeveloperGroups).toHaveBeenCalledWith(sampleGroups);
     });
 
     it('should update local cache after saving', async () => {
-      mockSet.mockResolvedValueOnce(undefined);
+      mockSetDeveloperGroups.mockResolvedValueOnce(undefined);
 
       const service = new DeveloperGroupsService();
       await service.saveGroups(sampleGroups);
@@ -149,8 +136,8 @@ describe('DeveloperGroupsService', () => {
       expect(service.getDeveloperGroup('dev_005')).toBe('internal');
     });
 
-    it('should throw on Firebase write error', async () => {
-      mockSet.mockRejectedValueOnce(new Error('Permission denied'));
+    it('should throw on DAL write error', async () => {
+      mockSetDeveloperGroups.mockRejectedValueOnce(new Error('Permission denied'));
 
       const service = new DeveloperGroupsService();
 

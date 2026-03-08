@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-vi.mock('../../public/firebase-config.js', () => ({
-  database: {},
-  ref: vi.fn(),
-  onValue: vi.fn(),
-  get: vi.fn()
+const mockGetUsersDirectory = vi.fn();
+
+vi.mock('../../public/js/services/dal-service.js', () => ({
+  dalService: {
+    config: {
+      getUsersDirectory: (...args) => mockGetUsersDirectory(...args),
+    },
+  },
 }));
 
 vi.mock('../../public/js/config/developer-directory.js', () => ({
@@ -39,7 +42,6 @@ describe('user-directory-service alias resolution', () => {
   });
 
   const rawDirectory = {
-    // Entrada principal
     'dnfernandez|partner!example!com': {
       name: '',
       email: 'dnfernandez@partner.example.com',
@@ -48,7 +50,6 @@ describe('user-directory-service alias resolution', () => {
       isAdmin: false,
       isSuperAdmin: false
     },
-    // Variante org.example.com sin nombre
     'dnfernandez_partner!example!com-ext-|org!example!com': {
       name: '',
       email: 'dnfernandez_partner.example.com#ext#@org.example.com',
@@ -78,5 +79,20 @@ describe('user-directory-service alias resolution', () => {
   it('resuelve alias corto sin dominio al nombre real', async () => {
     userDirectoryService._process(rawDirectory);
     expect(userDirectoryService.resolveDisplayName('dnfernandez')).toBe('David Nieto');
+  });
+
+  it('loads data via DAL config', async () => {
+    mockGetUsersDirectory.mockResolvedValueOnce(rawDirectory);
+
+    await userDirectoryService.load(true);
+
+    expect(mockGetUsersDirectory).toHaveBeenCalledOnce();
+    expect(userDirectoryService.resolveDisplayName('dnfernandez')).toBe('David Nieto');
+  });
+
+  it('handles DAL error gracefully', async () => {
+    mockGetUsersDirectory.mockRejectedValueOnce(new Error('Network error'));
+
+    await expect(userDirectoryService.load(true)).rejects.toThrow('Network error');
   });
 });

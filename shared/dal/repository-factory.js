@@ -46,6 +46,9 @@ const _docsBackends = {};
 /** @type {Object<string, Function>} Registry of backend constructors for StateTransitionRepository */
 const _stateTransitionBackends = {};
 
+/** @type {Object<string, Function>} Registry of backend constructors for HistoryRepository */
+const _historyBackends = {};
+
 /**
  * Register a CardRepository implementation for a backend.
  * @param {string} backendName - e.g., 'rtdb', 'firestore'
@@ -106,6 +109,11 @@ export function registerDocsBackend(backendName, RepositoryClass) {
 /** Register a StateTransitionRepository implementation. */
 export function registerStateTransitionBackend(backendName, RepositoryClass) {
   _stateTransitionBackends[backendName] = RepositoryClass;
+}
+
+/** Register a HistoryRepository implementation. */
+export function registerHistoryBackend(backendName, RepositoryClass) {
+  _historyBackends[backendName] = RepositoryClass;
 }
 
 /**
@@ -213,6 +221,11 @@ export function createStateTransitionRepository(backend, options = {}) {
   return _createFromRegistry(_stateTransitionBackends, 'StateTransitionRepository', backend, options);
 }
 
+/** Create a HistoryRepository for the specified backend. */
+export function createHistoryRepository(backend, options = {}) {
+  return _createFromRegistry(_historyBackends, 'HistoryRepository', backend, options);
+}
+
 /**
  * Create all repositories for a given backend.
  * @param {string} backend - 'rtdb' or 'firestore'
@@ -234,6 +247,7 @@ export function createRepositories(backend, options = {}, counterBackend = 'fire
   if (_configBackends[backend]) repos.config = createConfigRepository(backend, options);
   if (_docsBackends[backend]) repos.docs = createDocsRepository(backend, options);
   if (_stateTransitionBackends[backend]) repos.stateTransitions = createStateTransitionRepository(backend, options);
+  if (_historyBackends[backend]) repos.history = createHistoryRepository(backend, options);
 
   return repos;
 }
@@ -315,7 +329,7 @@ export function clearRegisteredBackends() {
   for (const registry of [
     _cardBackends, _projectBackends, _counterBackends,
     _entityBackends, _backlogBackends, _notificationBackends,
-    _planBackends, _configBackends, _docsBackends, _stateTransitionBackends
+    _planBackends, _configBackends, _docsBackends, _stateTransitionBackends, _historyBackends
   ]) {
     Object.keys(registry).forEach(k => delete registry[k]);
   }

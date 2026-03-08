@@ -1,4 +1,4 @@
-import { database, ref, get, set, onValue } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
 /**
  * Servicio para gestionar el backlog global de propuestas
  * Permite cargar propuestas de múltiples proyectos y gestionar su orden global
@@ -16,11 +16,9 @@ export const globalProposalsService = {
 
     const loadPromises = projectIds.map(async (projectId) => {
       try {
-        const proposalsPath = `/cards/${projectId}/PROPOSALS_${projectId}`;
-        const snapshot = await get(ref(database, proposalsPath));
+        const proposals = await dalService.cards.listCards(projectId, 'proposal');
 
-        if (snapshot.exists()) {
-          const proposals = snapshot.val();
+        if (proposals) {
           Object.entries(proposals).forEach(([firebaseId, proposal]) => {
             allProposals.push({
               ...proposal,
@@ -36,7 +34,7 @@ export const globalProposalsService = {
     });
 
     await Promise.all(loadPromises);
-return allProposals;
+    return allProposals;
   },
 
   /**
@@ -45,13 +43,10 @@ return allProposals;
    */
   async loadGlobalOrder() {
     try {
-      const snapshot = await get(ref(database, '/data/globalProposalOrder'));
-      if (snapshot.exists()) {
-        return snapshot.val();
-      }
-      return { order: [], lastUpdatedBy: null, lastUpdatedAt: null };
+      const data = await dalService.config.getGlobalProposalOrder();
+      return data || { order: [], lastUpdatedBy: null, lastUpdatedAt: null };
     } catch (error) {
-return { order: [], lastUpdatedBy: null, lastUpdatedAt: null };
+      return { order: [], lastUpdatedBy: null, lastUpdatedAt: null };
     }
   },
 
@@ -62,17 +57,13 @@ return { order: [], lastUpdatedBy: null, lastUpdatedAt: null };
    * @returns {Promise<void>}
    */
   async saveGlobalOrder(orderedProposals, userEmail) {
-    try {
-      const orderData = {
-        order: orderedProposals.map(p => p.compositeKey || `${p.projectId}/${p.firebaseId}`),
-        lastUpdatedBy: userEmail,
-        lastUpdatedAt: new Date().toISOString()
-      };
+    const orderData = {
+      order: orderedProposals.map(p => p.compositeKey || `${p.projectId}/${p.firebaseId}`),
+      lastUpdatedBy: userEmail,
+      lastUpdatedAt: new Date().toISOString()
+    };
 
-      await set(ref(database, '/data/globalProposalOrder'), orderData);
-} catch (error) {
-throw error;
-    }
+    await dalService.config.setGlobalProposalOrder(orderData);
   },
 
   /**
@@ -120,9 +111,8 @@ throw error;
       this._orderUnsubscribe();
     }
 
-    this._orderUnsubscribe = onValue(ref(database, '/data/globalProposalOrder'), (snapshot) => {
-      const data = snapshot.exists() ? snapshot.val() : { order: [] };
-      callback(data);
+    this._orderUnsubscribe = dalService.config.subscribeToGlobalProposalOrder((data) => {
+      callback(data || { order: [] });
     });
 
     return this._orderUnsubscribe;

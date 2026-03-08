@@ -18,6 +18,7 @@ export { PlanRepository } from './plan-repository.js';
 export { ConfigRepository } from './config-repository.js';
 export { DocsRepository } from './docs-repository.js';
 export { StateTransitionRepository } from './state-transition-repository.js';
+export { HistoryRepository } from './history-repository.js';
 
 export {
   registerCardBackend,
@@ -30,6 +31,7 @@ export {
   registerConfigBackend,
   registerDocsBackend,
   registerStateTransitionBackend,
+  registerHistoryBackend,
   createCardRepository,
   createProjectRepository,
   createCounterService,
@@ -40,6 +42,7 @@ export {
   createConfigRepository,
   createDocsRepository,
   createStateTransitionRepository,
+  createHistoryRepository,
   createRepositories,
   createDualWriteRepositories,
   createReadSwitchRepositories,
@@ -71,7 +74,8 @@ export {
   RtdbPlanRepository,
   RtdbConfigRepository,
   RtdbDocsRepository,
-  RtdbStateTransitionRepository
+  RtdbStateTransitionRepository,
+  RtdbHistoryRepository
 } from './rtdb/index.js';
 
 // Firestore backend

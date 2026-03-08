@@ -12,9 +12,7 @@
  * }
  */
 
-import { database, ref, get, set } from '../../firebase-config.js';
-
-const FIREBASE_PATH = '/data/developerGroups';
+import { dalService } from './dal-service.js';
 
 export class DeveloperGroupsService {
   constructor() {
@@ -23,12 +21,12 @@ export class DeveloperGroupsService {
   }
 
   /**
-   * Load groups from Firebase
+   * Load groups from Firebase via DAL
    */
   async loadGroups() {
-    const snapshot = await get(ref(database, FIREBASE_PATH));
-    if (snapshot.exists()) {
-      this._groups = snapshot.val();
+    const data = await dalService.config.getDeveloperGroups();
+    if (data) {
+      this._groups = data;
       this._buildIndex();
     } else {
       this._groups = null;
@@ -59,7 +57,7 @@ export class DeveloperGroupsService {
    * @param {Object} groups - Groups object to save
    */
   async saveGroups(groups) {
-    await set(ref(database, FIREBASE_PATH), groups);
+    await dalService.config.setDeveloperGroups(groups);
     this._groups = groups;
     this._buildIndex();
   }

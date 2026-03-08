@@ -221,6 +221,36 @@ export class ConfigRepository {
     throw new Error('Not implemented: deleteSuite()');
   }
 
+  // --- Developer groups ---
+
+  async getDeveloperGroups() {
+    throw new Error('Not implemented: getDeveloperGroups()');
+  }
+
+  async setDeveloperGroups(data) {
+    throw new Error('Not implemented: setDeveloperGroups()');
+  }
+
+  // --- Users directory ---
+
+  async getUsersDirectory() {
+    throw new Error('Not implemented: getUsersDirectory()');
+  }
+
+  // --- Global proposal order ---
+
+  async getGlobalProposalOrder() {
+    throw new Error('Not implemented: getGlobalProposalOrder()');
+  }
+
+  async setGlobalProposalOrder(data) {
+    throw new Error('Not implemented: setGlobalProposalOrder()');
+  }
+
+  subscribeToGlobalProposalOrder(callback) {
+    throw new Error('Not implemented: subscribeToGlobalProposalOrder()');
+  }
+
   static get globalBasePath() { return '/global'; }
   static get configPath() { return '/config'; }
   static get appConfigPath() { return '/appConfig'; }

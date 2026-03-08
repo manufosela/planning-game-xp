@@ -98,4 +98,28 @@ export class RtdbConfigRepository extends ConfigRepository {
   async deleteSuite(projectId, suiteId) {
     await this._repo.remove(ConfigRepository.buildSuitePath(projectId, suiteId));
   }
+
+  async getDeveloperGroups() {
+    return this._repo.read('/data/developerGroups');
+  }
+
+  async setDeveloperGroups(data) {
+    await this._repo.write('/data/developerGroups', data);
+  }
+
+  async getUsersDirectory() {
+    return this._repo.read('/data/usersDirectory');
+  }
+
+  async getGlobalProposalOrder() {
+    return this._repo.read('/data/globalProposalOrder');
+  }
+
+  async setGlobalProposalOrder(data) {
+    await this._repo.write('/data/globalProposalOrder', data);
+  }
+
+  subscribeToGlobalProposalOrder(callback) {
+    return this._repo.subscribe('/data/globalProposalOrder', callback);
+  }
 }

@@ -1,4 +1,4 @@
-import { ref, push, get, query, orderByChild, limitToLast, onValue, database } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
 /**
  * Servicio para gestionar el histórico de cambios de las tarjetas
  * Guarda solo los cambios diferenciales en una estructura separada
@@ -119,11 +119,8 @@ return;
 return;
       }
 
-      // Construir path del histórico
+      // Build history entry
       const cardType = this.getCardTypeForPath(card.cardType || card.group);
-      const historyPath = `/history/${card.projectId}/${cardType}/${card.cardId}`;
-      
-      // Crear entrada de histórico
       const historyEntry = {
         changedBy: userEmail || card.updatedBy || card.createdBy || 'system',
         timestamp: new Date().toISOString(),
@@ -131,8 +128,8 @@ return;
         action: oldState ? 'update' : 'create'
       };
 
-      // Guardar en Firebase
-      push(ref(database, historyPath), historyEntry);
+      // Save via DAL
+      await dalService.history.pushEntry(card.projectId, cardType, card.cardId, historyEntry);
 
       // Actualizar cache de estado
       this.previousStates.set(card.cardId, JSON.parse(JSON.stringify(card)));
@@ -152,30 +149,9 @@ return;
   async getHistory(projectId, cardType, cardId, limit = 50) {
     try {
       const normalizedType = this.getCardTypeForPath(cardType);
-      const historyPath = `/history/${projectId}/${normalizedType}/${cardId}`;
-      
-      const historyRef = ref(database, historyPath);
-      const historyQuery = query(historyRef, orderByChild('timestamp'), limitToLast(limit));
-      
-      const snapshot = await get(historyQuery);
-      
-      if (!snapshot.exists()) {
-        return [];
-      }
-      
-      const history = [];
-      snapshot.forEach(child => {
-        history.push({
-          id: child.key,
-          ...child.val()
-        });
-      });
-      
-      // Ordenar por timestamp descendente (más reciente primero)
-      return history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      
+      return await dalService.history.getEntries(projectId, normalizedType, cardId, limit);
     } catch (error) {
-return [];
+      return [];
     }
   }
 
@@ -189,30 +165,7 @@ return [];
    */
   subscribeToHistory(projectId, cardType, cardId, callback) {
     const normalizedType = this.getCardTypeForPath(cardType);
-    const historyPath = `/history/${projectId}/${normalizedType}/${cardId}`;
-    
-    const historyRef = ref(database, historyPath);
-    const historyQuery = query(historyRef, orderByChild('timestamp'), limitToLast(50));
-    
-    const unsubscribe = onValue(historyQuery, (snapshot) => {
-      const history = [];
-      if (snapshot.exists()) {
-        snapshot.forEach(child => {
-          history.push({
-            id: child.key,
-            ...child.val()
-          });
-        });
-      }
-      
-      // Ordenar y enviar al callback
-      const sortedHistory = history.sort((a, b) => 
-        new Date(b.timestamp) - new Date(a.timestamp)
-      );
-      callback(sortedHistory);
-    });
-    
-    return unsubscribe;
+    return dalService.history.subscribeToEntries(projectId, normalizedType, cardId, 50, callback);
   }
 
   /**
@@ -227,11 +180,9 @@ return [];
       }
 
       const cardType = this.getCardTypeForPath(card.cardType || card.group);
-      const historyPath = `/history/${card.projectId}/${cardType}/${card.cardId}`;
-// Migrar cada entrada del histórico embebido
+
       for (const entry of card.history) {
-        const historyRef = push(ref(database, historyPath));
-        await historyRef.set({
+        await dalService.history.pushEntry(card.projectId, cardType, card.cardId, {
           changedBy: entry.updatedBy || entry.user || 'migrated',
           timestamp: entry.timestamp || entry.date || new Date().toISOString(),
           changes: entry.changes || { migrated: { from: 'embedded', to: 'separated' } },
@@ -251,49 +202,42 @@ return [];
    */
   async getHistoryStats(projectId, cardType) {
     try {
-      const basePath = cardType 
-        ? `/history/${projectId}/${this.getCardTypeForPath(cardType)}`
-        : `/history/${projectId}`;
-      
-      const historyRef = ref(database, basePath);
-      const snapshot = await get(historyRef);
-      
-      if (!snapshot.exists()) {
+      const normalizedType = cardType ? this.getCardTypeForPath(cardType) : undefined;
+      const data = await dalService.history.getStats(projectId, normalizedType);
+
+      if (!data) {
         return { totalEntries: 0, cards: 0 };
       }
-      
+
       let totalEntries = 0;
-      let users = new Set();
+      const users = new Set();
       let lastUpdate = null;
-      
-      const processSnapshot = (snap) => {
-        snap.forEach(child => {
-          if (child.hasChildren()) {
-            processSnapshot(child);
-          } else {
-            const val = child.val();
-            if (val && val.timestamp) {
-              totalEntries++;
-              if (val.changedBy) users.add(val.changedBy);
-              if (!lastUpdate || val.timestamp > lastUpdate) {
-                lastUpdate = val.timestamp;
-              }
+
+      const processNode = (node) => {
+        if (!node || typeof node !== 'object') return;
+        Object.values(node).forEach(child => {
+          if (child && child.timestamp) {
+            totalEntries++;
+            if (child.changedBy) users.add(child.changedBy);
+            if (!lastUpdate || child.timestamp > lastUpdate) {
+              lastUpdate = child.timestamp;
             }
+          } else if (child && typeof child === 'object') {
+            processNode(child);
           }
         });
       };
-      
-      processSnapshot(snapshot);
-      
+
+      processNode(data);
+
       return {
         totalEntries,
         uniqueUsers: users.size,
         lastUpdate,
-        estimatedSize: JSON.stringify(snapshot.val()).length
+        estimatedSize: JSON.stringify(data).length
       };
-      
     } catch (error) {
-return { totalEntries: 0, cards: 0 };
+      return { totalEntries: 0, cards: 0 };
     }
   }
 }
