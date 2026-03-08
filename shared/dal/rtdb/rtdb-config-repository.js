@@ -122,4 +122,8 @@ export class RtdbConfigRepository extends ConfigRepository {
   subscribeToGlobalProposalOrder(callback) {
     return this._repo.subscribe('/data/globalProposalOrder', callback);
   }
+
+  async createIaLink(token, data) {
+    return this._repo.write(`/ia/links/${token}`, data);
+  }
 }

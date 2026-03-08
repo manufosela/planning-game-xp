@@ -251,6 +251,10 @@ export class ConfigRepository {
     throw new Error('Not implemented: subscribeToGlobalProposalOrder()');
   }
 
+  async createIaLink(token, data) {
+    throw new Error('Not implemented: createIaLink()');
+  }
+
   static get globalBasePath() { return '/global'; }
   static get configPath() { return '/config'; }
   static get appConfigPath() { return '/appConfig'; }

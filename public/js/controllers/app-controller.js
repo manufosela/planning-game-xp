@@ -71,7 +71,8 @@ import { globalDataManager } from '../services/global-data-manager.js';
 import { initCardRealtimeService } from '../services/card-realtime-service.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
 import { AppEventBus, AppEvents } from '../services/app-event-bus.js';
-import { database, auth, firebaseConfig, ref, set, get } from '../../firebase-config.js';
+import { auth, firebaseConfig } from '../../firebase-config.js';
+import { dalService } from '../services/dal-service.js';
 import { modalService } from '../services/modal-service.js';
 import { demoModeService } from '../services/demo-mode-service.js';
 
@@ -893,8 +894,8 @@ return config;
         return;
       }
 
-      const projectSnap = await get(ref(database, `/projects/${projectId}`));
-      if (!projectSnap.exists() || !projectSnap.val().iaEnabled) {
+      const projectData = await dalService.projects.getProject(projectId);
+      if (!projectData || !projectData.iaEnabled) {
         this.showNotification('La IA no está habilitada para este proyecto', 'warning');
         return;
       }
@@ -916,7 +917,7 @@ return config;
         used: false
       };
 
-      await set(ref(database, `/ia/links/${token}`), linkData);
+      await dalService.config.createIaLink(token, linkData);
       const url = this._buildIaLinkUrl(token);
       await navigator.clipboard.writeText(url);
       this.showNotification('Enlace IA generado y copiado (1 uso, 15 min)', 'success');
@@ -1039,12 +1040,11 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
       return;
     }
 
-    // Read allowExecutables directly from Firebase to avoid stale window.projects data
+    // Read allowExecutables directly from DAL to avoid stale window.projects data
     let allowExecutables = false;
     try {
-      const { database, ref, get } = await import('../../firebase-config.js');
-      const projectSnap = await get(ref(database, `/projects/${this.projectId}/allowExecutables`));
-      allowExecutables = projectSnap.exists() ? projectSnap.val() === true : false;
+      const projectData = await dalService.projects.getProject(this.projectId);
+      allowExecutables = projectData?.allowExecutables === true;
       // Update window.projects cache to keep it in sync
       if (window.projects?.[this.projectId]) {
         window.projects[this.projectId].allowExecutables = allowExecutables;
@@ -1200,11 +1200,9 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
       const projectId = this.projectId;
       if (!projectId) throw new Error('No hay proyecto seleccionado');
 
-      const cardPath = `${FirebaseService.getPathBySectionAndProjectId('tasks', projectId)}/${id}`;
-      const snap = await get(ref(database, cardPath));
+      const cardData = await dalService.cards.getCard(projectId, 'task', id);
 
-      if (snap.exists()) {
-        const cardData = snap.val();
+      if (cardData) {
         const taskCard = document.createElement('task-card');
         const { priority, ...dataWithoutComputed } = cardData;
         Object.assign(taskCard, dataWithoutComputed, {
@@ -1262,11 +1260,9 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
       const projectId = this.projectId;
       if (!projectId) throw new Error('No hay proyecto seleccionado');
 
-      const cardPath = `${FirebaseService.getPathBySectionAndProjectId('bugs', projectId)}/${id}`;
-      const snap = await get(ref(database, cardPath));
+      const cardData = await dalService.cards.getCard(projectId, 'bug', id);
 
-      if (snap.exists()) {
-        const cardData = snap.val();
+      if (cardData) {
         const bugCard = document.createElement('bug-card');
         Object.assign(bugCard, cardData, {
           id: id,
@@ -1321,11 +1317,9 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
       const projectId = this.projectId;
       if (!projectId) throw new Error('No hay proyecto seleccionado');
 
-      const cardPath = `${FirebaseService.getPathBySectionAndProjectId('proposals', projectId)}/${id}`;
-      const snap = await get(ref(database, cardPath));
+      const cardData = await dalService.cards.getCard(projectId, 'proposal', id);
 
-      if (snap.exists()) {
-        const cardData = snap.val();
+      if (cardData) {
         const proposalCard = document.createElement('proposal-card');
         Object.assign(proposalCard, cardData, {
           id: id,
@@ -1367,10 +1361,10 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
     let duplicateInfo = null;
     if (cardId) {
       try {
-        const sectionPath = FirebaseService.getPathBySectionAndProjectId(section, projectId);
-        const allCardsSnap = await get(ref(database, sectionPath));
-        if (allCardsSnap.exists()) {
-          const allCards = allCardsSnap.val();
+        const sectionToType = { tasks: 'task', bugs: 'bug', proposals: 'proposal', epics: 'epic', sprints: 'sprint', qa: 'qa' };
+        const dalType = sectionToType[section] || section;
+        const allCards = await dalService.cards.listCards(projectId, dalType);
+        if (allCards) {
           for (const [fbId, card] of Object.entries(allCards)) {
             if (card?.cardId === cardId && fbId !== firebaseId) {
               duplicateInfo = { firebaseId: fbId, status: card.status, title: card.title };
@@ -1429,9 +1423,7 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
       return;
     }
 
-    const fullViewPath = `/views/${viewPath}/${projectId}/${firebaseId}`;
-    const viewRef = ref(database, fullViewPath);
-    await set(viewRef, null);
+    await dalService.cards.removeFromView(viewPath, projectId, firebaseId);
 
     // Remove from local cache
     if (this.viewFactory?.tableViewManager?.cardsCache) {
