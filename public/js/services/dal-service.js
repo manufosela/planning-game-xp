@@ -234,7 +234,7 @@ class DalService {
 
   _ensureInitialized() {
     if (!this._initialized) {
-      throw new Error('DalService not initialized. Call dalService.init() first.');
+      this.init();
     }
   }
 }
