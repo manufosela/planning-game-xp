@@ -149,8 +149,109 @@ export class ViewFactory {
       case 'table':
         await this.showProposalsTableView(config);
         break;
+      case 'department':
+        this.showProposalsDeptView(config);
+        break;
       default:
 }
+  }
+
+  /**
+   * Shows the department kanban view for proposals, grouped by creator's team
+   * @param {Object} config
+   */
+  showProposalsDeptView(config) {
+    const container = document.getElementById('proposalsDeptView');
+    if (container) {
+      container.style.setProperty('display', 'block', 'important');
+      container.style.removeProperty('visibility');
+      container.style.removeProperty('opacity');
+      container.style.removeProperty('position');
+      container.style.removeProperty('left');
+    }
+
+    const columnsContainer = document.getElementById('proposalsDeptColumns');
+    if (!columnsContainer) return;
+
+    this._renderDeptKanban(columnsContainer, config);
+  }
+
+  async _renderDeptKanban(container, config) {
+    const { entityDirectoryService } = await import('../services/entity-directory-service.js');
+
+    // Gather proposal cards from DOM or Firebase
+    const proposalCards = Array.from(document.querySelectorAll('#proposalsCardsList proposal-card'));
+    const proposals = proposalCards.map(card => ({
+      cardId: card.cardId || card.getAttribute('card-id'),
+      title: card.title || card.getAttribute('title') || 'Sin título',
+      createdBy: card.createdBy || card.getAttribute('created-by') || '',
+      status: card.status || card.getAttribute('status') || 'Propuesta',
+      businessPoints: card.businessPoints || card.getAttribute('business-points') || 0,
+      firebaseId: card.id || card.getAttribute('id')
+    }));
+
+    // Group by team
+    const NO_TEAM = '__no_team__';
+    const grouped = {};
+
+    proposals.forEach(proposal => {
+      const teamId = entityDirectoryService.getStakeholderTeamId(proposal.createdBy);
+      const key = teamId || NO_TEAM;
+
+      if (!grouped[key]) {
+        const teamInfo = teamId ? entityDirectoryService.getTeam(teamId) : null;
+        grouped[key] = {
+          teamId: key,
+          teamName: teamInfo?.name || (key === NO_TEAM ? 'Sin departamento' : key),
+          proposals: []
+        };
+      }
+      grouped[key].proposals.push(proposal);
+    });
+
+    // Sort: alphabetical, "Sin departamento" last
+    const teams = Object.values(grouped).sort((a, b) => {
+      if (a.teamId === NO_TEAM) return 1;
+      if (b.teamId === NO_TEAM) return -1;
+      return a.teamName.localeCompare(b.teamName);
+    });
+
+    // Render kanban columns
+    container.innerHTML = teams.map(team => `
+      <div class="dept-kanban-column">
+        <div class="dept-kanban-column-header">
+          <span class="dept-kanban-column-title">${team.teamName}</span>
+          <span class="dept-kanban-column-count">${team.proposals.length}</span>
+        </div>
+        <div class="dept-kanban-column-body">
+          ${team.proposals.map(p => `
+            <div class="dept-kanban-card" data-card-id="${p.firebaseId}" title="${p.title}">
+              <span class="dept-kanban-card-id">${p.cardId || ''}</span>
+              <span class="dept-kanban-card-title">${p.title}</span>
+              <div class="dept-kanban-card-meta">
+                <span class="dept-kanban-card-creator">${p.createdBy}</span>
+                <span class="dept-kanban-card-status ${p.status?.toLowerCase().replace(/\s+/g, '-')}">${p.status}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    // Add click handlers to open proposal modal
+    container.querySelectorAll('.dept-kanban-card').forEach(cardEl => {
+      cardEl.addEventListener('click', () => {
+        const firebaseId = cardEl.dataset.cardId;
+        if (firebaseId) {
+          const proposalCard = document.querySelector(`#proposalsCardsList proposal-card[id="${firebaseId}"]`);
+          if (proposalCard) {
+            import('../utils/common-functions.js').then(({ showExpandedCardInModal }) => {
+              showExpandedCardInModal(proposalCard);
+            });
+          }
+        }
+      });
+    });
   }
 
   /**
@@ -443,7 +544,7 @@ export class ViewFactory {
       tasks: ['tasksCardsList', 'tasksKanbanView', 'tasksSprintView', 'tasksTableView'],
       bugs: ['bugsCardsList', 'bugsStatusKanbanView', 'bugsPriorityKanbanView', 'bugsTableView'],
       epics: ['epicsCardsList', 'epicsGanttView'],
-      proposals: ['proposalsCardsList', 'proposalsTableView']
+      proposals: ['proposalsCardsList', 'proposalsTableView', 'proposalsDeptView']
     };
 
     const containers = viewContainers[section] || [];
@@ -494,7 +595,8 @@ export class ViewFactory {
       },
       proposals: {
         list: 'proposalsListViewBtn',
-        table: 'proposalsTableViewBtn'
+        table: 'proposalsTableViewBtn',
+        department: 'proposalsDeptViewBtn'
       }
     };
 

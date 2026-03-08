@@ -160,6 +160,7 @@
       <div class="view-buttons">
         <button id="proposalsTableViewBtn" class="view-button active">Table View</button>
         <button id="proposalsListViewBtn" class="view-button">Cards View</button>
+        <button id="proposalsDeptViewBtn" class="view-button">Department View</button>
         <button id="importProposalsBtn" class="import-backlog-btn" style="display: none;">
           Importar de <span id="importProposalsYear"></span> (<span id="importProposalsCount">0</span>)
         </button>
@@ -167,6 +168,9 @@
       </div>
     </section>
     <section class="cards-container" id="proposalsCardsList" style="display:none"></section>
+    <section class="kanban-view" id="proposalsDeptView" style="display: none !important; visibility: hidden !important; opacity: 0 !important; position: absolute !important; left: -9999px !important;">
+      <div class="dept-kanban-columns" id="proposalsDeptColumns"></div>
+    </section>
     <section class="table-view" id="proposalsTableView">
       <div class="table-skeleton" data-placeholder>
         <div class="skeleton-header"><div class="skeleton-cell" style="width:60px"></div><div class="skeleton-cell" style="width:40px"></div><div class="skeleton-cell" style="width:200px"></div><div class="skeleton-cell" style="width:100px"></div><div class="skeleton-cell" style="width:80px"></div><div class="skeleton-cell" style="width:120px"></div><div class="skeleton-cell" style="width:120px"></div></div>
@@ -2645,6 +2649,109 @@ document.addEventListener('astro:page-load', () => {
   #tasksFilters .clear-button:disabled {
     background: var(--text-muted, #64748b);
     cursor: not-allowed;
+  }
+
+  /* Department View for Proposals */
+  .dept-kanban-columns {
+    display: flex;
+    gap: 1rem;
+    min-width: min-content;
+    padding: 0.5rem;
+    overflow-x: auto;
+  }
+
+  .dept-kanban-column {
+    min-width: 280px;
+    max-width: 320px;
+    background: var(--card-bg, #fff);
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  .dept-kanban-column-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 2px solid var(--primary-color, #3b82f6);
+    background: var(--hover-overlay, rgba(0,0,0,0.02));
+    border-radius: 8px 8px 0 0;
+  }
+
+  .dept-kanban-column-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-primary, #1e293b);
+  }
+
+  .dept-kanban-column-count {
+    background: var(--primary-color, #3b82f6);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+  }
+
+  .dept-kanban-column-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    overflow-y: auto;
+    max-height: 600px;
+    min-height: 60px;
+  }
+
+  .dept-kanban-card {
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 6px;
+    padding: 0.6rem 0.75rem;
+    cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+
+  .dept-kanban-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-color: var(--primary-color, #3b82f6);
+  }
+
+  .dept-kanban-card-id {
+    font-size: 0.7rem;
+    color: var(--text-muted, #64748b);
+    font-family: monospace;
+  }
+
+  .dept-kanban-card-title {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary, #1e293b);
+    margin: 0.25rem 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dept-kanban-card-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.7rem;
+    color: var(--text-muted, #64748b);
+    margin-top: 0.25rem;
+  }
+
+  .dept-kanban-card-status {
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    background: var(--hover-overlay, rgba(0,0,0,0.05));
   }
 
 </style>
