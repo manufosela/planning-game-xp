@@ -1,3 +1,8 @@
+/**
+ * @deprecated Use <unified-filters card-type="bug"> instead.
+ * This component is replaced by UnifiedFilters + UnifiedFilterService.
+ * Kept for backward compatibility — will be removed in a future version.
+ */
 import { APP_CONSTANTS } from '../constants/app-constants.js';
 import { bugFiltersStyles } from './bug-filters-styles.js';
 import { BaseFilters } from './BaseFilters.js';

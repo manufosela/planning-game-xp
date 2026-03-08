@@ -13,12 +13,16 @@ export function loadSectionWCs(section) {
     case 'tasks':
       _wcLoaded[section] = Promise.all([
         import('../wc/TaskCard.js'),
-        import('../wc/TaskFilters.js'),
+        import('../wc/UnifiedFilters.js'),
         import('@manufosela/multi-select'),
       ]);
       break;
     case 'bugs':
-      _wcLoaded[section] = import('../wc/BugCard.js');
+      _wcLoaded[section] = Promise.all([
+        import('../wc/BugCard.js'),
+        import('../wc/UnifiedFilters.js'),
+        import('@manufosela/multi-select'),
+      ]);
       break;
     case 'sprints':
       _wcLoaded[section] = Promise.all([
@@ -48,6 +52,7 @@ export function loadSectionWCs(section) {
 }
 
 // Importar servicios y controladores
+import { getUnifiedFilterService } from '../services/unified-filter-service.js';
 import { FirebaseDataService } from '../services/firebase-service.js';
 import { CardService } from '../services/card-service.js';
 import { CardRenderer } from '../renderers/card-renderer.js';
@@ -211,16 +216,10 @@ export class AppController {
 
     const currentSection = this.section || 'tasks';
 
-    // Try to find and apply to the filter component directly
-    const filterComponentSelector = currentSection === 'tasks' ? 'task-filters'
-      : currentSection === 'bugs' ? 'bug-filters'
-      : null;
-
-    if (filterComponentSelector) {
-      const filterComponent = document.querySelector(filterComponentSelector);
-      if (filterComponent && typeof filterComponent.applyFilters === 'function') {
-        filterComponent.applyFilters(filters);
-      }
+    // Apply filters via the unified-filters component
+    const filterComponent = document.querySelector('unified-filters');
+    if (filterComponent && typeof filterComponent.applyFilters === 'function') {
+      filterComponent.applyFilters(filters);
     }
   }
 
@@ -431,10 +430,6 @@ export class AppController {
    * Configura los event listeners para los componentes de filtros
    */
   setupFilterEventListeners() {
-    // Escuchar eventos del componente task-filters
-    document.addEventListener('filters-changed', this.handleFiltersChanged.bind(this));
-    document.addEventListener('filters-cleared', this.handleFiltersCleared.bind(this));
-
     // Escuchar evento para mover tareas entre sprints
     document.addEventListener('move-card-to-sprint', this.handleMoveCardToSprint.bind(this));
 
@@ -792,145 +787,78 @@ return filters;
   }
 
   /**
-   * Configura los filtros para la vista de bugs usando el componente bug-filters
+   * Set up filters for bugs section using unified-filters component
    */
   setupBugFilters() {
-// Prevent redundant setup executions
-    if (this.bugFiltersSetup) {
-return;
-    }
+    if (this.bugFiltersSetup) return;
 
-    // Solo configurar filtros si estamos en la vista de lista de bugs
     const bugsListView = document.getElementById('bugsCardsList');
     const bugsListBtn = document.getElementById('bugsListViewBtn');
 
     if (bugsListView && bugsListBtn?.classList.contains('active')) {
       this.bugFiltersSetup = true;
-      // Variables are available from GlobalDataManager, no need to wait
-      this.createBugFiltersComponent();
+      this._createUnifiedFilters('bugs');
     }
   }
 
   /**
-   * Crea o actualiza el componente bug-filters
-   */
-  createBugFiltersComponent() {
-    const filtersContainer = document.getElementById('bugsFilters');
-    if (!filtersContainer) {
-return;
-    }
-
-    // Verificar si ya existe un componente bug-filters
-    let bugFilters = filtersContainer.querySelector('bug-filters');
-    if (bugFilters) {
-return;
-    }
-
-    // Limpiar contenido existente
-    filtersContainer.innerHTML = '';
-
-    // Crear el componente bug-filters
-    bugFilters = document.createElement('bug-filters');
-    bugFilters.setAttribute('target-selector', '#bugsCardsList');
-    bugFilters.setAttribute('card-selector', 'bug-card');
-
-    // Añadir el componente al DOM
-    filtersContainer.appendChild(bugFilters);
-}
-
-  /**
-   * Resetea los filtros de bugs
+   * Reset bug filters via UnifiedFilterService
    */
   resetBugFilters() {
-    const bugFilters = document.querySelector('bug-filters');
-    if (bugFilters && typeof bugFilters.clearAllFilters === 'function') {
-      bugFilters.clearAllFilters();
-    }
-    // Reset the setup flag to allow fresh setup when needed
+    const service = getUnifiedFilterService();
+    service.clearAllFilters(this.projectId, 'bug');
     this.bugFiltersSetup = false;
   }
 
   /**
-   * Configura los filtros para la vista de tasks usando el componente task-filters
+   * Set up filters for tasks section using unified-filters component
    */
   setupTaskFilters() {
-    // Prevent redundant setup executions
-    if (this.taskFiltersSetup) {
-      return;
-    }
+    if (this.taskFiltersSetup) return;
 
-    // Solo configurar filtros si estamos en la vista de lista de tasks
     const tasksListView = document.getElementById('tasksCardsList');
     const tasksListBtn = document.getElementById('listViewBtn');
 
     if (tasksListView && tasksListBtn?.classList.contains('active')) {
       this.taskFiltersSetup = true;
-      // Variables are available from GlobalDataManager, no need to wait
-      this.createTaskFiltersComponent();
+      this._createUnifiedFilters('tasks');
     }
   }
 
   /**
-   * Asegura que las variables globales necesarias estén disponibles
-   */
-  async ensureGlobalVariables() {
-    // Asegurar que tenemos las listas de status
-    if (!window.statusTasksList && this.config.statusTasksList) {
-      window.statusTasksList = this.config.statusTasksList;
-    }
-
-    // Asegurar que tenemos la lista de desarrolladores
-    if (!window.globalDeveloperList && this.config.developerList) {
-      window.globalDeveloperList = this.config.developerList;
-    }
-
-    // Asegurar que tenemos la lista de stakeholders
-    if (!window.globalStakeholders && this.config.stakeholders) {
-      window.globalStakeholders = this.config.stakeholders;
-    }
-
-    // Asegurar que tenemos la lista de sprints
-    if (!window.globalSprintList && this.config.sprintList) {
-      window.globalSprintList = this.config.sprintList;
-    }
-}
-
-  /**
-   * Crea o actualiza el componente task-filters
-   */
-  createTaskFiltersComponent() {
-    const filtersContainer = document.getElementById('tasksFilters');
-    if (!filtersContainer) {
-return;
-    }
-
-    // Verificar si ya existe un componente task-filters
-    let taskFilters = filtersContainer.querySelector('task-filters');
-    if (taskFilters) {
-return;
-    }
-
-    // Limpiar contenido existente
-    filtersContainer.innerHTML = '';
-
-    // Crear el componente task-filters
-    taskFilters = document.createElement('task-filters');
-    taskFilters.setAttribute('target-selector', '#tasksCardsList');
-    taskFilters.setAttribute('card-selector', 'task-card');
-
-    // Añadir el componente al DOM
-    filtersContainer.appendChild(taskFilters);
-}
-
-  /**
-   * Resetea los filtros de tasks
+   * Reset task filters via UnifiedFilterService
    */
   resetTaskFilters() {
-    const taskFilters = document.querySelector('task-filters');
-    if (taskFilters && typeof taskFilters.clearAllFilters === 'function') {
-      taskFilters.clearAllFilters();
-    }
-    this.taskFiltersSetup = false; // Reset flag to allow fresh setup when needed
+    const service = getUnifiedFilterService();
+    service.clearAllFilters(this.projectId, 'task');
+    this.taskFiltersSetup = false;
+  }
+
+  /**
+   * Create a <unified-filters> component for the given section
+   * @param {string} section - 'tasks' or 'bugs'
+   */
+  _createUnifiedFilters(section) {
+    const containerId = section === 'tasks' ? 'tasksFilters' : 'bugsFilters';
+    const filtersContainer = document.getElementById(containerId);
+    if (!filtersContainer) return;
+
+    const cardType = section === 'tasks' ? 'task' : 'bug';
+
+    // Check if unified-filters already exists
+    const existing = filtersContainer.querySelector('unified-filters');
+    if (existing && existing.getAttribute('card-type') === cardType) return;
+
+    filtersContainer.innerHTML = '';
+
+    const filterComponent = document.createElement('unified-filters');
+    filterComponent.setAttribute('card-type', cardType);
+    filterComponent.setAttribute('project-id', this.projectId || '');
+
+    const savedYear = localStorage.getItem('selectedYear');
+    filterComponent.setAttribute('year', savedYear || new Date().getFullYear());
+
+    filtersContainer.appendChild(filterComponent);
   }
 
   showNotification(message, type = 'info') {
@@ -1223,19 +1151,7 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
     this.reloadCards(targetSection, preserveFilters);
   }
 
-  handleFiltersChanged(event) {
-    if (event.target.tagName.toLowerCase() === 'task-filters') {
-// El componente ya aplica los filtros automáticamente
-      // Aquí puedes añadir lógica adicional si es necesaria
-    }
-  }
-
-  handleFiltersCleared(event) {
-    if (event.target.tagName.toLowerCase() === 'task-filters') {
-// El componente ya limpia los filtros automáticamente
-      // Aquí puedes añadir lógica adicional si es necesaria
-    }
-  }
+  // Filter events are now handled by UnifiedFilterService + <unified-filters> component
 
   // Note: handleEpicCardDataRequest, handleTaskCardDataRequest, and handleBugCardDataRequest
   // are now handled by GlobalDataManager

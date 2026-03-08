@@ -1,3 +1,7 @@
+/**
+ * @deprecated Use UnifiedFilterService + filter matchers instead.
+ * Kept for backward compatibility — will be removed in a future version.
+ */
 import { BaseFilter } from '../base-filter-system.js';
 
 /**

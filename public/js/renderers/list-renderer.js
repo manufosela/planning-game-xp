@@ -3,7 +3,6 @@ import { UIUtils } from '../utils/ui-utils.js';
 export class ListRenderer {
   constructor() {
     this.sortOrder = { field: null, direction: 'asc' };
-    this.filters = {};
   }
 
   renderListView(container, cards, config) {
@@ -31,9 +30,8 @@ export class ListRenderer {
       }
     });
 
-    // Apply filters and sorting
-    const filteredCards = this.applyFilters(cards);
-    const sortedCards = this.applySorting(filteredCards);
+    // Cards arrive pre-filtered by UnifiedFilterService, only apply sorting
+    const sortedCards = this.applySorting(cards);
 
     Object.entries(sortedCards).forEach(([id, cardData]) => {
       if (cardData.deletedAt) return;
@@ -57,131 +55,6 @@ export class ListRenderer {
     card.section = config.section;
 
     return card;
-  }
-
-  /**
-   * Filter with "no-X" option logic (for validator, sprint, epic)
-   * @param {string} noOptionKey - The "no-X" key (e.g., 'no-sprint')
-   * @param {Array} filterValues - Selected filter values
-   * @param {boolean} cardHasNoValue - Whether the card lacks the value
-   * @param {*} cardValue - The card's value for this field
-   * @returns {boolean} Whether the card passes the filter
-   */
-  _matchesWithNoOption(noOptionKey, filterValues, cardHasNoValue, cardValue) {
-    const hasNoOption = filterValues.includes(noOptionKey);
-    const otherValues = filterValues.filter(v => v !== noOptionKey);
-
-    if (hasNoOption && otherValues.length === 0) {
-      return cardHasNoValue;
-    }
-    if (hasNoOption && otherValues.length > 0) {
-      return cardHasNoValue || otherValues.includes(cardValue);
-    }
-    return filterValues.includes(cardValue);
-  }
-
-  /**
-   * Check if a card matches the completedInSprint filter
-   */
-  _matchesCompletedInSprintFilter(card, filterValues) {
-    const completedStatuses = ['Fixed', 'Verified', 'Closed', 'Cerrado'];
-    if (!completedStatuses.includes(card.status) || !card.endDate) {
-      return false;
-    }
-
-    const bugEnd = new Date(card.endDate);
-    return filterValues.some(selectedSprint => {
-      const sprint = Object.values(globalThis.globalSprintList || {}).find(s =>
-        s.title === selectedSprint || s.name === selectedSprint || s.cardId === selectedSprint
-      );
-      if (!sprint) return false;
-      const startDate = new Date(sprint.startDate);
-      const endDate = new Date(sprint.endDate);
-      return bugEnd >= startDate && bugEnd <= endDate;
-    });
-  }
-
-  /**
-   * Check if a card matches the priority filter
-   */
-  _matchesPriorityFilterForCard(card, filterValues) {
-    if (card.cardType === 'bug' || card.group === 'bugs') {
-      return filterValues.includes(card.priority);
-    }
-    const priority = this.calculatePriority(card);
-    return filterValues.some(v => this.matchesPriorityFilter(priority, v));
-  }
-
-  /**
-   * Check if a card passes a specific filter
-   */
-  _cardPassesFilter(card, field, filterValues) {
-    switch (field) {
-      case 'status':
-      case 'developer':
-      case 'createdBy':
-        return filterValues.includes(card[field]);
-
-      case 'validator':
-        return this._matchesWithNoOption('no-validator', filterValues, !card.validator, card.validator);
-
-      case 'sprint': {
-        const isValidSprintId = card.sprint && globalThis.globalSprintList?.[card.sprint];
-        return this._matchesWithNoOption('no-sprint', filterValues, !isValidSprintId, card.sprint);
-      }
-
-      case 'epic':
-        return this._matchesWithNoOption('no-epic', filterValues, !card.epic, card.epic);
-
-      case 'priority':
-        return this._matchesPriorityFilterForCard(card, filterValues);
-
-      case 'completedInSprint':
-        return this._matchesCompletedInSprintFilter(card, filterValues);
-
-      default: {
-        const cardValue = card[field];
-        return cardValue === undefined || filterValues.includes(cardValue);
-      }
-    }
-  }
-
-  applyFilters(cards) {
-    if (Object.keys(this.filters).length === 0) {
-      return cards;
-    }
-
-    const filtered = {};
-
-    Object.entries(cards).forEach(([id, card]) => {
-      const passesAllFilters = Object.entries(this.filters).every(([field, value]) => {
-        if (value === null || (Array.isArray(value) && value.length === 0)) {
-          return true; // Skip empty filters
-        }
-        const filterValues = Array.isArray(value) ? value : [value];
-        return this._cardPassesFilter(card, field, filterValues);
-      });
-
-      if (passesAllFilters) {
-        filtered[id] = card;
-      }
-    });
-
-    return filtered;
-  }
-
-  calculatePriority(card) {
-    if (!card.devPoints || card.devPoints === 0) return 0;
-    return (card.businessPoints / card.devPoints) * 100;
-  }
-
-  matchesPriorityFilter(priority, filterValue) {
-    switch (filterValue) {
-      case 'High': return priority >= 200;
-      case 'Medium': return priority >= 100 && priority < 200;
-      case 'Low': return priority < 100;
-      default: return true;
-    }
   }
 
   applySorting(cards) {
@@ -250,7 +123,6 @@ export class ListRenderer {
   }
 
   cleanup() {
-    this.filters = {};
     this.sortOrder = { field: null, direction: 'asc' };
   }
 }

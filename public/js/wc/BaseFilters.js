@@ -1,3 +1,8 @@
+/**
+ * @deprecated Use <unified-filters> instead.
+ * This base class is replaced by UnifiedFilters + UnifiedFilterService.
+ * Kept for backward compatibility — will be removed in a future version.
+ */
 import { LitElement, html } from 'lit';
 import '@manufosela/multi-select';
 import { unsafeHTML } from 'https://unpkg.com/lit@2.8.0/directives/unsafe-html.js?module';
