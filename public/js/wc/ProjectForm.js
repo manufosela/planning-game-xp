@@ -58,6 +58,8 @@ export class ProjectForm extends LitElement {
       archived: { type: Boolean },
       // Whether the project has existing cards (locks abbreviation + name)
       hasCards: { type: Boolean },
+      // Public project (visible via public API)
+      isPublic: { type: Boolean },
       // Permission to delete (only superadmin)
       canDelete: { type: Boolean },
       // App permissions (Uploaders and Approvers)
@@ -116,6 +118,7 @@ export class ProjectForm extends LitElement {
     this.newStakeholderEmail = '';
     this.isLoading = true;
     this.archived = false;
+    this.isPublic = false;
     this.hasCards = false;
     this.canDelete = false; // Only superadmin can delete
     // App permissions
@@ -456,6 +459,17 @@ export class ProjectForm extends LitElement {
             />
             <label for="allowExecutables">Permitir adjuntar ejecutables</label>
           </div>
+          ${this.canDelete ? html`
+            <div class="checkbox-group">
+              <input
+                type="checkbox"
+                id="isPublic"
+                .checked=${this.isPublic}
+                @change=${this._handleIsPublicChange}
+              />
+              <label for="isPublic">Proyecto público (visible en API pública)</label>
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -1332,6 +1346,10 @@ export class ProjectForm extends LitElement {
     this.allowExecutables = e.target.checked;
   }
 
+  _handleIsPublicChange(e) {
+    this.isPublic = e.target.checked;
+  }
+
   _handleUseIaChange(e) {
     this.useIa = Boolean(e.target.checked);
   }
@@ -1511,7 +1529,8 @@ export class ProjectForm extends LitElement {
       selectedPrompts: this.selectedPrompts || [],
       selectedInstructions: this.selectedInstructions || [],
       useIa: this.useIa && this.iaAvailable,
-      businessContext: (this.businessContext || '').trim()
+      businessContext: (this.businessContext || '').trim(),
+      isPublic: this.isPublic
     };
   }
 

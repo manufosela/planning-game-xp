@@ -1375,6 +1375,7 @@ async function showEditProjectModal(projectName) {
       projectForm.useIa = Boolean(projectData.iaEnabled);
       projectForm.iaAvailable = projectData.iaEnabled || projectForm.iaAvailable;
       projectForm.archived = Boolean(projectData.archived);
+      projectForm.isPublic = Boolean(projectData.public);
       projectForm.requestUpdate();
     };
 
@@ -1495,7 +1496,8 @@ async function updateProject(projectForm, originalProjectName, originalData) {
       iaEnabled: formData.useIa || false,
       updatedAt: new Date().toISOString(),
       updatedBy: auth.currentUser?.email || 'unknown',
-      archived: originalData?.archived || false
+      archived: originalData?.archived || false,
+      public: formData.isPublic || false
     };
 
     // Only include optional fields if they exist in originalData
