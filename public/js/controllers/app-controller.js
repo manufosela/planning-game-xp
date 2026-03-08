@@ -598,6 +598,13 @@ const appManager = document.getElementById('appManager');
     }
   }
 
+  _handlePermissionsSection() {
+    const panel = document.getElementById('userPermissionsPanel');
+    if (panel && this.projectId) {
+      panel.setAttribute('project-id', this.projectId);
+    }
+  }
+
   _getPreservedFilters(section, preserveFilters) {
     if (!preserveFilters) return {};
 
@@ -657,6 +664,11 @@ return filters;
 
       if (section === 'app') {
         this._handleAppSection();
+        return;
+      }
+
+      if (section === 'permissions') {
+        this._handlePermissionsSection();
         return;
       }
 
@@ -1065,6 +1077,7 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
   setupAppAccessListener() {
     this.hasAppAccess = Boolean(window.isAppAdmin);
     this.updateTrashTabVisibility();
+    this.updatePermissionsTabVisibility();
     document.addEventListener('app-admin-status-changed', this.handleAppAdminStatusChange);
   }
 
@@ -1074,6 +1087,14 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
 
     const isSuperAdmin = await this._checkIsSuperAdmin();
     trashTab.style.display = isSuperAdmin ? 'block' : 'none';
+  }
+
+  async updatePermissionsTabVisibility() {
+    const permissionsTab = document.getElementById('permissionsTab');
+    if (!permissionsTab) return;
+
+    const isSuperAdmin = await this._checkIsSuperAdmin();
+    permissionsTab.style.display = isSuperAdmin ? 'block' : 'none';
   }
 
   handleAppAdminStatusChange(event) {

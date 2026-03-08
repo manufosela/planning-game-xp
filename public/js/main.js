@@ -12,6 +12,7 @@ import './wc/AiDocumentUploader.js';
 import './wc/AdrList.js';
 import './wc/DevPlansSection.js';
 import './wc/EntityDirectoryManager.js';
+import './wc/UserPermissionsPanel.js';
 import './wc/VersionUpdateModal.js';
 
 // Importar controladores - AppController importa los demás componentes

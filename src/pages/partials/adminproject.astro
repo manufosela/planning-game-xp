@@ -14,6 +14,7 @@
       <button id="adrsTab" data-section="adrs" class="tablinks">ADRs</button>
       <button id="devPlansTab" data-section="devPlans" class="tablinks">Dev Plans</button>
       <button id="appTab" data-section="app" class="tablinks app-tab" style="display:none;">App</button>
+      <button id="permissionsTab" data-section="permissions" class="tablinks permissions-tab" style="display:none;">Permissions</button>
       <button id="trashTab" data-section="trash" class="tablinks trash-tab" style="display:none;">🗑️</button>
     </div>
   </div>
@@ -195,6 +196,13 @@
       <h3>Aplicaciones del Proyecto</h3>
     </section>
     <app-manager id="appManager"></app-manager>
+  </div>
+  <div id="permissionsTabContent" class="tabcontent">
+    <section class="subheader">
+      <h3>User Permissions</h3>
+      <p class="subheader-hint">Manage section access and app permissions per user. Only visible for administrators.</p>
+    </section>
+    <user-permissions-panel id="userPermissionsPanel"></user-permissions-panel>
   </div>
   <div id="trashTabContent" class="tabcontent">
     <section class="subheader">
