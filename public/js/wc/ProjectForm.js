@@ -60,6 +60,9 @@ export class ProjectForm extends LitElement {
       hasCards: { type: Boolean },
       // Public project (visible via public API)
       isPublic: { type: Boolean },
+      // Team specs checklist (configurable per project)
+      teamSpecs: { type: Array },
+      _newSpecText: { type: String, state: true },
       // Permission to delete (only superadmin)
       canDelete: { type: Boolean },
       // App permissions (Uploaders and Approvers)
@@ -119,6 +122,8 @@ export class ProjectForm extends LitElement {
     this.isLoading = true;
     this.archived = false;
     this.isPublic = false;
+    this.teamSpecs = [];
+    this._newSpecText = '';
     this.hasCards = false;
     this.canDelete = false; // Only superadmin can delete
     // App permissions
@@ -470,6 +475,27 @@ export class ProjectForm extends LitElement {
               <label for="isPublic">Proyecto público (visible en API pública)</label>
             </div>
           ` : ''}
+        </div>
+
+        <div class="form-group">
+          <label>Team Specs (checklist informativo para developers)</label>
+          <div class="team-specs-editor">
+            ${this.teamSpecs.map((spec, i) => html`
+              <div class="team-spec-row" style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                <span style="flex:1;font-size:13px">${spec}</span>
+                <button type="button" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:14px"
+                  @click=${() => this._removeSpec(i)} title="Eliminar">x</button>
+              </div>
+            `)}
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <input type="text" placeholder="Nueva spec..." .value=${this._newSpecText}
+                @input=${(e) => { this._newSpecText = e.target.value; }}
+                @keydown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); this._addSpec(); } }}
+                style="flex:1;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px" />
+              <button type="button" @click=${this._addSpec}
+                style="padding:6px 12px;background:#059669;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px">Añadir</button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -1350,6 +1376,17 @@ export class ProjectForm extends LitElement {
     this.isPublic = e.target.checked;
   }
 
+  _addSpec() {
+    const text = (this._newSpecText || '').trim();
+    if (!text) return;
+    this.teamSpecs = [...this.teamSpecs, text];
+    this._newSpecText = '';
+  }
+
+  _removeSpec(index) {
+    this.teamSpecs = this.teamSpecs.filter((_, i) => i !== index);
+  }
+
   _handleUseIaChange(e) {
     this.useIa = Boolean(e.target.checked);
   }
@@ -1530,7 +1567,8 @@ export class ProjectForm extends LitElement {
       selectedInstructions: this.selectedInstructions || [],
       useIa: this.useIa && this.iaAvailable,
       businessContext: (this.businessContext || '').trim(),
-      isPublic: this.isPublic
+      isPublic: this.isPublic,
+      teamSpecs: this.teamSpecs || []
     };
   }
 

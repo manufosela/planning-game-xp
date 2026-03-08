@@ -1376,6 +1376,7 @@ async function showEditProjectModal(projectName) {
       projectForm.iaAvailable = projectData.iaEnabled || projectForm.iaAvailable;
       projectForm.archived = Boolean(projectData.archived);
       projectForm.isPublic = Boolean(projectData.public);
+      projectForm.teamSpecs = Array.isArray(projectData.teamSpecs) ? projectData.teamSpecs : [];
       projectForm.requestUpdate();
     };
 
@@ -1497,7 +1498,8 @@ async function updateProject(projectForm, originalProjectName, originalData) {
       updatedAt: new Date().toISOString(),
       updatedBy: auth.currentUser?.email || 'unknown',
       archived: originalData?.archived || false,
-      public: formData.isPublic || false
+      public: formData.isPublic || false,
+      teamSpecs: formData.teamSpecs || []
     };
 
     // Only include optional fields if they exist in originalData

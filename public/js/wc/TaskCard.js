@@ -99,6 +99,8 @@ export class TaskCard extends AiUsageDisplayMixin(CommitsDisplayMixin(NotesManag
       // Repository label (para proyectos con múltiples repos)
       repositoryLabel: { type: String },
       projectRepositories: { type: Array },
+      // Team specs checklist (from project config, read-only)
+      teamSpecs: { type: Array },
       // Year for filtering tasks by year
       year: { type: Number },
       // Warning when projectId doesn't match URL
@@ -203,8 +205,24 @@ export class TaskCard extends AiUsageDisplayMixin(CommitsDisplayMixin(NotesManag
         .notes-panel,
         .attachment-panel,
         .related-tasks-panel,
-        .history-panel {
+        .history-panel,
+        .team-specs-panel {
           color: var(--text-primary, #333);
+        }
+
+        .team-specs-list {
+          list-style: none;
+          padding: 0.5rem;
+          margin: 0;
+        }
+
+        .team-spec-item {
+          padding: 6px 8px;
+          border-left: 3px solid #059669;
+          margin-bottom: 6px;
+          font-size: 13px;
+          background: var(--bg-secondary, #f8f9fa);
+          border-radius: 0 4px 4px 0;
         }
 
         .attachment-section {
@@ -584,6 +602,7 @@ export class TaskCard extends AiUsageDisplayMixin(CommitsDisplayMixin(NotesManag
     // Repository label (para proyectos con múltiples repos)
     this.repositoryLabel = '';
     this.projectRepositories = []; // Array de {url, label} del proyecto
+    this.teamSpecs = []; // Team specs checklist from project config
 
     // Year for filtering - default to selected year or current year
     this.year = this._getSelectedYear();
@@ -1072,6 +1091,7 @@ return;
         this._normalizeDeveloperField();
         this.projectScoringSystem = projectData.scoringSystem || '1-5';
         this.projectRepositories = projectData.repositories || [];
+        this.teamSpecs = projectData.teamSpecs || [];
         this.requestUpdate();
         return;
       }
@@ -1085,6 +1105,7 @@ return;
         this._normalizeDeveloperField();
         this.projectScoringSystem = projectData.scoringSystem || '1-5';
         this.projectRepositories = projectData.repositories || [];
+        this.teamSpecs = projectData.teamSpecs || [];
         this.requestUpdate();
         return;
       }
@@ -1101,6 +1122,7 @@ return;
         this._normalizeDeveloperField();
         this.projectScoringSystem = projectData.scoringSystem || '1-5';
         this.projectRepositories = projectData.repositories || [];
+        this.teamSpecs = projectData.teamSpecs || [];
 // Cache the result
         TaskCard._stakeholderCache.set(this.projectId, projectData);
         this.requestUpdate();
@@ -1113,6 +1135,7 @@ this.stakeholders = [];
       this.projectStakeholders = [];
       this.developers = [];
       this.projectRepositories = [];
+      this.teamSpecs = [];
       TaskCard._loadingPromises.delete(this.projectId);
     }
   }
@@ -1169,9 +1192,15 @@ this.stakeholders = [];
         console.warn(`[TaskCard] No stakeholders found for project "${this.projectId}". Run sync-users-project-roles.js to fix /users/ data.`);
       }
 
-      return { stakeholders, developers, scoringSystem, repositories };
+      // Load teamSpecs from project config
+      let teamSpecs = [];
+      if (projectSnapshot.exists()) {
+        teamSpecs = projectSnapshot.val().teamSpecs || [];
+      }
+
+      return { stakeholders, developers, scoringSystem, repositories, teamSpecs };
     } catch (error) {
-return { stakeholders: [], developers: [], scoringSystem: '1-5', repositories: [] };
+return { stakeholders: [], developers: [], scoringSystem: '1-5', repositories: [], teamSpecs: [] };
     }
   }
 
@@ -3126,6 +3155,17 @@ return html`<div class="no-related-tasks">No hay tareas relacionadas</div>`;
           <div class="implementation-notes-content">
             <pre class="implementation-notes-text">${this.implementationNotes}</pre>
           </div>
+        </div>
+        </color-tab>
+        ` : ''}
+        ${this.teamSpecs?.length > 0 ? html`
+        <color-tab name="teamSpecs" label="Team Specs" color="#059669">
+        <div class="team-specs-panel">
+          <ul class="team-specs-list">
+            ${this.teamSpecs.map(spec => html`
+              <li class="team-spec-item">${spec}</li>
+            `)}
+          </ul>
         </div>
         </color-tab>
         ` : ''}
