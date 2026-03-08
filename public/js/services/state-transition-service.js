@@ -1,4 +1,5 @@
-import { ref, push, get, set, onValue, database, auth } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
+import { auth } from '../../firebase-config.js';
 
 /**
  * Service for tracking state transitions in tasks
@@ -72,16 +73,15 @@ export class StateTransitionService {
     }
 
     const cardType = card.cardType || 'task-card';
-    const basePath = this.getTransitionPath(card.projectId, cardType, card.cardId);
     const timestamp = new Date().toISOString();
     const normalizedToStatus = (toStatus || '').toLowerCase();
     const normalizedFromStatus = (fromStatus || '').toLowerCase();
 
     try {
+      const normalizedCardType = this.getCardTypeForPath(cardType);
+
       // Get current transition data
-      const dataRef = ref(database, basePath);
-      const snapshot = await get(dataRef);
-      const currentData = snapshot.exists() ? snapshot.val() : {
+      const currentData = await dalService.stateTransitions.getTransitionData(card.projectId, normalizedCardType, card.cardId) || {
         firstInProgressDate: null,
         validationCycles: 0,
         reopenCycles: 0,
@@ -92,7 +92,6 @@ export class StateTransitionService {
       let durationInPrevious = null;
       const transitionsArray = Object.values(currentData.transitions || {});
       if (transitionsArray.length > 0) {
-        // Sort by timestamp to get the most recent
         transitionsArray.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         const lastTransition = transitionsArray[0];
         if (lastTransition.timestamp) {
@@ -110,32 +109,30 @@ export class StateTransitionService {
       };
 
       // Push new transition
-      const transitionsRef = ref(database, `${basePath}/transitions`);
-      const newTransitionRef = push(transitionsRef);
-      await set(newTransitionRef, transition);
+      const transitionId = await dalService.stateTransitions.addTransition(card.projectId, normalizedCardType, card.cardId, transition);
 
       // Update firstInProgressDate if entering In Progress for the first time
       if (normalizedToStatus === 'in progress' && !currentData.firstInProgressDate) {
-        const today = timestamp.split('T')[0]; // Get YYYY-MM-DD format
-        await set(ref(database, `${basePath}/firstInProgressDate`), today);
+        const today = timestamp.split('T')[0];
+        await dalService.stateTransitions.setTransitionField(card.projectId, normalizedCardType, card.cardId, 'firstInProgressDate', today);
       }
 
       // Increment validationCycles if rejected (To Validate -> To Do)
       if (normalizedFromStatus === 'to validate' && normalizedToStatus === 'to do') {
         const newCycles = (currentData.validationCycles || 0) + 1;
-        await set(ref(database, `${basePath}/validationCycles`), newCycles);
+        await dalService.stateTransitions.setTransitionField(card.projectId, normalizedCardType, card.cardId, 'validationCycles', newCycles);
       }
 
       // Increment reopenCycles if task is reopened (To Validate/Done&Validated -> Reopened)
       if (normalizedToStatus === 'reopened' &&
           (normalizedFromStatus === 'to validate' || normalizedFromStatus === 'done&validated')) {
         const newReopenCycles = (currentData.reopenCycles || 0) + 1;
-        await set(ref(database, `${basePath}/reopenCycles`), newReopenCycles);
+        await dalService.stateTransitions.setTransitionField(card.projectId, normalizedCardType, card.cardId, 'reopenCycles', newReopenCycles);
       }
 
       return {
         ...transition,
-        id: newTransitionRef.key
+        id: transitionId
       };
     } catch (error) {
       console.error('[StateTransitionService] recordTransition failed:', error);
@@ -154,9 +151,8 @@ export class StateTransitionService {
     if (!projectId || !cardId) return null;
 
     try {
-      const path = `${this.getTransitionPath(projectId, cardType, cardId)}/firstInProgressDate`;
-      const snapshot = await get(ref(database, path));
-      return snapshot.exists() ? snapshot.val() : null;
+      const normalizedType = this.getCardTypeForPath(cardType);
+      return await dalService.stateTransitions.getTransitionField(projectId, normalizedType, cardId, 'firstInProgressDate');
     } catch (error) {
       console.error('[StateTransitionService] getFirstInProgressDate failed:', error);
       return null;
@@ -174,9 +170,9 @@ export class StateTransitionService {
     if (!projectId || !cardId) return 0;
 
     try {
-      const path = `${this.getTransitionPath(projectId, cardType, cardId)}/validationCycles`;
-      const snapshot = await get(ref(database, path));
-      return snapshot.exists() ? snapshot.val() : 0;
+      const normalizedType = this.getCardTypeForPath(cardType);
+      const value = await dalService.stateTransitions.getTransitionField(projectId, normalizedType, cardId, 'validationCycles');
+      return value || 0;
     } catch (error) {
       console.error('[StateTransitionService] getValidationCycles failed:', error);
       return 0;
@@ -194,9 +190,9 @@ export class StateTransitionService {
     if (!projectId || !cardId) return 0;
 
     try {
-      const path = `${this.getTransitionPath(projectId, cardType, cardId)}/reopenCycles`;
-      const snapshot = await get(ref(database, path));
-      return snapshot.exists() ? snapshot.val() : 0;
+      const normalizedType = this.getCardTypeForPath(cardType);
+      const value = await dalService.stateTransitions.getTransitionField(projectId, normalizedType, cardId, 'reopenCycles');
+      return value || 0;
     } catch (error) {
       console.error('[StateTransitionService] getReopenCycles failed:', error);
       return 0;
@@ -214,18 +210,15 @@ export class StateTransitionService {
     if (!projectId || !cardId) return [];
 
     try {
-      const path = `${this.getTransitionPath(projectId, cardType, cardId)}/transitions`;
-      const snapshot = await get(ref(database, path));
+      const normalizedType = this.getCardTypeForPath(cardType);
+      const data = await dalService.stateTransitions.getTransitionData(projectId, normalizedType, cardId);
 
-      if (!snapshot.exists()) return [];
+      if (!data || !data.transitions) return [];
 
-      const transitions = [];
-      snapshot.forEach(child => {
-        transitions.push({
-          id: child.key,
-          ...child.val()
-        });
-      });
+      const transitions = Object.entries(data.transitions).map(([key, value]) => ({
+        id: key,
+        ...value
+      }));
 
       // Sort by timestamp descending (newest first)
       return transitions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -253,10 +246,10 @@ export class StateTransitionService {
     }
 
     try {
-      const path = this.getTransitionPath(projectId, cardType, cardId);
-      const snapshot = await get(ref(database, path));
+      const normalizedType = this.getCardTypeForPath(cardType);
+      const data = await dalService.stateTransitions.getTransitionData(projectId, normalizedType, cardId);
 
-      if (!snapshot.exists()) {
+      if (!data) {
         return {
           firstInProgressDate: null,
           validationCycles: 0,
@@ -265,7 +258,6 @@ export class StateTransitionService {
         };
       }
 
-      const data = snapshot.val();
       const transitions = [];
 
       if (data.transitions) {
@@ -398,16 +390,14 @@ export class StateTransitionService {
       return () => {};
     }
 
-    const path = this.getTransitionPath(projectId, cardType, cardId);
-    const dataRef = ref(database, path);
+    const normalizedType = this.getCardTypeForPath(cardType);
 
-    const unsubscribe = onValue(dataRef, (snapshot) => {
-      if (!snapshot.exists()) {
+    const unsubscribe = dalService.stateTransitions.subscribeToTransitions(projectId, normalizedType, cardId, (data) => {
+      if (!data) {
         callback({ firstInProgressDate: null, validationCycles: 0, reopenCycles: 0, transitions: [] });
         return;
       }
 
-      const data = snapshot.val();
       const transitions = [];
 
       if (data.transitions) {
@@ -439,18 +429,17 @@ export class StateTransitionService {
 
     try {
       const cardType = card.cardType || 'task-card';
-      const basePath = this.getTransitionPath(card.projectId, cardType, card.cardId);
+      const normalizedType = this.getCardTypeForPath(cardType);
 
       // Check if already has transition data
-      const snapshot = await get(ref(database, basePath));
-      if (snapshot.exists() && snapshot.val().firstInProgressDate) {
-        // Already has data, don't overwrite
+      const data = await dalService.stateTransitions.getTransitionData(card.projectId, normalizedType, card.cardId);
+      if (data && data.firstInProgressDate) {
         return false;
       }
 
       // If card has startDate, use it as firstInProgressDate
       if (card.startDate) {
-        await set(ref(database, `${basePath}/firstInProgressDate`), card.startDate);
+        await dalService.stateTransitions.setTransitionField(card.projectId, normalizedType, card.cardId, 'firstInProgressDate', card.startDate);
         return true;
       }
 

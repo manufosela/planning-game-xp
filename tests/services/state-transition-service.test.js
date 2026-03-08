@@ -1,18 +1,29 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StateTransitionService } from '@/services/state-transition-service.js';
 
-// Mock Firebase
-vi.mock('../../public/firebase-config.js', () => ({
-  database: {},
-  auth: { currentUser: { email: 'test@example.com' } },
-  ref: vi.fn((db, path) => ({ path })),
-  push: vi.fn(() => ({ key: 'mock-transition-id' })),
-  get: vi.fn(),
-  set: vi.fn(),
-  onValue: vi.fn()
+// Mock dalService
+const mockGetTransitionData = vi.fn();
+const mockGetTransitionField = vi.fn();
+const mockSetTransitionField = vi.fn();
+const mockAddTransition = vi.fn();
+const mockSubscribeToTransitions = vi.fn();
+
+vi.mock('../../public/js/services/dal-service.js', () => ({
+  dalService: {
+    stateTransitions: {
+      getTransitionData: (...args) => mockGetTransitionData(...args),
+      getTransitionField: (...args) => mockGetTransitionField(...args),
+      setTransitionField: (...args) => mockSetTransitionField(...args),
+      addTransition: (...args) => mockAddTransition(...args),
+      subscribeToTransitions: (...args) => mockSubscribeToTransitions(...args)
+    }
+  }
 }));
 
-import { ref, push, get, set, onValue } from '../../public/firebase-config.js';
+// Mock firebase-config.js (only auth is used)
+vi.mock('../../public/firebase-config.js', () => ({
+  auth: { currentUser: { email: 'test@example.com' } }
+}));
 
 describe('StateTransitionService', () => {
   let service;
@@ -98,8 +109,8 @@ describe('StateTransitionService', () => {
     });
 
     it('should record a transition successfully', async () => {
-      get.mockResolvedValueOnce({ exists: () => false });
-      set.mockResolvedValue(undefined);
+      mockGetTransitionData.mockResolvedValueOnce(null);
+      mockAddTransition.mockResolvedValueOnce('mock-transition-id');
 
       const result = await service.recordTransition(
         { projectId: 'TestProject', cardId: 'TST-TSK-0001', cardType: 'task-card' },
@@ -113,18 +124,17 @@ describe('StateTransitionService', () => {
       expect(result.toStatus).toBe('In Progress');
       expect(result.changedBy).toBe('user@test.com');
       expect(result.id).toBe('mock-transition-id');
+      expect(mockAddTransition).toHaveBeenCalledWith('TestProject', 'tasks', 'TST-TSK-0001', expect.any(Object));
     });
 
     it('should set firstInProgressDate when entering In Progress for the first time', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => true,
-        val: () => ({
-          firstInProgressDate: null,
-          validationCycles: 0,
-          transitions: {}
-        })
+      mockGetTransitionData.mockResolvedValueOnce({
+        firstInProgressDate: null,
+        validationCycles: 0,
+        transitions: {}
       });
-      set.mockResolvedValue(undefined);
+      mockAddTransition.mockResolvedValueOnce('mock-id');
+      mockSetTransitionField.mockResolvedValue(undefined);
 
       await service.recordTransition(
         { projectId: 'TestProject', cardId: 'TST-TSK-0001', cardType: 'task-card' },
@@ -133,23 +143,18 @@ describe('StateTransitionService', () => {
         'user@test.com'
       );
 
-      // Check that set was called for firstInProgressDate
-      const firstInProgressCall = set.mock.calls.find(call =>
-        call[0].path?.includes('firstInProgressDate')
+      expect(mockSetTransitionField).toHaveBeenCalledWith(
+        'TestProject', 'tasks', 'TST-TSK-0001', 'firstInProgressDate', expect.any(String)
       );
-      expect(firstInProgressCall).toBeTruthy();
     });
 
     it('should NOT overwrite firstInProgressDate if already set', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => true,
-        val: () => ({
-          firstInProgressDate: '2026-01-01',
-          validationCycles: 0,
-          transitions: {}
-        })
+      mockGetTransitionData.mockResolvedValueOnce({
+        firstInProgressDate: '2026-01-01',
+        validationCycles: 0,
+        transitions: {}
       });
-      set.mockResolvedValue(undefined);
+      mockAddTransition.mockResolvedValueOnce('mock-id');
 
       await service.recordTransition(
         { projectId: 'TestProject', cardId: 'TST-TSK-0001', cardType: 'task-card' },
@@ -158,23 +163,21 @@ describe('StateTransitionService', () => {
         'user@test.com'
       );
 
-      // Check that set was NOT called for firstInProgressDate
-      const firstInProgressCall = set.mock.calls.find(call =>
-        call[0].path?.includes('firstInProgressDate')
+      // setTransitionField should NOT be called for firstInProgressDate
+      const firstInProgressCalls = mockSetTransitionField.mock.calls.filter(
+        call => call[3] === 'firstInProgressDate'
       );
-      expect(firstInProgressCall).toBeFalsy();
+      expect(firstInProgressCalls.length).toBe(0);
     });
 
     it('should increment validationCycles when rejected (To Validate -> To Do)', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => true,
-        val: () => ({
-          firstInProgressDate: '2026-01-01',
-          validationCycles: 1,
-          transitions: {}
-        })
+      mockGetTransitionData.mockResolvedValueOnce({
+        firstInProgressDate: '2026-01-01',
+        validationCycles: 1,
+        transitions: {}
       });
-      set.mockResolvedValue(undefined);
+      mockAddTransition.mockResolvedValueOnce('mock-id');
+      mockSetTransitionField.mockResolvedValue(undefined);
 
       await service.recordTransition(
         { projectId: 'TestProject', cardId: 'TST-TSK-0001', cardType: 'task-card' },
@@ -183,32 +186,26 @@ describe('StateTransitionService', () => {
         'user@test.com'
       );
 
-      // Check that set was called for validationCycles with incremented value
-      const cyclesCall = set.mock.calls.find(call =>
-        call[0].path?.includes('validationCycles')
+      expect(mockSetTransitionField).toHaveBeenCalledWith(
+        'TestProject', 'tasks', 'TST-TSK-0001', 'validationCycles', 2
       );
-      expect(cyclesCall).toBeTruthy();
-      expect(cyclesCall[1]).toBe(2); // Incremented from 1 to 2
     });
 
     it('should calculate durationInPrevious from last transition', async () => {
       const lastTimestamp = new Date(Date.now() - 3600000).toISOString(); // 1 hour ago
 
-      get.mockResolvedValueOnce({
-        exists: () => true,
-        val: () => ({
-          firstInProgressDate: '2026-01-01',
-          validationCycles: 0,
-          transitions: {
-            'trans-1': {
-              timestamp: lastTimestamp,
-              fromStatus: 'To Do',
-              toStatus: 'In Progress'
-            }
+      mockGetTransitionData.mockResolvedValueOnce({
+        firstInProgressDate: '2026-01-01',
+        validationCycles: 0,
+        transitions: {
+          'trans-1': {
+            timestamp: lastTimestamp,
+            fromStatus: 'To Do',
+            toStatus: 'In Progress'
           }
-        })
+        }
       });
-      set.mockResolvedValue(undefined);
+      mockAddTransition.mockResolvedValueOnce('mock-id');
 
       const result = await service.recordTransition(
         { projectId: 'TestProject', cardId: 'TST-TSK-0001', cardType: 'task-card' },
@@ -233,19 +230,14 @@ describe('StateTransitionService', () => {
     });
 
     it('should return the date if it exists', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => true,
-        val: () => '2026-01-15'
-      });
+      mockGetTransitionField.mockResolvedValueOnce('2026-01-15');
 
       const result = await service.getFirstInProgressDate('TestProject', 'task-card', 'TST-TSK-0001');
       expect(result).toBe('2026-01-15');
     });
 
     it('should return null if date does not exist', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => false
-      });
+      mockGetTransitionField.mockResolvedValueOnce(null);
 
       const result = await service.getFirstInProgressDate('TestProject', 'task-card', 'TST-TSK-0001');
       expect(result).toBeNull();
@@ -259,19 +251,14 @@ describe('StateTransitionService', () => {
     });
 
     it('should return the count if it exists', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => true,
-        val: () => 3
-      });
+      mockGetTransitionField.mockResolvedValueOnce(3);
 
       const result = await service.getValidationCycles('TestProject', 'task-card', 'TST-TSK-0001');
       expect(result).toBe(3);
     });
 
     it('should return 0 if count does not exist', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => false
-      });
+      mockGetTransitionField.mockResolvedValueOnce(null);
 
       const result = await service.getValidationCycles('TestProject', 'task-card', 'TST-TSK-0001');
       expect(result).toBe(0);
@@ -285,34 +272,24 @@ describe('StateTransitionService', () => {
     });
 
     it('should return transitions sorted by timestamp descending', async () => {
-      const mockTransitions = {
-        'trans-1': { timestamp: '2026-01-10T10:00:00Z', fromStatus: 'To Do', toStatus: 'In Progress' },
-        'trans-2': { timestamp: '2026-01-15T10:00:00Z', fromStatus: 'In Progress', toStatus: 'To Validate' },
-        'trans-3': { timestamp: '2026-01-12T10:00:00Z', fromStatus: 'To Validate', toStatus: 'To Do' }
-      };
-
-      get.mockResolvedValueOnce({
-        exists: () => true,
-        forEach: (fn) => {
-          Object.entries(mockTransitions).forEach(([key, val]) => {
-            fn({ key, val: () => val });
-          });
+      mockGetTransitionData.mockResolvedValueOnce({
+        transitions: {
+          'trans-1': { timestamp: '2026-01-10T10:00:00Z', fromStatus: 'To Do', toStatus: 'In Progress' },
+          'trans-2': { timestamp: '2026-01-15T10:00:00Z', fromStatus: 'In Progress', toStatus: 'To Validate' },
+          'trans-3': { timestamp: '2026-01-12T10:00:00Z', fromStatus: 'To Validate', toStatus: 'To Do' }
         }
       });
 
       const result = await service.getTransitions('TestProject', 'task-card', 'TST-TSK-0001');
 
       expect(result.length).toBe(3);
-      // Should be sorted newest first
       expect(result[0].timestamp).toBe('2026-01-15T10:00:00Z');
       expect(result[1].timestamp).toBe('2026-01-12T10:00:00Z');
       expect(result[2].timestamp).toBe('2026-01-10T10:00:00Z');
     });
 
     it('should return empty array if no transitions exist', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => false
-      });
+      mockGetTransitionData.mockResolvedValueOnce(null);
 
       const result = await service.getTransitions('TestProject', 'task-card', 'TST-TSK-0001');
       expect(result).toEqual([]);
@@ -321,15 +298,12 @@ describe('StateTransitionService', () => {
 
   describe('getTransitionData', () => {
     it('should return full transition data object', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => true,
-        val: () => ({
-          firstInProgressDate: '2026-01-10',
-          validationCycles: 2,
-          transitions: {
-            'trans-1': { timestamp: '2026-01-10T10:00:00Z', fromStatus: 'To Do', toStatus: 'In Progress' }
-          }
-        })
+      mockGetTransitionData.mockResolvedValueOnce({
+        firstInProgressDate: '2026-01-10',
+        validationCycles: 2,
+        transitions: {
+          'trans-1': { timestamp: '2026-01-10T10:00:00Z', fromStatus: 'To Do', toStatus: 'In Progress' }
+        }
       });
 
       const result = await service.getTransitionData('TestProject', 'task-card', 'TST-TSK-0001');
@@ -340,9 +314,7 @@ describe('StateTransitionService', () => {
     });
 
     it('should return default values if no data exists', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => false
-      });
+      mockGetTransitionData.mockResolvedValueOnce(null);
 
       const result = await service.getTransitionData('TestProject', 'task-card', 'TST-TSK-0001');
 
@@ -364,9 +336,9 @@ describe('StateTransitionService', () => {
 
     it('should calculate time spent in each status', () => {
       const transitions = [
-        { timestamp: '2026-01-10T10:00:00Z', fromStatus: 'To Do', toStatus: 'In Progress', durationInPrevious: 86400000 }, // 1 day in To Do
-        { timestamp: '2026-01-11T10:00:00Z', fromStatus: 'In Progress', toStatus: 'To Validate', durationInPrevious: 28800000 }, // 8 hours in In Progress
-        { timestamp: '2026-01-12T10:00:00Z', fromStatus: 'To Validate', toStatus: 'Done&Validated', durationInPrevious: 3600000 } // 1 hour in To Validate
+        { timestamp: '2026-01-10T10:00:00Z', fromStatus: 'To Do', toStatus: 'In Progress', durationInPrevious: 86400000 },
+        { timestamp: '2026-01-11T10:00:00Z', fromStatus: 'In Progress', toStatus: 'To Validate', durationInPrevious: 28800000 },
+        { timestamp: '2026-01-12T10:00:00Z', fromStatus: 'To Validate', toStatus: 'Done&Validated', durationInPrevious: 3600000 }
       ];
 
       const result = service.calculateTimeMetrics(transitions);
@@ -381,10 +353,10 @@ describe('StateTransitionService', () => {
       const transitions = [
         { timestamp: '2026-01-10T10:00:00Z', fromStatus: 'To Do', toStatus: 'In Progress', durationInPrevious: 1000 },
         { timestamp: '2026-01-11T10:00:00Z', fromStatus: 'In Progress', toStatus: 'To Validate', durationInPrevious: 1000 },
-        { timestamp: '2026-01-12T10:00:00Z', fromStatus: 'To Validate', toStatus: 'To Do', durationInPrevious: 1000 }, // Rejection 1
+        { timestamp: '2026-01-12T10:00:00Z', fromStatus: 'To Validate', toStatus: 'To Do', durationInPrevious: 1000 },
         { timestamp: '2026-01-13T10:00:00Z', fromStatus: 'To Do', toStatus: 'In Progress', durationInPrevious: 1000 },
         { timestamp: '2026-01-14T10:00:00Z', fromStatus: 'In Progress', toStatus: 'To Validate', durationInPrevious: 1000 },
-        { timestamp: '2026-01-15T10:00:00Z', fromStatus: 'To Validate', toStatus: 'To Do', durationInPrevious: 1000 } // Rejection 2
+        { timestamp: '2026-01-15T10:00:00Z', fromStatus: 'To Validate', toStatus: 'To Do', durationInPrevious: 1000 }
       ];
 
       const result = service.calculateTimeMetrics(transitions);
@@ -394,13 +366,12 @@ describe('StateTransitionService', () => {
 
     it('should calculate average validation time', () => {
       const transitions = [
-        { timestamp: '2026-01-11T10:00:00Z', fromStatus: 'To Validate', toStatus: 'To Do', durationInPrevious: 3600000 }, // 1 hour
-        { timestamp: '2026-01-13T10:00:00Z', fromStatus: 'To Validate', toStatus: 'Done&Validated', durationInPrevious: 7200000 } // 2 hours
+        { timestamp: '2026-01-11T10:00:00Z', fromStatus: 'To Validate', toStatus: 'To Do', durationInPrevious: 3600000 },
+        { timestamp: '2026-01-13T10:00:00Z', fromStatus: 'To Validate', toStatus: 'Done&Validated', durationInPrevious: 7200000 }
       ];
 
       const result = service.calculateTimeMetrics(transitions);
 
-      // Average of 1 hour and 2 hours = 1.5 hours = 5400000ms
       expect(result.averageValidationTime).toBe(5400000);
     });
 
@@ -408,15 +379,15 @@ describe('StateTransitionService', () => {
       const transitions = [
         { timestamp: '2026-01-10T10:00:00Z', fromStatus: 'To Do', toStatus: 'In Progress', durationInPrevious: 86400000 },
         { timestamp: '2026-01-11T10:00:00Z', fromStatus: 'In Progress', toStatus: 'Pausado', durationInPrevious: 28800000 },
-        { timestamp: '2026-01-12T10:00:00Z', fromStatus: 'Pausado', toStatus: 'In Progress', durationInPrevious: 7200000 }, // 2 hours paused
+        { timestamp: '2026-01-12T10:00:00Z', fromStatus: 'Pausado', toStatus: 'In Progress', durationInPrevious: 7200000 },
         { timestamp: '2026-01-13T10:00:00Z', fromStatus: 'In Progress', toStatus: 'To Validate', durationInPrevious: 14400000 }
       ];
 
       const result = service.calculateTimeMetrics(transitions);
 
-      expect(result.totalPausedTime).toBe(7200000); // 2 hours
-      expect(result.totalDevelopmentTime).toBe(28800000 + 14400000); // In Progress time
-      expect(result.effectiveWorkTime).toBe(28800000 + 14400000 - 7200000); // development - paused
+      expect(result.totalPausedTime).toBe(7200000);
+      expect(result.totalDevelopmentTime).toBe(28800000 + 14400000);
+      expect(result.effectiveWorkTime).toBe(28800000 + 14400000 - 7200000);
     });
   });
 
@@ -443,7 +414,7 @@ describe('StateTransitionService', () => {
     });
 
     it('should return "< 1m" for less than a minute', () => {
-      expect(service.formatDuration(30000)).toBe('< 1m'); // 30 seconds
+      expect(service.formatDuration(30000)).toBe('< 1m');
     });
   });
 
@@ -463,24 +434,22 @@ describe('StateTransitionService', () => {
 
     it('should set up subscription correctly', () => {
       const callback = vi.fn();
-      onValue.mockImplementation((refPath, cb) => {
-        // Simulate immediate callback
+      mockSubscribeToTransitions.mockImplementation((projectId, cardType, cardId, cb) => {
         cb({
-          exists: () => true,
-          val: () => ({
-            firstInProgressDate: '2026-01-10',
-            validationCycles: 1,
-            transitions: {
-              't1': { timestamp: '2026-01-10T10:00:00Z', fromStatus: 'To Do', toStatus: 'In Progress' }
-            }
-          })
+          firstInProgressDate: '2026-01-10',
+          validationCycles: 1,
+          transitions: {
+            't1': { timestamp: '2026-01-10T10:00:00Z', fromStatus: 'To Do', toStatus: 'In Progress' }
+          }
         });
-        return () => {}; // Unsubscribe function
+        return () => {};
       });
 
       const unsubscribe = service.subscribeToTransitions('TestProject', 'task-card', 'TST-TSK-0001', callback);
 
-      expect(onValue).toHaveBeenCalled();
+      expect(mockSubscribeToTransitions).toHaveBeenCalledWith(
+        'TestProject', 'tasks', 'TST-TSK-0001', expect.any(Function)
+      );
       expect(callback).toHaveBeenCalled();
       const callArg = callback.mock.calls[0][0];
       expect(callArg.firstInProgressDate).toBe('2026-01-10');
@@ -496,10 +465,7 @@ describe('StateTransitionService', () => {
     });
 
     it('should not overwrite existing firstInProgressDate', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => true,
-        val: () => ({ firstInProgressDate: '2026-01-01' })
-      });
+      mockGetTransitionData.mockResolvedValueOnce({ firstInProgressDate: '2026-01-01' });
 
       const result = await service.migrateFromExistingDates({
         projectId: 'TestProject',
@@ -508,14 +474,12 @@ describe('StateTransitionService', () => {
       });
 
       expect(result).toBe(false);
-      expect(set).not.toHaveBeenCalled();
+      expect(mockSetTransitionField).not.toHaveBeenCalled();
     });
 
     it('should migrate startDate to firstInProgressDate', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => false
-      });
-      set.mockResolvedValue(undefined);
+      mockGetTransitionData.mockResolvedValueOnce(null);
+      mockSetTransitionField.mockResolvedValue(undefined);
 
       const result = await service.migrateFromExistingDates({
         projectId: 'TestProject',
@@ -525,16 +489,13 @@ describe('StateTransitionService', () => {
       });
 
       expect(result).toBe(true);
-      expect(set).toHaveBeenCalledWith(
-        expect.objectContaining({ path: expect.stringContaining('firstInProgressDate') }),
-        '2026-01-15'
+      expect(mockSetTransitionField).toHaveBeenCalledWith(
+        'TestProject', 'tasks', 'TST-TSK-0001', 'firstInProgressDate', '2026-01-15'
       );
     });
 
     it('should return false if card has no startDate', async () => {
-      get.mockResolvedValueOnce({
-        exists: () => false
-      });
+      mockGetTransitionData.mockResolvedValueOnce(null);
 
       const result = await service.migrateFromExistingDates({
         projectId: 'TestProject',
