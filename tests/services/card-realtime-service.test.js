@@ -20,19 +20,28 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const mockSubscribeToCard = vi.fn(() => vi.fn()); // returns unsubscribe function
+const mockUpdateCard = vi.fn();
+
+vi.mock('@/services/dal-service.js', () => ({
+  dalService: {
+    cards: {
+      subscribeToCard: (...args) => mockSubscribeToCard(...args),
+      updateCard: (...args) => mockUpdateCard(...args),
+    },
+  },
+}));
+
 // Import after mocks are set up
 const { CardRealtimeService } = await import('@/services/card-realtime-service.js');
 
 describe('CardRealtimeService', () => {
   let service;
-  let mockFirebaseService;
 
   beforeEach(() => {
-    mockFirebaseService = {
-      subscribeToPath: vi.fn(() => vi.fn()), // returns unsubscribe function
-      updateCard: vi.fn()
-    };
-    service = new CardRealtimeService(mockFirebaseService);
+    mockSubscribeToCard.mockReturnValue(vi.fn());
+    mockUpdateCard.mockClear();
+    service = new CardRealtimeService();
     dispatchEventSpy.mockClear();
   });
 
@@ -48,19 +57,19 @@ describe('CardRealtimeService', () => {
     it('should skip temporary cards', () => {
       const element = { firebaseId: 'temp-123', cardId: 'TSK-001', projectId: 'TestProject' };
       service.subscribeToCard(element);
-      expect(mockFirebaseService.subscribeToPath).not.toHaveBeenCalled();
+      expect(mockSubscribeToCard).not.toHaveBeenCalled();
     });
 
     it('should skip cards without cardId', () => {
       const element = { firebaseId: '-abc', cardId: '', projectId: 'TestProject' };
       service.subscribeToCard(element);
-      expect(mockFirebaseService.subscribeToPath).not.toHaveBeenCalled();
+      expect(mockSubscribeToCard).not.toHaveBeenCalled();
     });
 
     it('should skip cards without projectId', () => {
       const element = { firebaseId: '-abc', cardId: 'TSK-001', projectId: '' };
       service.subscribeToCard(element);
-      expect(mockFirebaseService.subscribeToPath).not.toHaveBeenCalled();
+      expect(mockSubscribeToCard).not.toHaveBeenCalled();
     });
 
     it('should create subscription for valid card', () => {
@@ -71,7 +80,10 @@ describe('CardRealtimeService', () => {
         tagName: 'task-card'
       };
       service.subscribeToCard(element);
-      expect(mockFirebaseService.subscribeToPath).toHaveBeenCalledOnce();
+      expect(mockSubscribeToCard).toHaveBeenCalledOnce();
+      expect(mockSubscribeToCard).toHaveBeenCalledWith(
+        'TestProject', 'task', '-abc123', expect.any(Function)
+      );
       expect(service.subscribedCards.size).toBe(1);
       expect(service.activeSubscriptions.size).toBe(1);
     });
@@ -93,8 +105,8 @@ describe('CardRealtimeService', () => {
       service.subscribeToCard(element1);
       service.subscribeToCard(element2);
 
-      // Should only create one Firebase subscription
-      expect(mockFirebaseService.subscribeToPath).toHaveBeenCalledOnce();
+      // Should only create one subscription
+      expect(mockSubscribeToCard).toHaveBeenCalledOnce();
       // But should have two elements in the set
       const cardKey = 'TestProject_TSK-001';
       expect(service.subscribedCards.get(cardKey).size).toBe(2);
@@ -120,7 +132,7 @@ describe('CardRealtimeService', () => {
 
     it('should call unsubscribe when last element removed', () => {
       const unsubscribeFn = vi.fn();
-      mockFirebaseService.subscribeToPath.mockReturnValue(unsubscribeFn);
+      mockSubscribeToCard.mockReturnValue(unsubscribeFn);
 
       const element = {
         firebaseId: '-abc123',
@@ -137,7 +149,7 @@ describe('CardRealtimeService', () => {
 
     it('should not call unsubscribe when other elements remain', () => {
       const unsubscribeFn = vi.fn();
-      mockFirebaseService.subscribeToPath.mockReturnValue(unsubscribeFn);
+      mockSubscribeToCard.mockReturnValue(unsubscribeFn);
 
       const element1 = {
         firebaseId: '-abc123',
@@ -281,9 +293,9 @@ describe('CardRealtimeService', () => {
       expect(cardData._validationError).toBeUndefined();
     });
 
-    it('should clean up transient flags from Firebase when cardPath is provided', () => {
+    it('should clean up transient flags from Firebase when cardInfo is provided', () => {
       const cardKey = 'TestProject_TSK-001';
-      const cardPath = '/cards/TestProject/TASKS_TestProject/-abc123';
+      const cardInfo = { projectId: 'TestProject', type: 'task', firebaseId: '-abc123' };
       const mockElement = {
         status: 'In Progress',
         constructor: { properties: { status: {} } },
@@ -300,10 +312,10 @@ describe('CardRealtimeService', () => {
         })
       };
 
-      service.handleCardDataUpdate(cardKey, snapshot, cardPath);
+      service.handleCardDataUpdate(cardKey, snapshot, cardInfo);
 
-      expect(mockFirebaseService.updateCard).toHaveBeenCalledWith(
-        'TestProject', 'TASKS', '-abc123',
+      expect(mockUpdateCard).toHaveBeenCalledWith(
+        'TestProject', 'task', '-abc123',
         { _validationReverted: null, _validationError: null }
       );
     });
@@ -388,23 +400,31 @@ describe('CardRealtimeService', () => {
     });
   });
 
-  describe('getCardPath', () => {
-    it('should return correct path for task-card', () => {
+  describe('getCardInfo', () => {
+    it('should return correct info for task-card', () => {
       const element = {
         projectId: 'TestProject',
         tagName: 'task-card',
         firebaseId: '-abc123'
       };
-      expect(service.getCardPath(element)).toBe('/cards/TestProject/TASKS_TestProject/-abc123');
+      expect(service.getCardInfo(element)).toEqual({
+        projectId: 'TestProject',
+        type: 'task',
+        firebaseId: '-abc123'
+      });
     });
 
-    it('should return correct path for bug-card', () => {
+    it('should return correct info for bug-card', () => {
       const element = {
         projectId: 'TestProject',
         tagName: 'bug-card',
         firebaseId: '-abc123'
       };
-      expect(service.getCardPath(element)).toBe('/cards/TestProject/BUGS_TestProject/-abc123');
+      expect(service.getCardInfo(element)).toEqual({
+        projectId: 'TestProject',
+        type: 'bug',
+        firebaseId: '-abc123'
+      });
     });
 
     it('should return null for temporary cards', () => {
@@ -413,7 +433,7 @@ describe('CardRealtimeService', () => {
         tagName: 'task-card',
         firebaseId: 'temp-123'
       };
-      expect(service.getCardPath(element)).toBeNull();
+      expect(service.getCardInfo(element)).toBeNull();
     });
 
     it('should return null for unknown card types', () => {
@@ -422,14 +442,14 @@ describe('CardRealtimeService', () => {
         tagName: 'unknown-card',
         firebaseId: '-abc123'
       };
-      expect(service.getCardPath(element)).toBeNull();
+      expect(service.getCardInfo(element)).toBeNull();
     });
   });
 
   describe('cleanup', () => {
     it('should unsubscribe all and clear maps', () => {
       const unsubscribeFn = vi.fn();
-      mockFirebaseService.subscribeToPath.mockReturnValue(unsubscribeFn);
+      mockSubscribeToCard.mockReturnValue(unsubscribeFn);
 
       const element = {
         firebaseId: '-abc123',

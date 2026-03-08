@@ -1,49 +1,43 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CardService } from '../../public/js/services/card-service.js';
-import { createTestCard, createFirebaseSuccessResponse, createFirebaseErrorResponse } from '../utils/test-helpers.js';
+import { createTestCard } from '../utils/test-helpers.js';
 
-// Mock completo de firebase-config.js para evitar imports remotos en Node
+const mockGetCard = vi.fn();
+const mockUpdateCard = vi.fn();
+const mockFindCardByCardId = vi.fn();
+
+vi.mock('../../public/js/services/dal-service.js', () => ({
+  dalService: {
+    cards: {
+      getCard: (...args) => mockGetCard(...args),
+      updateCard: (...args) => mockUpdateCard(...args),
+      findCardByCardId: (...args) => mockFindCardByCardId(...args),
+    },
+  },
+}));
+
+// Minimal firebase-config mock to prevent import errors
 vi.mock('../../public/firebase-config.js', () => ({
-  get: vi.fn(),
-  set: vi.fn(),
+  database: {},
   ref: vi.fn(),
   onValue: vi.fn(),
-  push: vi.fn(),
-  database: {},
   auth: {},
-  getAuth: vi.fn(),
-  getDatabase: vi.fn(),
-  getFirestore: vi.fn(),
-  getStorage: vi.fn(),
-  getMessaging: vi.fn(),
-  onAuthStateChanged: vi.fn(),
-  signOut: vi.fn(),
-  signInWithPopup: vi.fn(),
+  databaseFirestore: {},
   doc: vi.fn(),
   runTransaction: vi.fn(),
   setDoc: vi.fn(),
   getDoc: vi.fn(),
-  vapidKey: 'test',
-  OAuthProvider: vi.fn(),
-  connectFirestoreEmulator: vi.fn(),
-  authProvider: {},
-  authProviderName: 'google',
-  app: {},
-  databaseFirestore: {},
-  messaging: {},
-  storage: {},
+  firebaseConfig: {},
+  superAdminEmail: '',
 }));
+
+const { CardService } = await import('../../public/js/services/card-service.js');
 
 describe('CardService', () => {
   let cardService;
-  let mockFirebaseService;
 
   beforeEach(() => {
-    // Crear mock del FirebaseService
-    mockFirebaseService = {
-      getRef: vi.fn()
-    };
-    cardService = new CardService(mockFirebaseService);
+    vi.clearAllMocks();
+    cardService = new CardService();
   });
 
   describe('orderCards', () => {
@@ -77,14 +71,12 @@ describe('CardService', () => {
       const task1 = createTestCard('task', { businessPoints: 10, devPoints: 5, sprintId: 'sprint1', blocked: false, startDate: '2024-01-01', desiredDate: '2024-01-15' });
       const task2 = createTestCard('task', { businessPoints: 5, devPoints: 2, sprintId: 'sprint1', blocked: true, startDate: '2024-01-02', desiredDate: '2024-01-10' });
       const result = cardService.compareCards(task1, task2, 'task-card');
-      // task2 tiene mayor prioridad (5/2=2.5 > 10/5=2), pero está bloqueado, así que task1 va antes
       expect(result).toBeGreaterThan(0);
     });
     it('debería comparar bug cards correctamente', () => {
       const bug1 = createTestCard('bug', { bugpriorityList: 2, blocked: false, startDate: '2024-01-01', desiredDate: '2024-01-15' });
       const bug2 = createTestCard('bug', { bugpriorityList: 1, blocked: true, startDate: '2024-01-02', desiredDate: '2024-01-10' });
       const result = cardService.compareCards(bug1, bug2, 'bug-card');
-      // bug2 tiene mayor prioridad (menor número), pero está bloqueado, así que bug1 va antes
       expect(result).toBeGreaterThan(0);
     });
     it('debería manejar cards sin sprint correctamente', () => {
@@ -97,106 +89,112 @@ describe('CardService', () => {
 
   describe('moveCardToStatus', () => {
     it('debería mover una card a nuevo status exitosamente', async () => {
-      const projectId = 'test-project';
-      const section = 'tasks';
-      const cardId = 'test-card';
-      const newStatus = 'In Progress';
-      const mockCardData = createTestCard('task', { status: 'To Do' });
-      const mockRef = {
-        get: vi.fn().mockResolvedValue({ exists: () => true, val: () => mockCardData }),
-        set: vi.fn().mockResolvedValue()
-      };
-      mockFirebaseService.getRef.mockReturnValue(mockRef);
-      const result = await cardService.moveCardToStatus(projectId, section, cardId, newStatus);
+      mockGetCard.mockResolvedValue({ status: 'To Do', title: 'Test' });
+      mockUpdateCard.mockResolvedValue(undefined);
+
+      const result = await cardService.moveCardToStatus('test-project', 'tasks', 'test-card', 'In Progress');
+
       expect(result.success).toBe(true);
-      expect(mockFirebaseService.getRef).toHaveBeenCalledWith(`/cards/${projectId}/${section}_${projectId}/${cardId}`);
-      expect(mockRef.set).toHaveBeenCalledWith({ ...mockCardData, status: newStatus });
+      expect(mockGetCard).toHaveBeenCalledWith('test-project', 'task', 'test-card');
+      expect(mockUpdateCard).toHaveBeenCalledWith('test-project', 'task', 'test-card', { status: 'In Progress' });
     });
+
     it('debería manejar error cuando la card no existe', async () => {
-      const projectId = 'test-project';
-      const section = 'tasks';
-      const cardId = 'non-existent-card';
-      const newStatus = 'In Progress';
-      const mockRef = {
-        get: vi.fn().mockResolvedValue({ exists: () => false, val: () => null }),
-        set: vi.fn()
-      };
-      mockFirebaseService.getRef.mockReturnValue(mockRef);
-      const result = await cardService.moveCardToStatus(projectId, section, cardId, newStatus);
+      mockGetCard.mockResolvedValue(null);
+
+      const result = await cardService.moveCardToStatus('test-project', 'tasks', 'non-existent', 'In Progress');
+
       expect(result.success).toBe(false);
       expect(result.error).toBe('Card not found');
+      expect(mockUpdateCard).not.toHaveBeenCalled();
     });
+
     it('debería manejar errores de Firebase', async () => {
-      const projectId = 'test-project';
-      const section = 'tasks';
-      const cardId = 'test-card';
-      const newStatus = 'In Progress';
-      const mockRef = {
-        get: vi.fn().mockRejectedValue(new Error('Firebase error')),
-        set: vi.fn()
-      };
-      mockFirebaseService.getRef.mockReturnValue(mockRef);
-      const result = await cardService.moveCardToStatus(projectId, section, cardId, newStatus);
+      mockGetCard.mockRejectedValue(new Error('Firebase error'));
+
+      const result = await cardService.moveCardToStatus('test-project', 'tasks', 'test-card', 'In Progress');
+
       expect(result.success).toBe(false);
       expect(result.error).toBe('Firebase error');
+    });
+
+    it('debería convertir section UPPERCASE a type correctamente', async () => {
+      mockGetCard.mockResolvedValue({ status: 'Created' });
+      mockUpdateCard.mockResolvedValue(undefined);
+
+      await cardService.moveCardToStatus('test-project', 'BUGS', 'bug-1', 'Assigned');
+
+      expect(mockGetCard).toHaveBeenCalledWith('test-project', 'bug', 'bug-1');
+      expect(mockUpdateCard).toHaveBeenCalledWith('test-project', 'bug', 'bug-1', { status: 'Assigned' });
     });
   });
 
   describe('moveCardToPriority', () => {
     it('debería ignorar cambio de prioridad para tasks', async () => {
-      const projectId = 'test-project';
-      const section = 'TASKS';
-      const cardId = 'test-card';
-      const newPriority = 'High';
-      const result = await cardService.moveCardToPriority(projectId, section, cardId, newPriority);
+      const result = await cardService.moveCardToPriority('test-project', 'TASKS', 'test-card', 'High');
+
       expect(result.success).toBe(true);
       expect(result.message).toBe('Priority is calculated for tasks, no update needed');
+      expect(mockGetCard).not.toHaveBeenCalled();
     });
+
     it('debería actualizar prioridad para bugs', async () => {
-      const projectId = 'test-project';
-      const section = 'BUGS';
-      const cardId = 'test-bug';
-      const newPriority = 'High';
-      const mockCardData = createTestCard('bug', { priority: 'Low' });
-      const mockRef = {
-        get: vi.fn().mockResolvedValue({ exists: () => true, val: () => mockCardData }),
-        set: vi.fn().mockResolvedValue()
-      };
-      mockFirebaseService.getRef.mockReturnValue(mockRef);
-      const result = await cardService.moveCardToPriority(projectId, section, cardId, newPriority);
+      mockGetCard.mockResolvedValue({ priority: 'Low' });
+      mockUpdateCard.mockResolvedValue(undefined);
+
+      const result = await cardService.moveCardToPriority('test-project', 'BUGS', 'test-bug', 'High');
+
       expect(result.success).toBe(true);
-      expect(mockRef.set).toHaveBeenCalledWith({ ...mockCardData, priority: newPriority });
+      expect(mockGetCard).toHaveBeenCalledWith('test-project', 'bug', 'test-bug');
+      expect(mockUpdateCard).toHaveBeenCalledWith('test-project', 'bug', 'test-bug', { priority: 'High' });
     });
   });
 
   describe('moveCardToSprint', () => {
     it('debería mover una card a un sprint exitosamente', async () => {
-      const projectId = 'test-project';
-      const cardId = 'test-card';
-      const sprintId = 'new-sprint';
-      const mockCardData = createTestCard('task', { sprint: 'old-sprint' });
-      const mockRef = {
-        get: vi.fn().mockResolvedValue({ exists: () => true, val: () => mockCardData }),
-        set: vi.fn().mockResolvedValue()
-      };
-      mockFirebaseService.getRef.mockReturnValue(mockRef);
-      const result = await cardService.moveCardToSprint(projectId, cardId, sprintId);
+      mockGetCard.mockResolvedValue({ sprint: 'old-sprint', title: 'Test' });
+      mockUpdateCard.mockResolvedValue(undefined);
+
+      const result = await cardService.moveCardToSprint('test-project', 'test-card', 'new-sprint');
+
       expect(result.success).toBe(true);
-      expect(mockFirebaseService.getRef).toHaveBeenCalledWith(`/cards/${projectId}/TASKS_${projectId}/${cardId}`);
-      expect(mockRef.set).toHaveBeenCalledWith({ ...mockCardData, sprint: sprintId });
+      expect(mockGetCard).toHaveBeenCalledWith('test-project', 'task', 'test-card');
+      expect(mockUpdateCard).toHaveBeenCalledWith('test-project', 'task', 'test-card', { sprint: 'new-sprint' });
     });
+
+    it('debería buscar por cardId si no se encuentra como firebaseId', async () => {
+      mockGetCard.mockResolvedValue(null); // direct lookup fails
+      mockFindCardByCardId.mockResolvedValue({
+        firebaseId: '-abc123',
+        data: { sprint: 'old', title: 'Test' }
+      });
+      mockUpdateCard.mockResolvedValue(undefined);
+
+      const result = await cardService.moveCardToSprint('test-project', 'PRJ-TSK-0001', 'new-sprint');
+
+      expect(result.success).toBe(true);
+      expect(mockFindCardByCardId).toHaveBeenCalledWith('test-project', 'PRJ-TSK-0001', 'task');
+      expect(mockUpdateCard).toHaveBeenCalledWith('test-project', 'task', '-abc123', { sprint: 'new-sprint' });
+    });
+
+    it('debería incluir year en la actualización si se proporciona', async () => {
+      mockGetCard.mockResolvedValue({ sprint: 'old', title: 'Test' });
+      mockUpdateCard.mockResolvedValue(undefined);
+
+      const result = await cardService.moveCardToSprint('test-project', 'card-1', 'new-sprint', 2027);
+
+      expect(result.success).toBe(true);
+      expect(mockUpdateCard).toHaveBeenCalledWith('test-project', 'task', 'card-1', { sprint: 'new-sprint', year: 2027 });
+    });
+
     it('debería manejar error cuando la card no existe', async () => {
-      const projectId = 'test-project';
-      const cardId = 'non-existent-card';
-      const sprintId = 'new-sprint';
-      const mockRef = {
-        get: vi.fn().mockResolvedValue({ exists: () => false, val: () => null }),
-        set: vi.fn()
-      };
-      mockFirebaseService.getRef.mockReturnValue(mockRef);
-      const result = await cardService.moveCardToSprint(projectId, cardId, sprintId);
+      mockGetCard.mockResolvedValue(null);
+      mockFindCardByCardId.mockResolvedValue(null);
+
+      const result = await cardService.moveCardToSprint('test-project', 'PRJ-TSK-9999', 'new-sprint');
+
       expect(result.success).toBe(false);
       expect(result.error).toBe('Card not found');
     });
   });
-}); 
+});

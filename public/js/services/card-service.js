@@ -1,7 +1,16 @@
-import { get, set } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
+
+const SECTION_TO_TYPE = {
+  tasks: 'task', TASKS: 'task',
+  bugs: 'bug', BUGS: 'bug',
+  epics: 'epic', EPICS: 'epic',
+  proposals: 'proposal', PROPOSALS: 'proposal',
+  sprints: 'sprint', SPRINTS: 'sprint',
+  qa: 'qa', QA: 'qa'
+};
+
 export class CardService {
-  constructor(firebaseService) {
-    this.firebaseService = firebaseService;
+  constructor() {
   }
 
   orderCards(cards, cardType) {
@@ -105,19 +114,16 @@ export class CardService {
 
   async moveCardToStatus(projectId, section, cardId, newStatus) {
     try {
-      const cardPath = `/cards/${projectId}/${section}_${projectId}/${cardId}`;
-      const cardRef = this.firebaseService.getRef(cardPath);
-      const snapshot = await this._getSnapshot(cardRef);
+      const type = SECTION_TO_TYPE[section] || section.toLowerCase();
+      const card = await dalService.cards.getCard(projectId, type, cardId);
 
-      if (this._snapshotExists(snapshot)) {
-        const cardData = snapshot.val();
-        const updatedData = { ...cardData, status: newStatus };
-        await this._setData(cardRef, updatedData);
-        return { success: true };
+      if (!card) {
+        console.warn(`[CardService] moveCardToStatus: Card not found`, { projectId, section, cardId });
+        return { success: false, error: 'Card not found' };
       }
 
-      console.warn(`[CardService] moveCardToStatus: Card not found at path ${cardPath}`);
-      return { success: false, error: 'Card not found' };
+      await dalService.cards.updateCard(projectId, type, cardId, { status: newStatus });
+      return { success: true };
     } catch (error) {
       console.error(`[CardService] moveCardToStatus failed:`, {
         projectId, section, cardId, newStatus,
@@ -143,19 +149,16 @@ export class CardService {
         return { success: true, message: 'Priority is calculated for tasks, no update needed' };
       }
 
-      const cardPath = `/cards/${projectId}/${section}_${projectId}/${cardId}`;
-      const cardRef = this.firebaseService.getRef(cardPath);
-      const snapshot = await this._getSnapshot(cardRef);
+      const type = SECTION_TO_TYPE[section] || section.toLowerCase();
+      const card = await dalService.cards.getCard(projectId, type, cardId);
 
-      if (this._snapshotExists(snapshot)) {
-        const cardData = snapshot.val();
-        const updatedData = { ...cardData, priority: newPriority };
-        await this._setData(cardRef, updatedData);
-        return { success: true };
+      if (!card) {
+        console.warn(`[CardService] moveCardToPriority: Card not found`, { projectId, section, cardId });
+        return { success: false, error: 'Card not found' };
       }
 
-      console.warn(`[CardService] moveCardToPriority: Card not found at path ${cardPath}`);
-      return { success: false, error: 'Card not found' };
+      await dalService.cards.updateCard(projectId, type, cardId, { priority: newPriority });
+      return { success: true };
     } catch (error) {
       console.error(`[CardService] moveCardToPriority failed:`, {
         projectId, section, cardId, newPriority,
@@ -168,42 +171,28 @@ export class CardService {
 
   async moveCardToSprint(projectId, cardIdentifier, sprintId, newYear = null) {
     try {
-      // First try as Firebase ID (direct path)
-      let cardPath = `/cards/${projectId}/TASKS_${projectId}/${cardIdentifier}`;
-      let cardRef = this.firebaseService.getRef(cardPath);
-      let snapshot = await this._getSnapshot(cardRef);
+      // First try as Firebase ID (direct lookup)
+      let card = await dalService.cards.getCard(projectId, 'task', cardIdentifier);
+      let firebaseId = cardIdentifier;
 
       // If not found and looks like a display cardId, search by cardId field
-      if (!this._snapshotExists(snapshot) && (cardIdentifier.includes('-') || cardIdentifier.includes('_'))) {
-        const tasksPath = `/cards/${projectId}/TASKS_${projectId}`;
-        const tasksRef = this.firebaseService.getRef(tasksPath);
-        const tasksSnapshot = await this._getSnapshot(tasksRef);
-
-        if (this._snapshotExists(tasksSnapshot)) {
-          const tasks = tasksSnapshot.val();
-          const taskEntry = Object.entries(tasks).find(([id, task]) =>
-            task.cardId === cardIdentifier
-          );
-
-          if (taskEntry) {
-            const [firebaseId] = taskEntry;
-            cardPath = `/cards/${projectId}/TASKS_${projectId}/${firebaseId}`;
-            cardRef = this.firebaseService.getRef(cardPath);
-            snapshot = await this._getSnapshot(cardRef);
-          }
+      if (!card && (cardIdentifier.includes('-') || cardIdentifier.includes('_'))) {
+        const found = await dalService.cards.findCardByCardId(projectId, cardIdentifier, 'task');
+        if (found) {
+          firebaseId = found.firebaseId;
+          card = found.data;
         }
       }
 
-      if (this._snapshotExists(snapshot)) {
-        const cardData = snapshot.val();
-        const updatedData = { ...cardData, sprint: sprintId };
+      if (card) {
+        const updates = { sprint: sprintId };
 
         // Update year if provided (when moving to a sprint in a different year)
         if (newYear !== null && typeof newYear === 'number') {
-          updatedData.year = newYear;
+          updates.year = newYear;
         }
 
-        await this._setData(cardRef, updatedData);
+        await dalService.cards.updateCard(projectId, 'task', firebaseId, updates);
         return { success: true };
       }
 
@@ -216,53 +205,6 @@ export class CardService {
         stack: error.stack
       });
       return { success: false, error: error.message };
-    }
-  }
-
-  _snapshotExists(snapshot) {
-    return Boolean(snapshot && typeof snapshot.exists === 'function' && snapshot.exists());
-  }
-
-  _createEmptySnapshot() {
-    return {
-      exists: () => false,
-      val: () => null
-    };
-  }
-
-  async _getSnapshot(ref) {
-    if (!ref) {
-      return this._createEmptySnapshot();
-    }
-
-    if (typeof ref.get === 'function') {
-      const snapshot = await ref.get();
-      return snapshot ?? this._createEmptySnapshot();
-    }
-
-    const snapshot = await get(ref);
-    return snapshot ?? this._createEmptySnapshot();
-  }
-
-  async _setData(ref, data) {
-    if (!ref) {
-      console.error('[CardService] _setData: Invalid Firebase reference (null/undefined)');
-      throw new Error('Invalid Firebase reference');
-    }
-
-    try {
-      if (typeof ref.set === 'function') {
-        return await ref.set(data);
-      }
-      return await set(ref, data);
-    } catch (error) {
-      console.error('[CardService] _setData failed:', {
-        refPath: ref?.toString?.() || 'unknown',
-        dataKeys: Object.keys(data || {}),
-        error: error.message,
-        stack: error.stack
-      });
-      throw error;
     }
   }
 }

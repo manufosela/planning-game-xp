@@ -1,10 +1,20 @@
+import { dalService } from './dal-service.js';
+
+const TAG_TO_TYPE = {
+  'task-card': 'task',
+  'bug-card': 'bug',
+  'epic-card': 'epic',
+  'proposal-card': 'proposal',
+  'qa-card': 'qa',
+  'sprint-card': 'sprint'
+};
+
 /**
  * Servicio para gestionar reactividad en tiempo real de cards individuales
  * Permite que cards expandidas se actualicen automáticamente cuando cambian en Firebase
  */
 export class CardRealtimeService {
-  constructor(firebaseService) {
-    this.firebaseService = firebaseService;
+  constructor() {
     this.activeSubscriptions = new Map(); // cardId -> unsubscribe function
     this.subscribedCards = new Map(); // cardId -> Set of card elements
     this.latestCardData = new Map(); // cardId -> last snapshot data
@@ -37,21 +47,20 @@ const cachedData = this.latestCardData.get(cardKey);
     }
 
     // Crear nueva suscripción
-    const cardPath = this.getCardPath(cardElement);
-    if (!cardPath) {
+    const cardInfo = this.getCardInfo(cardElement);
+    if (!cardInfo) {
 return;
     }
 // Crear set para elementos suscritos a esta card
     this.subscribedCards.set(cardKey, new Set([cardElement]));
 
-    // Crear listener de Firebase
-    const unsubscribe = this.firebaseService.subscribeToPath(cardPath, (snapshot) => {
-      // Solo log si hay problemas
-      if (!snapshot.exists()) {
-}
-
-      this.handleCardDataUpdate(cardKey, snapshot, cardPath);
-    });
+    // Crear listener via DAL
+    const unsubscribe = dalService.cards.subscribeToCard(
+      cardInfo.projectId, cardInfo.type, cardInfo.firebaseId,
+      (snapshot) => {
+        this.handleCardDataUpdate(cardKey, snapshot, cardInfo);
+      }
+    );
 
     // Guardar función de cleanup
     this.activeSubscriptions.set(cardKey, unsubscribe);
@@ -92,7 +101,7 @@ return;
    * @param {string} cardKey - Clave de la card
    * @param {Object} snapshot - Snapshot de Firebase
    */
-  handleCardDataUpdate(cardKey, snapshot, cardPath) {
+  handleCardDataUpdate(cardKey, snapshot, cardInfo) {
     const subscribedElements = this.subscribedCards.get(cardKey);
     if (!subscribedElements || subscribedElements.size === 0) {
       return;
@@ -109,18 +118,11 @@ return;
           detail: { options: { message: errorMessage, type: 'error' } }
         }));
         // Clean up the transient flags in Firebase so they don't trigger again on reload
-        if (cardPath && this.firebaseService) {
-          const pathParts = cardPath.split('/');
-          // Path format: /cards/{projectId}/{SECTION_projectId}/{firebaseKey}
-          if (pathParts.length >= 5) {
-            const projectId = pathParts[2];
-            const section = pathParts[3].split('_')[0];
-            const firebaseKey = pathParts[4];
-            this.firebaseService.updateCard(projectId, section, firebaseKey, {
-              _validationReverted: null,
-              _validationError: null
-            });
-          }
+        if (cardInfo) {
+          dalService.cards.updateCard(cardInfo.projectId, cardInfo.type, cardInfo.firebaseId, {
+            _validationReverted: null,
+            _validationError: null
+          });
         }
         delete cardData._validationReverted;
         delete cardData._validationError;
@@ -294,38 +296,25 @@ subscribedElements.forEach(cardElement => {
   }
 
   /**
-   * Determina la ruta de Firebase para una card
-   * @param {HTMLElement} cardElement - Elemento de la card
-   * @returns {string} Ruta de Firebase
+   * Extracts card info needed for DAL operations
+   * @param {HTMLElement} cardElement - Card element
+   * @returns {{projectId: string, type: string, firebaseId: string}|null}
    */
-  getCardPath(cardElement) {
+  getCardInfo(cardElement) {
     const { projectId, tagName } = cardElement;
 
-    // IMPORTANTE: Usar Firebase ID en lugar de cardId interno
     const firebaseId = cardElement.firebaseId || cardElement.id;
-    
+
     if (!firebaseId || firebaseId.startsWith('temp-') || firebaseId.includes('temp')) {
-      // No intentar suscribir cards temporales - esto es normal para cards nuevas
       return null;
     }
-    
-    // Mapear tipo de card a sección de Firebase
-    const sectionMap = {
-      'task-card': 'TASKS',
-      'bug-card': 'BUGS', 
-      'epic-card': 'EPICS',
-      'proposal-card': 'PROPOSALS',
-      'qa-card': 'QA',
-      'sprint-card': 'SPRINTS'
-    };
 
-    const firebaseSection = sectionMap[tagName.toLowerCase()];
-    if (!firebaseSection) {
+    const type = TAG_TO_TYPE[tagName.toLowerCase()];
+    if (!type) {
 return null;
     }
 
-    const path = `/cards/${projectId}/${firebaseSection}_${projectId}/${firebaseId}`;
-return path;
+    return { projectId, type, firebaseId };
   }
 
   /**
@@ -362,11 +351,10 @@ export let cardRealtimeService = null;
 
 /**
  * Inicializa el servicio global
- * @param {Object} firebaseService - Servicio de Firebase
  */
-export function initCardRealtimeService(firebaseService) {
+export function initCardRealtimeService() {
   if (!cardRealtimeService) {
-    cardRealtimeService = new CardRealtimeService(firebaseService);
+    cardRealtimeService = new CardRealtimeService();
 }
   return cardRealtimeService;
 }

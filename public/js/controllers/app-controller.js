@@ -78,7 +78,7 @@ import { demoModeService } from '../services/demo-mode-service.js';
 export class AppController {
   constructor() {
     this.firebaseService = new FirebaseDataService();
-    this.cardService = new CardService(this.firebaseService);
+    this.cardService = new CardService();
     this.cardRenderer = new CardRenderer(this.cardService);
     this.viewFactory = new ViewFactory(this.cardService, this.firebaseService, this.cardRenderer);
     this.tabController = new TabController();
@@ -91,7 +91,7 @@ export class AppController {
     this.globalDataManager = globalDataManager;
 
     // Inicializar servicio de reactividad de cards individuales
-    this.cardRealtimeService = initCardRealtimeService(this.firebaseService);
+    this.cardRealtimeService = initCardRealtimeService();
 
     this.projectId = null;
     this.section = null;
