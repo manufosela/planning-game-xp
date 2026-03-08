@@ -1,4 +1,4 @@
-import { database, ref, onValue, get } from '../../firebase-config.js';
+import { dalService } from '../services/dal-service.js';
 import { APP_CONSTANTS } from '../constants/app-constants.js';
 import { modalStackService } from '../services/modal-stack-service.js';
 const projectCardElement = APP_CONSTANTS.PROJECT_CARD_ELEMENT;
@@ -20,12 +20,11 @@ let globalSprintList = {};
 
 // Función para actualizar la lista global de sprints
 export function updateGlobalSprintList(projectId) {
-  return new Promise((resolve, reject) => {
-    const sprintRef = ref(database, `/cards/${projectId}/SPRINTS_${projectId}`);
-    onValue(sprintRef, (snapshot) => {
-      const sprintData = snapshot.val() || {};
+  return new Promise((resolve) => {
+    dalService.cards.subscribeToSection(projectId, 'sprint', (sprintData) => {
+      const data = sprintData || {};
       globalSprintList = {};
-      Object.values(sprintData).forEach(sprint => {
+      Object.values(data).forEach(sprint => {
         if (sprint.cardId) {
           globalSprintList[sprint.cardId] = sprint;
         }
@@ -34,8 +33,6 @@ export function updateGlobalSprintList(projectId) {
       document.querySelectorAll('task-card').forEach(card => card.requestUpdate());
       window.globalSprintList = globalSprintList; // Hacer disponible globalmente
       resolve(globalSprintList);
-    }, (error) => {
-reject(error);
     });
   });
 }
@@ -77,7 +74,7 @@ export function findObjectById(id, data) {
 }
 
 export async function getSprintList(projectId) {
-  const sprintListObjects = await get(ref(database, `/cards/${projectId}/SPRINTS_${projectId}`)).then((snapshot) => snapshot.val());
+  const sprintListObjects = await dalService.cards.listCards(projectId, 'sprint');
   if (!sprintListObjects) return {};
 
   // Transform the data to use cardId as key
@@ -93,11 +90,11 @@ export async function getSprintList(projectId) {
 
 export async function getLists(projectId) {
   const [statusTasksList, statusBugList, projectData, bugpriorityList, userAdminEmails] = await Promise.all([
-    get(ref(database, `/data/statusList/task-card`)).then((snapshot) => snapshot.val()),
-    get(ref(database, `/data/statusList/bug-card`)).then((snapshot) => snapshot.val()),
-    get(ref(database, `/projects/${projectId}`)).then((snapshot) => snapshot.val()),
-    get(ref(database, '/data/bugpriorityList')).then((snapshot) => snapshot.val()),
-    get(ref(database, '/data/userAdminEmails')).then((snapshot) => snapshot.val())
+    dalService.config.getStatusList('task-card'),
+    dalService.config.getStatusList('bug-card'),
+    dalService.projects.getProject(projectId),
+    dalService.config.getBugPriorityList(),
+    dalService.config.getUserAdminEmails()
   ]);
   // Asegurar que userAdminEmails es siempre un array
   const userAdminEmailsArr = userAdminEmails
@@ -354,9 +351,8 @@ export function renderCardsByType(cards, condition, projectId) {
  */
 export async function getEpicList(projectId) {
   try {
-    const epicsRef = ref(database, `/cards/${projectId}/EPICS_${projectId}`);
-    const snapshot = await get(epicsRef);
-    const epicsData = snapshot.exists() ? snapshot.val() : {};
+    const epicsData = await dalService.cards.listCards(projectId, 'epic');
+    if (!epicsData) return [];
     // Mapear a array de objetos {id, title}
     return Object.entries(epicsData)
       .filter(([_, epic]) => !epic.deletedAt)
@@ -365,7 +361,7 @@ export async function getEpicList(projectId) {
         title: epic.title || (epic.cardId || id)
       }));
   } catch (error) {
-return [];
+    return [];
   }
 }
 
