@@ -1,12 +1,14 @@
 /**
  * Plan Service
- * Handles CRUD operations for development plans stored per project in Firebase Realtime Database,
+ * Handles CRUD operations for development plans via DAL,
  * plus calls to Cloud Functions for AI generation and task creation.
  *
  * Structure:
  * /plans/{projectId}/{planId}/
- *   title, objective, status, phases[], generatedTasks[], createdAt, createdBy, updatedAt
+ *   title, objective, content (markdown), phases[], generatedTasks[], createdAt, createdBy, updatedAt
  */
+
+import { dalService } from './dal-service.js';
 
 export const PLAN_STATUSES = ['draft', 'accepted'];
 
@@ -17,19 +19,14 @@ class PlanService {
   }
 
   /**
-   * Get Firebase modules dynamically
+   * Get Firebase modules for Cloud Functions and Auth only.
+   * RTDB operations go through DAL.
    */
-  async getFirebaseModules() {
+  async _getCloudModules() {
     const module = await import(
       /* @vite-ignore */ `${window.location.origin}/firebase-config.js`
     );
     return {
-      database: module.database,
-      ref: module.ref,
-      get: module.get,
-      set: module.set,
-      push: module.push,
-      remove: module.remove,
       auth: module.auth,
       functions: module.functions,
       httpsCallable: module.httpsCallable
@@ -51,19 +48,16 @@ class PlanService {
     }
 
     try {
-      const { database, ref, get } = await this.getFirebaseModules();
-      const plansRef = ref(database, `plans/${projectId}`);
-      const snapshot = await get(plansRef);
+      const data = await dalService.plans.getAll(projectId);
 
-      if (!snapshot.exists()) {
+      if (!data) {
         return [];
       }
 
-      const plans = [];
-      snapshot.forEach((child) => {
-        const plan = { _id: child.key, ...child.val() };
-        plans.push(plan);
-        this.cache.set(this._getCacheKey(projectId, plan._id), plan);
+      const plans = Object.entries(data).map(([key, val]) => {
+        const plan = { _id: key, ...val };
+        this.cache.set(this._getCacheKey(projectId, key), plan);
+        return plan;
       });
 
       // Sort: drafts first, then by updatedAt desc
@@ -100,15 +94,13 @@ class PlanService {
     }
 
     try {
-      const { database, ref, get } = await this.getFirebaseModules();
-      const planRef = ref(database, `plans/${projectId}/${planId}`);
-      const snapshot = await get(planRef);
+      const data = await dalService.plans.get(projectId, planId);
 
-      if (!snapshot.exists()) {
+      if (!data) {
         return null;
       }
 
-      const plan = { _id: planId, ...snapshot.val() };
+      const plan = { _id: planId, ...data };
       this.cache.set(cacheKey, plan);
       return plan;
     } catch (error) {
@@ -129,7 +121,7 @@ class PlanService {
     }
 
     try {
-      const { database, ref, set, push, get: fbGet, auth } = await this.getFirebaseModules();
+      const { auth } = await this._getCloudModules();
       const currentUser = auth.currentUser;
 
       if (!currentUser) {
@@ -142,16 +134,13 @@ class PlanService {
 
       let previousData = null;
       if (!isNew) {
-        const existingRef = ref(database, `plans/${projectId}/${planId}`);
-        const snap = await fbGet(existingRef);
-        if (snap.exists()) {
-          previousData = snap.val();
-        }
+        previousData = await dalService.plans.get(projectId, planId);
       }
 
       const data = {
         title: plan.title || 'Untitled Plan',
         objective: plan.objective || '',
+        content: plan.content || previousData?.content || '',
         status: plan.status || previousData?.status || 'draft',
         phases: plan.phases || [],
         updatedAt: now
@@ -176,9 +165,7 @@ class PlanService {
       if (isNew) {
         data.createdAt = now;
         data.createdBy = currentUser.email;
-        const plansRef = ref(database, `plans/${projectId}`);
-        const newRef = push(plansRef);
-        planId = newRef.key;
+        planId = await dalService.plans.create(projectId, data);
       } else {
         data.createdAt = previousData?.createdAt || now;
         data.createdBy = previousData?.createdBy || currentUser.email;
@@ -194,10 +181,9 @@ class PlanService {
             return phase;
           });
         }
-      }
 
-      const planRef = ref(database, `plans/${projectId}/${planId}`);
-      await set(planRef, data);
+        await dalService.plans.set(projectId, planId, data);
+      }
 
       const saved = { _id: planId, ...data };
       this.cache.set(this._getCacheKey(projectId, planId), saved);
@@ -208,28 +194,6 @@ class PlanService {
       console.error('Error saving plan:', error);
       throw error;
     }
-  }
-
-  /**
-   * Accept a plan (change status to accepted)
-   * @param {string} projectId
-   * @param {string} planId
-   * @returns {Promise<void>}
-   */
-  async accept(projectId, planId) {
-    const { database, ref, set } = await this.getFirebaseModules();
-    const now = new Date().toISOString();
-    await set(ref(database, `plans/${projectId}/${planId}/status`), 'accepted');
-    await set(ref(database, `plans/${projectId}/${planId}/updatedAt`), now);
-
-    // Update cache
-    const cacheKey = this._getCacheKey(projectId, planId);
-    if (this.cache.has(cacheKey)) {
-      const cached = this.cache.get(cacheKey);
-      cached.status = 'accepted';
-      cached.updatedAt = now;
-    }
-    this.projectCache.delete(projectId);
   }
 
   /**
@@ -244,9 +208,7 @@ class PlanService {
     }
 
     try {
-      const { database, ref, remove } = await this.getFirebaseModules();
-      const planRef = ref(database, `plans/${projectId}/${planId}`);
-      await remove(planRef);
+      await dalService.plans.remove(projectId, planId);
 
       this.cache.delete(this._getCacheKey(projectId, planId));
       this.projectCache.delete(projectId);
@@ -265,7 +227,7 @@ class PlanService {
    * @returns {Promise<Object>} Generated plan data
    */
   async generateWithAI(projectId, context, existingPlanJson) {
-    const { functions, httpsCallable } = await this.getFirebaseModules();
+    const { functions, httpsCallable } = await this._getCloudModules();
     const generateDevPlan = httpsCallable(functions, 'generateDevPlan');
     const params = { projectId, context };
     if (existingPlanJson) {
@@ -286,7 +248,7 @@ class PlanService {
    * @returns {Promise<Object>} { createdTasks, totalCreated }
    */
   async generateTasksFromPlan(projectId, planId) {
-    const { functions, httpsCallable } = await this.getFirebaseModules();
+    const { functions, httpsCallable } = await this._getCloudModules();
     const createTasksFn = httpsCallable(functions, 'createTasksFromPlan');
     const result = await createTasksFn({ projectId, planId });
     return result.data;
@@ -299,14 +261,14 @@ class PlanService {
    * @returns {Promise<Object>} { createdTasks, totalCreated, skippedTasks }
    */
   async regenerateTasksFromPlan(projectId, planId) {
-    const { functions, httpsCallable } = await this.getFirebaseModules();
+    const { functions, httpsCallable } = await this._getCloudModules();
     const regenerateFn = httpsCallable(functions, 'regenerateTasksFromPlan');
     const result = await regenerateFn({ projectId, planId });
     return result.data;
   }
 
   /**
-   * Refresh a plan's data from Firebase (after task generation, etc.)
+   * Refresh a plan's data from DAL (after task generation, etc.)
    * @param {string} projectId
    * @param {string} planId
    * @returns {Promise<Object>}
@@ -316,15 +278,13 @@ class PlanService {
     this.cache.delete(cacheKey);
     this.projectCache.delete(projectId);
 
-    const { database, ref, get } = await this.getFirebaseModules();
-    const planRef = ref(database, `plans/${projectId}/${planId}`);
-    const snapshot = await get(planRef);
+    const data = await dalService.plans.get(projectId, planId);
 
-    if (!snapshot.exists()) {
+    if (!data) {
       return null;
     }
 
-    const plan = { _id: planId, ...snapshot.val() };
+    const plan = { _id: planId, ...data };
     this.cache.set(cacheKey, plan);
     return plan;
   }
