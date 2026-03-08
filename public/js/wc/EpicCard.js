@@ -3,8 +3,7 @@ import { format, parse, isValid } from 'https://cdn.jsdelivr.net/npm/date-fns@3.
 import { BaseCard } from './base-card.js';
 import { EpicCardStyles } from './epic-card-styles.js';
 import { permissionService } from '../services/permission-service.js';
-import { database } from '../../firebase-config.js';
-import { ref, get } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+import { dalService } from '../services/dal-service.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
 import { modalStackService } from '../services/modal-stack-service.js';
 import { setupAutoCloseOnSave } from '../services/modal-service.js';
@@ -407,15 +406,12 @@ found = true;
 return;
     }
 
-    const projectRef = ref(database, `/projects/${this.projectId}`);
-
     try {
-const projectSnapshot = await get(projectRef);
+      const projectData = await dalService.projects.getProject(this.projectId);
 
       let stakeholders = [];
 
-      if (projectSnapshot.exists()) {
-        const projectData = projectSnapshot.val() || {};
+      if (projectData) {
         const stakeholdersData = projectData.stakeholders;
 if (Array.isArray(stakeholdersData)) {
           stakeholders = stakeholdersData.map(item => {

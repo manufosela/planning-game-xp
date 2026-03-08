@@ -1,7 +1,7 @@
 import { html } from 'https://cdn.jsdelivr.net/npm/lit@3.1.0/+esm';
 import { format, parse, isValid } from 'https://cdn.jsdelivr.net/npm/date-fns@3.6.0/+esm';
-import { ref, onValue } from 'https://www.gstatic.com/firebasejs/9.15.0/firebase-database.js';
-import { database, functions, httpsCallable } from '../../firebase-config.js';
+import { functions, httpsCallable } from '../../firebase-config.js';
+import { dalService } from '../services/dal-service.js';
 import { BaseCard } from './base-card.js';
 import { ProposalCardStyles } from './proposal-card-styles.js';
 import { developerBacklogService } from '../services/developer-backlog-service.js';
@@ -1182,10 +1182,9 @@ return;
    */
   async _loadEpics() {
     try {
-      const epicsRef = ref(database, `/cards/${this.projectId}/EPICS_${this.projectId}`);
-      onValue(epicsRef, (snapshot) => {
-        const epicsData = snapshot.val() || {};
-        const epics = Object.entries(epicsData).map(([id, epic]) => ({
+      dalService.cards.subscribeToSection(this.projectId, 'epic', (epicsData) => {
+        const data = epicsData || {};
+        const epics = Object.entries(data).map(([id, epic]) => ({
           id: epic.cardId || id,
           title: epic.title || (epic.cardId || id),
           description: epic.description || ''
@@ -1193,12 +1192,9 @@ return;
         // Añadir opción "Sin épica"
         this.epicList = [{ id: '', title: 'Sin épica' }, ...epics];
         this.requestUpdate('epic');
-      }, (error) => {
-this.epicList = [{ id: '', title: 'Error al cargar épicas' }];
-        this.requestUpdate('epic');
       });
     } catch (error) {
-this.epicList = [{ id: '', title: 'Error al cargar épicas' }];
+      this.epicList = [{ id: '', title: 'Error al cargar épicas' }];
       this.requestUpdate('epic');
     }
   }
@@ -1221,14 +1217,11 @@ this.epicList = [{ id: '', title: 'Error al cargar épicas' }];
         return;
       }
 
-      const projectRef = ref(database, `/projects/${this.projectId}`);
-      onValue(projectRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const projectData = snapshot.val();
-          this.projectScoringSystem = projectData.scoringSystem || '1-5';
-          this.requestUpdate();
-        }
-      }, { onlyOnce: true });
+      const projectData = await dalService.projects.getProject(this.projectId);
+      if (projectData) {
+        this.projectScoringSystem = projectData.scoringSystem || '1-5';
+        this.requestUpdate();
+      }
     } catch (error) {
 this.projectScoringSystem = '1-5';
     }

@@ -65,4 +65,8 @@ export class RtdbBacklogRepository extends BacklogRepository {
   subscribeToBacklog(developerId, callback) {
     return this._repo.subscribe(BacklogRepository.buildBacklogPath(developerId), callback);
   }
+
+  subscribeToBacklogItems(developerId, callback) {
+    return this._repo.subscribe(BacklogRepository.buildBacklogItemsPath(developerId), callback);
+  }
 }

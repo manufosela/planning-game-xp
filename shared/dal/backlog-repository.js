@@ -149,7 +149,18 @@ export class BacklogRepository {
   static get wipPath() { return '/wip'; }
   static get wipHistoryPath() { return '/wipHistory'; }
 
+  /**
+   * Subscribe to backlog items only for a developer.
+   * @param {string} developerId
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
+   */
+  subscribeToBacklogItems(developerId, callback) {
+    throw new Error('Not implemented: subscribeToBacklogItems()');
+  }
+
   static buildBacklogPath(developerId) { return `/developerBacklogs/${developerId}`; }
+  static buildBacklogItemsPath(developerId) { return `/developerBacklogs/${developerId}/items`; }
   static buildWipPath(developerId) { return `/wip/${developerId}`; }
   static buildWipHistoryPath(developerId) { return `/wipHistory/${developerId}`; }
 }

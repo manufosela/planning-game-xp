@@ -11,7 +11,8 @@ import { AiUsageStyles } from './ai-usage-styles.js';
 import { KANBAN_STATUS_COLORS_CSS } from '../config/theme-config.js';
 import { APP_CONSTANTS } from '../constants/app-constants.js';
 import { permissionService } from '../services/permission-service.js';
-import { database, ref, get, functions, httpsCallable, set as dbSet, auth, firebaseConfig } from '../../firebase-config.js';
+import { functions, httpsCallable, auth, firebaseConfig } from '../../firebase-config.js';
+import { dalService } from '../services/dal-service.js';
 import { normalizeDeveloperEntries, normalizeDeveloperEntry, buildDeveloperSelectOptions, getDeveloperKey } from '../utils/developer-normalizer.js';
 import { developerDirectory } from '../config/developer-directory.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
@@ -539,9 +540,9 @@ document.dispatchEvent(new CustomEvent('request-bugcard-data', {
     try {
       // Use entityDirectoryService to get developers with proper dev_XXX IDs
       await entityDirectoryService.waitForInit();
-      const [developers, projectSnapshot] = await Promise.all([
+      const [developers, projectData] = await Promise.all([
         entityDirectoryService.getProjectDevelopers(this.projectId),
-        get(ref(database, `/projects/${this.projectId}`))
+        dalService.projects.getProject(this.projectId)
       ]);
 
       // Convert to the format expected by the component
@@ -553,8 +554,7 @@ document.dispatchEvent(new CustomEvent('request-bugcard-data', {
 
       // Extract repositories from project
       let repositories = [];
-      if (projectSnapshot.exists()) {
-        const projectData = projectSnapshot.val();
+      if (projectData) {
         const repoUrl = projectData.repoUrl;
         if (Array.isArray(repoUrl) && repoUrl.length > 1) {
           repositories = repoUrl; // [{url, label}, ...]
@@ -2064,8 +2064,8 @@ this.attachment = '';
     }
 
     try {
-      const projectSnap = await get(ref(database, `/projects/${this.projectId}`));
-      this.iaEnabled = projectSnap.exists() && projectSnap.val().iaEnabled === true;
+      const projectData = await dalService.projects.getProject(this.projectId);
+      this.iaEnabled = projectData && projectData.iaEnabled === true;
     } catch (error) {
       this.iaEnabled = false;
     }
@@ -2745,8 +2745,8 @@ this.attachment = '';
         return;
       }
 
-      const projectSnap = await get(ref(database, `/projects/${this.projectId}`));
-      if (!projectSnap.exists() || !projectSnap.val().iaEnabled) {
+      const projectData = await dalService.projects.getProject(this.projectId);
+      if (!projectData || !projectData.iaEnabled) {
         this._showNotification('La IA no está habilitada para este proyecto', 'warning');
         return;
       }
@@ -2769,7 +2769,7 @@ this.attachment = '';
         used: false
       };
 
-      await dbSet(ref(database, `/ia/links/${token}`), linkData);
+      await dalService.config.createIaLink(token, linkData);
 
       const url = this._buildIaLinkUrl(token);
       this._copyToClipboard(url);

@@ -8,7 +8,8 @@ import { TaskCardStyles } from './task-card-styles.js';
 import { NotesStyles } from '../ui/styles/notes-styles.js';
 import { CommitsListStyles } from './commits-list-styles.js';
 import { AiUsageStyles } from './ai-usage-styles.js';
-import { ref, onValue, get, set as dbSet, database, auth, firebaseConfig, functions, httpsCallable } from '../../firebase-config.js';
+import { auth, firebaseConfig, functions, httpsCallable } from '../../firebase-config.js';
+import { dalService } from '../services/dal-service.js';
 import { KANBAN_STATUS_COLORS_CSS } from '../config/theme-config.js';
 import { permissionService } from '../services/permission-service.js';
 import { normalizeDeveloperEntries, normalizeDeveloperEntry, getDeveloperKey } from '../utils/developer-normalizer.js';
@@ -976,10 +977,9 @@ const fallbackStatusList = window.statusTasksList || {};
    */
   async _loadEpics() {
     try {
-      const epicsRef = ref(database, `/cards/${this.projectId}/EPICS_${this.projectId}`);
-      onValue(epicsRef, (snapshot) => {
-        const epicsData = snapshot.val() || {};
-        const allEpics = Object.entries(epicsData).map(this._mapEpicData.bind(this));
+      dalService.cards.subscribeToSection(this.projectId, 'epic', (epicsData) => {
+        const data = epicsData || {};
+        const allEpics = Object.entries(data).map(this._mapEpicData.bind(this));
         // Filter epics by year
         let filteredEpics = this._filterEpicsByYear(allEpics);
 
@@ -997,12 +997,9 @@ const fallbackStatusList = window.statusTasksList || {};
         // Add "Sin épica" option at the beginning
         this.epicList = [{ id: '', name: 'Sin épica' }, ...filteredEpics];
         this.requestUpdate('epic');
-      }, (error) => {
-this.epicList = [{ id: '', name: 'Error al cargar épicas' }];
-        this.requestUpdate('epic');
       });
     } catch (error) {
-this.epicList = [{ id: '', name: 'Error al cargar épicas' }];
+      this.epicList = [{ id: '', name: 'Error al cargar épicas' }];
       this.requestUpdate('epic');
     }
   }
@@ -1145,14 +1142,12 @@ this.stakeholders = [];
    * @private
    */
   async _fetchProjectData() {
-    const projectRef = ref(database, `/projects/${this.projectId}`);
-
     try {
       // Use entityDirectoryService for developers and stakeholders with proper IDs
       await entityDirectoryService.waitForInit();
 
-      const [projectSnapshot, projectDevelopers, projectStakeholders] = await Promise.all([
-        get(projectRef),
+      const [projectData, projectDevelopers, projectStakeholders] = await Promise.all([
+        dalService.projects.getProject(this.projectId),
         entityDirectoryService.getProjectDevelopers(this.projectId),
         entityDirectoryService.getProjectStakeholders(this.projectId)
       ]);
@@ -1173,8 +1168,7 @@ this.stakeholders = [];
       // Get scoring system and repositories from project
       let scoringSystem = '1-5';
       let repositories = [];
-      if (projectSnapshot.exists()) {
-        const projectData = projectSnapshot.val();
+      if (projectData) {
         scoringSystem = projectData.scoringSystem || '1-5';
 
         // Extract repositories: string (1 repo) or array (multiple)
@@ -4169,8 +4163,8 @@ this.repositoryLabel = newLabel;
         return;
       }
 
-      const projectSnap = await get(ref(database, `/projects/${this.projectId}`));
-      if (!projectSnap.exists() || !projectSnap.val().iaEnabled) {
+      const projectData = await dalService.projects.getProject(this.projectId);
+      if (!projectData || !projectData.iaEnabled) {
         this._showNotification('La IA no está habilitada para este proyecto', 'warning');
         return;
       }
@@ -4192,7 +4186,7 @@ this.repositoryLabel = newLabel;
         used: false
       };
 
-      await dbSet(ref(database, `/ia/links/${token}`), linkData);
+      await dalService.config.createIaLink(token, linkData);
 
       const url = this._buildIaLinkUrl(token);
       this._copyTaskUrl(url);

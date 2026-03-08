@@ -1,5 +1,5 @@
 import { LitElement, html, nothing } from 'https://unpkg.com/lit@3/index.js?module';
-import { database, ref, get, onValue, query, orderByChild, equalTo } from '../../firebase-config.js';
+import { dalService } from '../services/dal-service.js';
 import { sanitizeEmailForFirebase } from '../utils/email-sanitizer.js';
 import { QuickAccessIconsStyles } from './quick-access-icons-styles.js';
 
@@ -72,10 +72,8 @@ class QuickAccessIcons extends LitElement {
     if (!encodedEmail) return;
 
     try {
-      const userSnap = await get(ref(database, `/users/${encodedEmail}`));
-      if (!userSnap.exists()) return;
-
-      const userData = userSnap.val();
+      const userData = await dalService.entities.getUser(encodedEmail);
+      if (!userData) return;
       this._developerId = userData.developerId || '';
       this._stakeholderId = userData.stakeholderId || '';
       this._userProjects = userData.projects || {};
@@ -92,16 +90,8 @@ class QuickAccessIcons extends LitElement {
   }
 
   _subscribeBacklog() {
-    const backlogRef = ref(database, `/developerBacklogs/${this._developerId}/items`);
-    const unsub = onValue(backlogRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const items = snapshot.val();
-        this.backlogCount = typeof items === 'object' ? Object.keys(items).length : 0;
-      } else {
-        this.backlogCount = 0;
-      }
-    }, (error) => {
-      console.error('[QuickAccessIcons] Backlog subscription error:', error.code);
+    const unsub = dalService.backlogs.subscribeToBacklogItems(this._developerId, (items) => {
+      this.backlogCount = items && typeof items === 'object' ? Object.keys(items).length : 0;
     });
     this._unsubscribers.push(unsub);
   }
@@ -111,72 +101,36 @@ class QuickAccessIcons extends LitElement {
       (pid) => this._userProjects[pid]?.stakeholder === true
     );
 
-    for (const projectId of projectIds) {
-      const taskQuery = query(
-        ref(database, `/views/task-list/${projectId}`),
-        orderByChild('status'),
-        equalTo('To Validate')
-      );
-      const unsub = onValue(taskQuery, () => {
-        this._recalcToValidate();
-      }, (error) => {
-        console.error(`[QuickAccessIcons] To Validate subscription error for ${projectId}:`, error.code);
-      });
-      this._unsubscribers.push(unsub);
+    // Store per-project counts so subscriptions can update independently
+    this._toValidateCounts = {};
 
-      const bugQuery = query(
-        ref(database, `/views/bug-list/${projectId}`),
-        orderByChild('status'),
-        equalTo('To Validate')
-      );
-      const unsubBug = onValue(bugQuery, () => {
-        this._recalcToValidate();
-      }, (error) => {
-        console.error(`[QuickAccessIcons] Bug To Validate subscription error for ${projectId}:`, error.code);
+    for (const projectId of projectIds) {
+      const unsubTask = dalService.cards.subscribeToSection(projectId, 'task', (tasks) => {
+        const count = tasks
+          ? Object.values(tasks).filter(
+            (t) => t.status === 'To Validate' && t.validator === this._stakeholderId
+          ).length
+          : 0;
+        this._toValidateCounts[`${projectId}-task`] = count;
+        this._updateToValidateTotal();
+      });
+      this._unsubscribers.push(unsubTask);
+
+      const unsubBug = dalService.cards.subscribeToSection(projectId, 'bug', (bugs) => {
+        const count = bugs
+          ? Object.values(bugs).filter(
+            (b) => b.status === 'To Validate' && b.validator === this._stakeholderId
+          ).length
+          : 0;
+        this._toValidateCounts[`${projectId}-bug`] = count;
+        this._updateToValidateTotal();
       });
       this._unsubscribers.push(unsubBug);
     }
   }
 
-  async _recalcToValidate() {
-    const projectIds = Object.keys(this._userProjects).filter(
-      (pid) => this._userProjects[pid]?.stakeholder === true
-    );
-
-    let total = 0;
-    for (const projectId of projectIds) {
-      try {
-        const taskQuery = query(
-          ref(database, `/views/task-list/${projectId}`),
-          orderByChild('status'),
-          equalTo('To Validate')
-        );
-        const taskSnap = await get(taskQuery);
-        if (taskSnap.exists()) {
-          const tasks = taskSnap.val();
-          total += Object.values(tasks).filter(
-            (t) => t.validator === this._stakeholderId
-          ).length;
-        }
-
-        const bugQuery = query(
-          ref(database, `/views/bug-list/${projectId}`),
-          orderByChild('status'),
-          equalTo('To Validate')
-        );
-        const bugSnap = await get(bugQuery);
-        if (bugSnap.exists()) {
-          const bugs = bugSnap.val();
-          total += Object.values(bugs).filter(
-            (b) => b.validator === this._stakeholderId
-          ).length;
-        }
-      } catch (_) {
-        // Permission denied on some projects is expected
-      }
-    }
-
-    this.toValidateCount = total;
+  _updateToValidateTotal() {
+    this.toValidateCount = Object.values(this._toValidateCounts || {}).reduce((sum, c) => sum + c, 0);
   }
 
   _navigateBacklog() {

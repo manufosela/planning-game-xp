@@ -1,5 +1,5 @@
 import { LitElement, html } from 'https://unpkg.com/lit@3/index.js?module';
-import { database, ref, onValue, update } from '../../firebase-config.js';
+import { dalService } from '../services/dal-service.js';
 import { sanitizeEmailForFirebase } from '../utils/email-sanitizer.js';
 import { NotificationBellStyles } from './notification-bell-styles.js';
 
@@ -92,43 +92,34 @@ return;
         }
 
         this.currentUserKey = userKey;
-        const notificationsRef = ref(database, `notifications/${userKey}`);
-this.unsubscribe = onValue(notificationsRef, (snapshot) => {
+        this.unsubscribe = dalService.notifications.subscribeToNotifications(userKey, (data) => {
             const notifications = [];
             let notificationsWithUrl = 0;
-            
-            if (snapshot.exists()) {
-                snapshot.forEach((childSnapshot) => {
-                    const notification = {
-                        id: childSnapshot.key,
-                        ...childSnapshot.val()
-                    };
-                    
-                    // Solo contar las que tienen URL para el log consolidado
+
+            if (data) {
+                for (const [id, val] of Object.entries(data)) {
+                    const notification = { id, ...val };
                     if (notification.url) {
                         notificationsWithUrl++;
                     }
-                    
                     notifications.push(notification);
-                });
+                }
             }
-            
+
             // Ordenar por timestamp descendente (más recientes primero)
             notifications.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-            
+
             this.notifications = notifications;
             this.unreadCount = notifications.filter(n => !n.read).length;
-            
+
             // Log consolidado más limpio - solo cuando hay cambios significativos
             if (this.previousUnreadCount !== this.unreadCount || notifications.length !== this.previousNotificationCount) {
-this.previousUnreadCount = this.unreadCount;
+                this.previousUnreadCount = this.unreadCount;
                 this.previousNotificationCount = notifications.length;
             }
-            
+
             this.requestUpdate();
-        }, (error) => {
-            console.error('NotificationBell: Error loading notifications', error.code);
-});
+        });
 
         this.isInitialized = true;
     }
@@ -148,9 +139,8 @@ this.previousUnreadCount = this.unreadCount;
     async markAsRead(notification) {
         if (!notification.read && this.currentUser?.email) {
             const userKey = this.sanitizeEmail(this.currentUser.email);
-            const notificationRef = ref(database, `notifications/${userKey}/${notification.id}`);
             try {
-                await update(notificationRef, { read: true });
+                await dalService.notifications.markAsRead(userKey, notification.id);
             } catch (error) {
                 console.error('NotificationBell: Failed to mark notification as read', error.code);
             }
@@ -165,8 +155,7 @@ this.previousUnreadCount = this.unreadCount;
 
         try {
             for (const notification of unreadNotifications) {
-                const notificationRef = ref(database, `notifications/${userKey}/${notification.id}`);
-                await update(notificationRef, { read: true });
+                await dalService.notifications.markAsRead(userKey, notification.id);
             }
         } catch (error) {
             console.error('NotificationBell: Failed to mark all notifications as read', error.code);
