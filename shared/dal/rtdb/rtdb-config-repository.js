@@ -47,6 +47,14 @@ export class RtdbConfigRepository extends ConfigRepository {
     return this._repo.read('/appConfig/currentVersion');
   }
 
+  async setCurrentVersion(version) {
+    await this._repo.write('/appConfig/currentVersion', version);
+  }
+
+  subscribeToCurrentVersion(callback) {
+    return this._repo.subscribe('/appConfig/currentVersion', callback);
+  }
+
   async getAppAdmins(projectName) {
     return this._repo.read(`/data/appAdmins/${projectName}`);
   }
@@ -73,6 +81,10 @@ export class RtdbConfigRepository extends ConfigRepository {
 
   async getUserAdminEmails() {
     return this._repo.read('/data/userAdminEmails');
+  }
+
+  async getAllProjectsByUser() {
+    return this._repo.read('/data/projectsByUser');
   }
 
   async getUserProjects(encodedEmail) {
@@ -125,5 +137,49 @@ export class RtdbConfigRepository extends ConfigRepository {
 
   async createIaLink(token, data) {
     return this._repo.write(`/ia/links/${token}`, data);
+  }
+
+  async getRelEmailUser() {
+    return this._repo.read('/data/relEmailUser');
+  }
+
+  async getWipTimelineState() {
+    return this._repo.read('/data/wipTimelineState');
+  }
+
+  async setWipTimelineState(data) {
+    await this._repo.write('/data/wipTimelineState', data);
+  }
+
+  async getAllSuites() {
+    return this._repo.read('/data/suites');
+  }
+
+  subscribeToProjects(callback) {
+    return this._repo.subscribe('/projects', callback);
+  }
+
+  subscribeToProjectsByUser(callback) {
+    return this._repo.subscribe('/data/projectsByUser', callback);
+  }
+
+  subscribeToRelEmailUser(callback) {
+    return this._repo.subscribe('/data/relEmailUser', callback);
+  }
+
+  subscribeToStatusLists(callback) {
+    return this._repo.subscribe('/data/statusList', callback);
+  }
+
+  subscribeToAllSuites(callback) {
+    return this._repo.subscribe('/data/suites', callback);
+  }
+
+  subscribeToWipTimelineState(callback) {
+    return this._repo.subscribe('/data/wipTimelineState', callback);
+  }
+
+  async getDevelopers() {
+    return this._repo.read('/data/developers');
   }
 }

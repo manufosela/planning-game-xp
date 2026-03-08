@@ -10,7 +10,7 @@
  * - All other tasks → Development
  */
 
-import { database, ref, get } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
 import { isWorkday } from '../utils/workday-utils.js';
 
 const HOURS_PER_DAY = 8;
@@ -84,8 +84,7 @@ export class ReportHoursService {
    * @returns {Promise<Object|null>}
    */
   async _loadDeveloperGroups() {
-    const snapshot = await get(ref(database, '/data/developerGroups'));
-    return snapshot.exists() ? snapshot.val() : null;
+    return dalService.config.getDeveloperGroups();
   }
 
   /**
@@ -93,8 +92,7 @@ export class ReportHoursService {
    * @returns {Promise<Object>}
    */
   async _loadDeveloperNames() {
-    const snapshot = await get(ref(database, '/data/developers'));
-    return snapshot.exists() ? snapshot.val() : {};
+    return (await dalService.config.getDevelopers()) || {};
   }
 
   /**
@@ -102,8 +100,7 @@ export class ReportHoursService {
    * @returns {Promise<Object|null>}
    */
   async _loadProjects() {
-    const snapshot = await get(ref(database, '/projects'));
-    return snapshot.exists() ? snapshot.val() : null;
+    return dalService.projects.listProjects();
   }
 
   /**
@@ -136,9 +133,8 @@ export class ReportHoursService {
    * Load a card section from Firebase
    */
   async _loadSection(projectId, section) {
-    const path = `/cards/${projectId}/${section}_${projectId}`;
-    const snapshot = await get(ref(database, path));
-    return snapshot.exists() ? snapshot.val() : null;
+    const type = section === 'TASKS' ? 'task' : section === 'BUGS' ? 'bug' : section.toLowerCase();
+    return dalService.cards.listCards(projectId, type);
   }
 
   /**
@@ -147,10 +143,8 @@ export class ReportHoursService {
   async _loadEpicsFromProjects(projectIds) {
     const epicCache = {};
     const promises = projectIds.map(async (projectId) => {
-      const path = `/cards/${projectId}/EPICS_${projectId}`;
-      const snapshot = await get(ref(database, path));
-      if (snapshot.exists()) {
-        const epics = snapshot.val();
+      const epics = await dalService.cards.listCards(projectId, 'epic');
+      if (epics) {
         for (const [epicId, epic] of Object.entries(epics)) {
           epicCache[epicId] = epic;
         }

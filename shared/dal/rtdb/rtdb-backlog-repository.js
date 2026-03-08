@@ -69,4 +69,24 @@ export class RtdbBacklogRepository extends BacklogRepository {
   subscribeToBacklogItems(developerId, callback) {
     return this._repo.subscribe(BacklogRepository.buildBacklogItemsPath(developerId), callback);
   }
+
+  async transactionBacklog(developerId, updateFn) {
+    return this._repo.transaction(BacklogRepository.buildBacklogPath(developerId), updateFn);
+  }
+
+  async getBacklogItem(developerId, cardKey) {
+    return this._repo.read(BacklogRepository.buildBacklogItemPath(developerId, cardKey));
+  }
+
+  async setBacklogItem(developerId, cardKey, data) {
+    await this._repo.write(BacklogRepository.buildBacklogItemPath(developerId, cardKey), data);
+  }
+
+  async setBacklogOrder(developerId, order) {
+    await this._repo.write(BacklogRepository.buildBacklogOrderPath(developerId), order);
+  }
+
+  subscribeToAllBacklogs(callback) {
+    return this._repo.subscribe(BacklogRepository.backlogsPath, callback);
+  }
 }

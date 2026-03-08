@@ -155,5 +155,16 @@ export class EntityRepository {
   static buildDeveloperPath(developerId) { return `/data/developers/${developerId}`; }
   static buildStakeholderPath(stakeholderId) { return `/data/stakeholders/${stakeholderId}`; }
   static buildUserPath(encodedEmail) { return `/users/${encodedEmail}`; }
+  static buildLoginHistoryPath(encodedEmail) { return `/loginHistory/${encodedEmail}`; }
   static get trashUsersPath() { return '/trash/users'; }
+
+  /**
+   * Get login history for a user (latest entries).
+   * @param {string} encodedEmail
+   * @param {number} limit - Max entries to return
+   * @returns {Promise<Array>} Login history entries sorted by timestamp desc
+   */
+  async getLoginHistory(encodedEmail, limit = 50) {
+    throw new Error('Not implemented: getLoginHistory()');
+  }
 }

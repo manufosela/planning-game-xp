@@ -1,4 +1,4 @@
-import { ref, push, set, database } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
 import { sanitizeEmailForFirebase } from '../utils/email-sanitizer.js';
 import { pushNotificationServicePromise } from './push-notification-service.js';
 import { entityDirectoryService } from './entity-directory-service.js';
@@ -49,24 +49,22 @@ return userIdentifier
     async createNotification(userIdentifier, notification) {
         try {
             const userKey = await this.getUserKey(userIdentifier);
-            const notificationsRef = ref(database, `notifications/${userKey}`);
-            const newNotificationRef = push(notificationsRef);
-            
+
             const notificationData = {
-                id: newNotificationRef.key,
                 title: notification.title || 'Notificación',
                 message: notification.message || notification.body || 'Sin mensaje',
                 type: notification.type || 'info',
                 read: false,
-                timestamp: Date.now(), // Usar timestamp simple en lugar de serverTimestamp para mayor compatibilidad
-                url: notification.url || null, // Añadir la URL
+                timestamp: Date.now(),
+                url: notification.url || null,
                 data: notification.data || {},
                 projectId: notification.projectId || null,
                 taskId: notification.taskId || null,
                 bugId: notification.bugId || null
             };
 
-            await set(newNotificationRef, notificationData);
+            const notificationId = await dalService.notifications.addNotification(userKey, notificationData);
+            notificationData.id = notificationId;
             
             // Enviar push notification utilizando el PushNotificationService
             

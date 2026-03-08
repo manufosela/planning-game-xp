@@ -106,6 +106,24 @@ export class ConfigRepository {
   }
 
   /**
+   * Set current app version.
+   * @param {string} version
+   * @returns {Promise<void>}
+   */
+  async setCurrentVersion(version) {
+    throw new Error('Not implemented: setCurrentVersion()');
+  }
+
+  /**
+   * Subscribe to app version changes.
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
+   */
+  subscribeToCurrentVersion(callback) {
+    throw new Error('Not implemented: subscribeToCurrentVersion()');
+  }
+
+  /**
    * Get app admins for a project.
    * @param {string} projectName
    * @returns {Promise<Object|null>}
@@ -163,6 +181,14 @@ export class ConfigRepository {
    */
   async getUserAdminEmails() {
     throw new Error('Not implemented: getUserAdminEmails()');
+  }
+
+  /**
+   * Get all projects-by-user data.
+   * @returns {Promise<Object|null>}
+   */
+  async getAllProjectsByUser() {
+    throw new Error('Not implemented: getAllProjectsByUser()');
   }
 
   /**
@@ -253,6 +279,60 @@ export class ConfigRepository {
 
   async createIaLink(token, data) {
     throw new Error('Not implemented: createIaLink()');
+  }
+
+  // --- Rel email user ---
+
+  async getRelEmailUser() {
+    throw new Error('Not implemented: getRelEmailUser()');
+  }
+
+  // --- WIP timeline state ---
+
+  async getWipTimelineState() {
+    throw new Error('Not implemented: getWipTimelineState()');
+  }
+
+  async setWipTimelineState(data) {
+    throw new Error('Not implemented: setWipTimelineState()');
+  }
+
+  // --- All suites ---
+
+  async getAllSuites() {
+    throw new Error('Not implemented: getAllSuites()');
+  }
+
+  // --- Subscribe methods for data-bus paths ---
+
+  subscribeToProjects(callback) {
+    throw new Error('Not implemented: subscribeToProjects()');
+  }
+
+  subscribeToProjectsByUser(callback) {
+    throw new Error('Not implemented: subscribeToProjectsByUser()');
+  }
+
+  subscribeToRelEmailUser(callback) {
+    throw new Error('Not implemented: subscribeToRelEmailUser()');
+  }
+
+  subscribeToStatusLists(callback) {
+    throw new Error('Not implemented: subscribeToStatusLists()');
+  }
+
+  subscribeToAllSuites(callback) {
+    throw new Error('Not implemented: subscribeToAllSuites()');
+  }
+
+  subscribeToWipTimelineState(callback) {
+    throw new Error('Not implemented: subscribeToWipTimelineState()');
+  }
+
+  // --- Developers data ---
+
+  async getDevelopers() {
+    throw new Error('Not implemented: getDevelopers()');
   }
 
   static get globalBasePath() { return '/global'; }

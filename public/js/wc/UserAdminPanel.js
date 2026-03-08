@@ -8,7 +8,8 @@
  */
 import { LitElement, html, nothing } from 'https://cdn.jsdelivr.net/npm/lit@3.0.2/+esm';
 import { UserAdminPanelStyles } from './user-admin-panel-styles.js';
-import { functions, database, ref, get, query, orderByChild, limitToLast, httpsCallable } from '/firebase-config.js';
+import { functions, httpsCallable } from '/firebase-config.js';
+import { dalService } from '/js/services/dal-service.js';
 import { encodeEmailForFirebase } from '/js/utils/email-sanitizer.js';
 import './MultiSelect.js';
 
@@ -101,10 +102,8 @@ class UserAdminPanel extends LitElement {
   }
 
   async _loadProjects() {
-    const projectsRef = ref(database, '/projects');
-    const snapshot = await get(projectsRef);
-    if (snapshot.exists()) {
-      const projectsData = snapshot.val();
+    const projectsData = await dalService.projects.listProjects();
+    if (projectsData) {
       this.projects = Object.keys(projectsData).sort();
       this._projectsWithApps = new Set(
         Object.entries(projectsData)
@@ -391,19 +390,7 @@ class UserAdminPanel extends LitElement {
 
     try {
       const encodedEmail = encodeEmailForFirebase(user.email.toLowerCase());
-      const historyRef = query(
-        ref(database, `/loginHistory/${encodedEmail}`),
-        orderByChild('timestamp'),
-        limitToLast(50)
-      );
-      const snapshot = await get(historyRef);
-      if (snapshot.exists()) {
-        const entries = [];
-        snapshot.forEach((child) => {
-          entries.push({ id: child.key, ...child.val() });
-        });
-        this._loginHistoryEntries = entries.reverse();
-      }
+      this._loginHistoryEntries = await dalService.entities.getLoginHistory(encodedEmail, 50);
     } catch (error) {
       console.error('Error loading login history:', error);
       this._notify('Error loading login history', 'error');

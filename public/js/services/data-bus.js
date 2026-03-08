@@ -1,17 +1,8 @@
-import { database, ref, get, onValue } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
 import { entityDirectoryService } from './entity-directory-service.js';
 
 const SESSION_KEY = 'pgxp-data-cache';
 const TTL_MS = 24 * 60 * 60 * 1000; // 1 día
-
-const PATHS = {
-  projects: '/projects',
-  projectsByUser: '/data/projectsByUser',
-  relEmailUser: '/data/relEmailUser',
-  statusList: '/data/statusList',
-  suites: '/data/suites',
-  wipTimelineState: '/data/wipTimelineState'
-};
 
 class DataBus {
   constructor() {
@@ -97,10 +88,23 @@ sessionStorage.removeItem(SESSION_KEY);
 
   async _preload() {
     try {
-      const entries = Object.entries(PATHS);
-      const results = await Promise.all(entries.map(async ([key, path]) => {
-        const snap = await get(ref(database, path));
-        return [key, snap.exists() ? snap.val() : null];
+      const loaders = {
+        projects: () => dalService.projects.listProjects(),
+        projectsByUser: () => dalService.config.getAllProjectsByUser(),
+        relEmailUser: () => dalService.config.getRelEmailUser(),
+        statusList: () => dalService.config.getAllStatusLists(),
+        suites: () => dalService.config.getAllSuites(),
+        wipTimelineState: () => dalService.config.getWipTimelineState(),
+      };
+
+      const entries = Object.entries(loaders);
+      const results = await Promise.all(entries.map(async ([key, loader]) => {
+        try {
+          const data = await loader();
+          return [key, data];
+        } catch {
+          return [key, null];
+        }
       }));
 
       for (const [key, value] of results) {
@@ -116,9 +120,18 @@ sessionStorage.removeItem(SESSION_KEY);
     this._listeners.forEach(unsub => unsub());
     this._listeners = [];
 
-    Object.entries(PATHS).forEach(([key, path]) => {
-      const unsub = onValue(ref(database, path), (snapshot) => {
-        this._cache[key] = snapshot.exists() ? snapshot.val() : {};
+    const subscribers = {
+      projects: (cb) => dalService.config.subscribeToProjects(cb),
+      projectsByUser: (cb) => dalService.config.subscribeToProjectsByUser(cb),
+      relEmailUser: (cb) => dalService.config.subscribeToRelEmailUser(cb),
+      statusList: (cb) => dalService.config.subscribeToStatusLists(cb),
+      suites: (cb) => dalService.config.subscribeToAllSuites(cb),
+      wipTimelineState: (cb) => dalService.config.subscribeToWipTimelineState(cb),
+    };
+
+    Object.entries(subscribers).forEach(([key, subscribeFn]) => {
+      const unsub = subscribeFn((data) => {
+        this._cache[key] = data || {};
         this._persist();
       });
       this._listeners.push(unsub);
@@ -206,12 +219,12 @@ sessionStorage.removeItem(SESSION_KEY);
     }
     const promise = (async () => {
       try {
-        const snap = await get(ref(database, `/projects/${projectId}`));
-        if (snap.exists()) {
+        const projectData = await dalService.projects.getProject(projectId);
+        if (projectData) {
           this._cache.projects = this._cache.projects || {};
-          this._cache.projects[projectId] = snap.val() || {};
+          this._cache.projects[projectId] = projectData;
           this._persist();
-          return this._cache.projects[projectId];
+          return projectData;
         }
       } catch (error) {
         // Silently ignore project fetch errors

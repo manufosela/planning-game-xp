@@ -159,8 +159,60 @@ export class BacklogRepository {
     throw new Error('Not implemented: subscribeToBacklogItems()');
   }
 
+  /**
+   * Atomically update backlog using transaction.
+   * @param {string} developerId
+   * @param {Function} updateFn
+   * @returns {Promise<*>}
+   */
+  async transactionBacklog(developerId, updateFn) {
+    throw new Error('Not implemented: transactionBacklog()');
+  }
+
+  /**
+   * Get a single backlog item.
+   * @param {string} developerId
+   * @param {string} cardKey
+   * @returns {Promise<Object|null>}
+   */
+  async getBacklogItem(developerId, cardKey) {
+    throw new Error('Not implemented: getBacklogItem()');
+  }
+
+  /**
+   * Set a single backlog item.
+   * @param {string} developerId
+   * @param {string} cardKey
+   * @param {Object} data
+   * @returns {Promise<void>}
+   */
+  async setBacklogItem(developerId, cardKey, data) {
+    throw new Error('Not implemented: setBacklogItem()');
+  }
+
+  /**
+   * Set backlog order.
+   * @param {string} developerId
+   * @param {Array} order
+   * @returns {Promise<void>}
+   */
+  async setBacklogOrder(developerId, order) {
+    throw new Error('Not implemented: setBacklogOrder()');
+  }
+
+  /**
+   * Subscribe to all developer backlogs.
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
+   */
+  subscribeToAllBacklogs(callback) {
+    throw new Error('Not implemented: subscribeToAllBacklogs()');
+  }
+
   static buildBacklogPath(developerId) { return `/developerBacklogs/${developerId}`; }
   static buildBacklogItemsPath(developerId) { return `/developerBacklogs/${developerId}/items`; }
+  static buildBacklogItemPath(developerId, cardKey) { return `/developerBacklogs/${developerId}/items/${cardKey}`; }
+  static buildBacklogOrderPath(developerId) { return `/developerBacklogs/${developerId}/order`; }
   static buildWipPath(developerId) { return `/wip/${developerId}`; }
   static buildWipHistoryPath(developerId) { return `/wipHistory/${developerId}`; }
 }

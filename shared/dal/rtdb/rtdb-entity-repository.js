@@ -69,4 +69,16 @@ export class RtdbEntityRepository extends EntityRepository {
   async getTrashUsers() {
     return this._repo.read(EntityRepository.trashUsersPath);
   }
+
+  async getLoginHistory(encodedEmail, limit = 50) {
+    const data = await this._repo.read(EntityRepository.buildLoginHistoryPath(encodedEmail));
+    if (!data) return [];
+    const entries = Object.entries(data).map(([key, val]) => ({ id: key, ...val }));
+    entries.sort((a, b) => {
+      const tsA = a.timestamp || '';
+      const tsB = b.timestamp || '';
+      return tsA < tsB ? 1 : tsA > tsB ? -1 : 0;
+    });
+    return entries.slice(0, limit);
+  }
 }

@@ -1,4 +1,4 @@
-import { database, ref, get, set, runDbTransaction, onValue } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
 const normalize = (value) => (value || '').toString().trim();
 const isValidKey = (value) => {
   const key = normalize(value);
@@ -42,7 +42,7 @@ export const developerBacklogService = {
       addedAt: new Date().toISOString()
     };
 
-    await runDbTransaction(ref(database, `/developerBacklogs/${devKey}`), (current) => {
+    await dalService.backlogs.transactionBacklog(devKey, (current) => {
       const next = current && typeof current === 'object' ? { ...current } : {};
       const items = next.items && typeof next.items === 'object' ? { ...next.items } : {};
       items[cardKey] = payload;
@@ -65,7 +65,7 @@ return cardKey;
     const devKey = normalize(developerId);
     if (!isValidKey(devKey) || !cardKey) return;
 
-    await runDbTransaction(ref(database, `/developerBacklogs/${devKey}`), (current) => {
+    await dalService.backlogs.transactionBacklog(devKey, (current) => {
       if (!current || typeof current !== 'object') return current;
 
       const next = { ...current };
@@ -90,18 +90,15 @@ return cardKey;
     if (newOrder.some(k => !k)) return;
 
     const sanitized = dedupeOrder(newOrder);
-    await set(ref(database, `/developerBacklogs/${devKey}/order`), sanitized);
+    await dalService.backlogs.setBacklogOrder(devKey, sanitized);
 },
 
   async updateIfExists(developerId, cardData) {
     const devKey = normalize(developerId);
     if (!isValidKey(devKey)) return;
     const cardKey = cardData.cardKey || this.buildCardKey(cardData.projectId, cardData.cardType, cardData.cardId);
-    const itemRef = ref(database, `/developerBacklogs/${devKey}/items/${cardKey}`);
-    const snap = await get(itemRef);
-    if (!snap.exists()) return;
-
-    const current = snap.val() || {};
+    const current = await dalService.backlogs.getBacklogItem(devKey, cardKey);
+    if (!current) return;
     const updated = {
       ...current,
       title: cardData.title || current.title || cardData.cardId || '',
@@ -113,13 +110,11 @@ return cardKey;
       cardKey
     };
 
-    await set(itemRef, updated);
+    await dalService.backlogs.setBacklogItem(devKey, cardKey, updated);
 },
 
   subscribe(callback) {
-    const backlogRef = ref(database, '/developerBacklogs');
-    return onValue(backlogRef, (snapshot) => {
-      const data = snapshot.exists() ? snapshot.val() : {};
+    return dalService.backlogs.subscribeToAllBacklogs((data) => {
       callback(data || {});
     });
   }

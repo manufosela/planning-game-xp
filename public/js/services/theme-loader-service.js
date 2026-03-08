@@ -38,7 +38,7 @@
 
 import { ThemeManagerService } from './theme-manager-service.js';
 import { getContrastColor } from '../utils/color-utils.js';
-import { database, ref, get, set, onValue } from '../../firebase-config.js';
+import { dalService } from './dal-service.js';
 
 const CONFIG_PATH = '/theme-config.json';
 const RTDB_PATH = '/config/theme';
@@ -85,9 +85,9 @@ class ThemeLoader {
   async _loadFromSources() {
     // Try RTDB first
     try {
-      const snapshot = await get(ref(database, RTDB_PATH));
-      if (snapshot.exists()) {
-        return snapshot.val();
+      const data = await dalService.config.getTheme();
+      if (data) {
+        return data;
       }
     } catch {
       // RTDB unavailable, fall through to static fallback
@@ -112,7 +112,7 @@ class ThemeLoader {
    * @returns {Promise<void>}
    */
   async saveConfig(config) {
-    await set(ref(database, RTDB_PATH), config);
+    await dalService.config.setTheme(config);
     this.config = config;
     this.configLoadedAt = Date.now();
     this._cacheToLocalStorage(config);
@@ -126,10 +126,9 @@ class ThemeLoader {
       return;
     }
 
-    const configRef = ref(database, RTDB_PATH);
-    this._unsubscribe = onValue(configRef, (snapshot) => {
-      if (snapshot.exists()) {
-        this.config = snapshot.val();
+    this._unsubscribe = dalService.config.subscribeToTheme((data) => {
+      if (data) {
+        this.config = data;
         this.configLoadedAt = Date.now();
         this._cacheToLocalStorage(this.config);
         this.applyConfig(this.config);

@@ -1,6 +1,6 @@
-import { storage, database } from '../../firebase-config.js';
+import { storage } from '../../firebase-config.js';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js';
-import { ref as dbRef, update, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+import { dalService } from './dal-service.js';
 /**
  * Service for handling Firebase Storage video uploads for Sprint demos
  * Direct upload to Firebase Storage without Cloud Functions
@@ -142,7 +142,7 @@ reject(error);
         downloadUrl: uploadResult.downloadURL,
         publicUrl: uploadResult.downloadURL,
         size: uploadResult.size,
-        uploadedAt: serverTimestamp(),
+        uploadedAt: new Date().toISOString(),
         uploadedBy: userEmail,
         path: uploadResult.filePath,
         title: metadata.title || `Sprint ${metadata.sprintId} Demo`,
@@ -151,12 +151,9 @@ reject(error);
       };
 
       // Update the sprint card directly using its Firebase ID
-      const sprintPath = `cards/${metadata.projectId}/SPRINTS_${metadata.projectId}/${metadata.firebaseId}`;
-      const sprintRef = dbRef(database, sprintPath);
-      
-      await update(sprintRef, {
+      await dalService.cards.updateCard(metadata.projectId, 'sprint', metadata.firebaseId, {
         demoVideo: videoRef,
-        lastUpdated: serverTimestamp()
+        lastUpdated: new Date().toISOString()
       });
 
       // Update progress
@@ -199,12 +196,9 @@ reject(error);
       await deleteObject(storageReference);
 
       // Remove metadata from the sprint card directly using Firebase ID
-      const sprintPath = `cards/${projectId}/SPRINTS_${projectId}/${firebaseId}`;
-      const sprintRef = dbRef(database, sprintPath);
-      
-      await update(sprintRef, {
+      await dalService.cards.updateCard(projectId, 'sprint', firebaseId, {
         demoVideo: null,
-        lastUpdated: serverTimestamp()
+        lastUpdated: new Date().toISOString()
       });
 
       const result = {
