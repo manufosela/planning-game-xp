@@ -42,6 +42,12 @@
     </div>
 
     <div class="tab-content" id="sprint-tab">
+      <div class="sprint-range-controls" id="sprint-range-controls" style="display:none;">
+        <label>From:</label>
+        <select id="sprint-range-from"><option value="">All</option></select>
+        <label>To:</label>
+        <select id="sprint-range-to"><option value="">All</option></select>
+      </div>
       <div class="chart-container">
         <div id="sprint-charts-container">
           <div class="no-projects-message">
@@ -741,108 +747,214 @@ this.innerHTML = '<p class="error">Error loading projects</p>';
 
     async updateSprintCharts() {
       const container = document.getElementById('sprint-charts-container');
-if (this.selectedProjects.length === 0) {
+      const rangeControls = document.getElementById('sprint-range-controls');
+
+      if (this.selectedProjects.length === 0) {
         container.innerHTML = '<div class="no-projects-message">Select up to 3 projects to compare their sprint analytics</div>';
+        if (rangeControls) rangeControls.style.display = 'none';
         return;
       }
 
       container.innerHTML = '';
-      
+
       for (const [index, project] of this.selectedProjects.entries()) {
-try {
-          // Load sprint data like app-controller does
+        try {
           const { database, ref, get } = await import('/firebase-config.js');
           const sprintsRef = ref(database, `/cards/${project.id}/SPRINTS_${project.id}`);
           const sprintsSnapshot = await get(sprintsRef);
-          
-          if (sprintsSnapshot.exists()) {
-            const sprintData = sprintsSnapshot.val();
-            const selectedYear = this.selectedYear;
 
-            // Transform to expected format and filter by year
-            const allSprints = Object.entries(sprintData).map(([id, sprint]) => ({
-              title: sprint.title,
-              businessPoints: Number(sprint.businessPoints) || 0,
-              devPoints: Number(sprint.devPoints) || 0,
-              startDate: sprint.startDate,
-              endDate: sprint.endDate || sprint.estimatedEndDate
-            }));
-
-            // Filter sprints that have activity in the selected year
-            const sprints = allSprints.filter(sprint => {
-              const startDate = sprint.startDate ? new Date(sprint.startDate) : null;
-              const endDate = sprint.endDate ? new Date(sprint.endDate) : null;
-
-              if (!startDate && !endDate) return false;
-
-              const startYear = startDate ? startDate.getFullYear() : null;
-              const endYear = endDate ? endDate.getFullYear() : null;
-
-              // Sprint is in year if it starts, ends, or spans the year
-              const startsInYear = startYear === selectedYear;
-              const endsInYear = endYear === selectedYear;
-              const spansYear = startYear && endYear && startYear < selectedYear && endYear > selectedYear;
-
-              return startsInYear || endsInYear || spansYear;
-            });
-
-            // Get bugs data to calculate bugs by sprint
-            const bugsRef = ref(database, `/cards/${project.id}/BUGS_${project.id}`);
-            const bugsSnapshot = await get(bugsRef);
-            const bugs = bugsSnapshot.exists() ? Object.values(bugsSnapshot.val()) : [];
-
-            // Calculate bugs resolved by sprint
-            const bugsBySprint = sprints.map((sprint, idx) => {
-              if (!sprint.startDate || !sprint.endDate) return 0;
-
-              const start = new Date(sprint.startDate);
-              const end = new Date(sprint.endDate);
-
-              const bugsInSprint = bugs.filter(bug => {
-                const bugEnd = bug.endDate || bug.desiredDate || bug.estimatedEndDate;
-                if (!bugEnd) return false;
-
-                const bugEndDate = new Date(bugEnd);
-                return bugEndDate >= start && bugEndDate <= end;
-              });
-
-              return bugsInSprint.length;
-            });
-
+          if (!sprintsSnapshot.exists()) {
             const chartWrapper = document.createElement('div');
-            chartWrapper.className = 'chart-wrapper';
-            chartWrapper.innerHTML = `
-              <h3 class="chart-title" style="color: var(--project-color-${index + 1})">${project.name} (${selectedYear})</h3>
-              <sprint-points-chart
-                class="project-sprint-chart"
-                data-project-index="${index}">
-              </sprint-points-chart>
-            `;
-            container.appendChild(chartWrapper);
-
-            // Set the properties after the element is in the DOM
-            const sprintChart = chartWrapper.querySelector('sprint-points-chart');
-            if (sprintChart) {
-              if (sprints.length === 0) {
-                chartWrapper.querySelector('sprint-points-chart').remove();
-                chartWrapper.insertAdjacentHTML('beforeend', `<div class="no-data-message">No hay sprints con actividad en ${selectedYear}</div>`);
-              } else {
-                sprintChart.sprints = sprints;
-                sprintChart.bugsBySprint = bugsBySprint;
-              }
-            }
-          } else {
-const chartWrapper = document.createElement('div');
             chartWrapper.className = 'chart-wrapper';
             chartWrapper.innerHTML = `
               <h3 class="chart-title" style="color: var(--project-color-${index + 1})">${project.name}</h3>
               <div class="no-data-message">No sprint data available for this project</div>
             `;
             container.appendChild(chartWrapper);
+            continue;
           }
-          
+
+          const sprintData = sprintsSnapshot.val();
+          const selectedYear = this.selectedYear;
+
+          // Transform sprints and filter by year
+          const allSprints = Object.entries(sprintData).map(([id, sprint]) => ({
+            id,
+            cardId: sprint.cardId || id,
+            title: sprint.title,
+            businessPoints: Number(sprint.businessPoints) || 0,
+            devPoints: Number(sprint.devPoints) || 0,
+            startDate: sprint.startDate,
+            endDate: sprint.endDate || sprint.estimatedEndDate
+          }));
+
+          const sprints = allSprints.filter(sprint => {
+            const startDate = sprint.startDate ? new Date(sprint.startDate) : null;
+            const endDate = sprint.endDate ? new Date(sprint.endDate) : null;
+            if (!startDate && !endDate) return false;
+            const startYear = startDate ? startDate.getFullYear() : null;
+            const endYear = endDate ? endDate.getFullYear() : null;
+            return (startYear === selectedYear) || (endYear === selectedYear) ||
+                   (startYear && endYear && startYear < selectedYear && endYear > selectedYear);
+          });
+
+          // Apply sprint range filter
+          const rangeFrom = document.getElementById('sprint-range-from')?.value;
+          const rangeTo = document.getElementById('sprint-range-to')?.value;
+          let filteredSprints = sprints;
+          if (rangeFrom || rangeTo) {
+            const fromIdx = rangeFrom ? sprints.findIndex(s => s.cardId === rangeFrom || s.title === rangeFrom) : 0;
+            const toIdx = rangeTo ? sprints.findIndex(s => s.cardId === rangeTo || s.title === rangeTo) : sprints.length - 1;
+            if (fromIdx >= 0 && toIdx >= 0) {
+              filteredSprints = sprints.slice(Math.min(fromIdx, toIdx), Math.max(fromIdx, toIdx) + 1);
+            }
+          }
+
+          // Populate sprint range selectors (first project only)
+          if (index === 0 && sprints.length > 0 && rangeControls) {
+            rangeControls.style.display = 'flex';
+            const fromSelect = document.getElementById('sprint-range-from');
+            const toSelect = document.getElementById('sprint-range-to');
+            if (fromSelect && toSelect) {
+              const currentFrom = fromSelect.value;
+              const currentTo = toSelect.value;
+              fromSelect.innerHTML = '<option value="">All</option>' + sprints.map(s =>
+                `<option value="${s.cardId || s.title}" ${(s.cardId === currentFrom || s.title === currentFrom) ? 'selected' : ''}>${s.title}</option>`
+              ).join('');
+              toSelect.innerHTML = '<option value="">All</option>' + sprints.map(s =>
+                `<option value="${s.cardId || s.title}" ${(s.cardId === currentTo || s.title === currentTo) ? 'selected' : ''}>${s.title}</option>`
+              ).join('');
+
+              // Attach change listeners (only once)
+              if (!this._sprintRangeListenersAttached) {
+                this._sprintRangeListenersAttached = true;
+                fromSelect.addEventListener('change', () => this.updateSprintCharts());
+                toSelect.addEventListener('change', () => this.updateSprintCharts());
+              }
+            }
+          }
+
+          // Load tasks to calculate completion rates per sprint
+          const tasksRef = ref(database, `/cards/${project.id}/TASKS_${project.id}`);
+          const tasksSnapshot = await get(tasksRef);
+          const allTasks = tasksSnapshot.exists() ? Object.values(tasksSnapshot.val()) : [];
+
+          // Load bugs data
+          const bugsRef = ref(database, `/cards/${project.id}/BUGS_${project.id}`);
+          const bugsSnapshot = await get(bugsRef);
+          const bugs = bugsSnapshot.exists() ? Object.values(bugsSnapshot.val()) : [];
+
+          // Calculate per-sprint metrics
+          const completedStatuses = ['Done', 'Done&Validated'];
+          const sprintMetrics = filteredSprints.map(sprint => {
+            const sprintTasks = allTasks.filter(t => t.sprint === sprint.cardId || t.sprint === sprint.id);
+            const completedTasks = sprintTasks.filter(t => completedStatuses.includes(t.status));
+            const completedDevPts = completedTasks.reduce((sum, t) => sum + (Number(t.devPoints) || 0), 0);
+            const totalDevPts = sprintTasks.reduce((sum, t) => sum + (Number(t.devPoints) || 0), 0);
+
+            // Bugs resolved in sprint date range
+            let bugsResolved = 0;
+            if (sprint.startDate && sprint.endDate) {
+              const start = new Date(sprint.startDate);
+              const end = new Date(sprint.endDate);
+              bugsResolved = bugs.filter(bug => {
+                const bugEnd = bug.endDate || bug.desiredDate || bug.estimatedEndDate;
+                if (!bugEnd) return false;
+                const d = new Date(bugEnd);
+                return d >= start && d <= end;
+              }).length;
+            }
+
+            return {
+              title: sprint.title,
+              totalTasks: sprintTasks.length,
+              completedTasks: completedTasks.length,
+              completionRate: sprintTasks.length > 0 ? Math.round((completedTasks.length / sprintTasks.length) * 100) : 0,
+              velocity: completedDevPts,
+              plannedDevPoints: totalDevPts,
+              bugsResolved
+            };
+          });
+
+          // Calculate velocity summary
+          const velocities = sprintMetrics.map(m => m.velocity).filter(v => v > 0);
+          const avgVelocity = velocities.length > 0 ? (velocities.reduce((a, b) => a + b, 0) / velocities.length).toFixed(1) : 0;
+          const avgCompletion = sprintMetrics.length > 0 ? Math.round(sprintMetrics.reduce((a, m) => a + m.completionRate, 0) / sprintMetrics.length) : 0;
+
+          // Velocity trend: compare second half vs first half
+          let trendLabel = '—';
+          let trendClass = 'neutral';
+          if (velocities.length >= 4) {
+            const mid = Math.floor(velocities.length / 2);
+            const firstHalf = velocities.slice(0, mid).reduce((a, b) => a + b, 0) / mid;
+            const secondHalf = velocities.slice(mid).reduce((a, b) => a + b, 0) / (velocities.length - mid);
+            const change = ((secondHalf - firstHalf) / firstHalf * 100).toFixed(0);
+            if (secondHalf > firstHalf * 1.05) {
+              trendLabel = `+${change}%`;
+              trendClass = 'positive';
+            } else if (secondHalf < firstHalf * 0.95) {
+              trendLabel = `${change}%`;
+              trendClass = 'negative';
+            } else {
+              trendLabel = 'Stable';
+              trendClass = 'neutral';
+            }
+          }
+
+          // Build wrapper with velocity summary + chart
+          const chartWrapper = document.createElement('div');
+          chartWrapper.className = 'chart-wrapper';
+
+          const summaryHTML = filteredSprints.length > 0 ? `
+            <div class="velocity-summary">
+              <div class="velocity-card">
+                <span class="velocity-label">Avg Velocity</span>
+                <span class="velocity-value">${avgVelocity}</span>
+                <span class="velocity-unit">pts/sprint</span>
+              </div>
+              <div class="velocity-card">
+                <span class="velocity-label">Completion Rate</span>
+                <span class="velocity-value">${avgCompletion}%</span>
+                <span class="velocity-unit">${sprintMetrics.length} sprints</span>
+              </div>
+              <div class="velocity-card">
+                <span class="velocity-label">Velocity Trend</span>
+                <span class="velocity-value trend-${trendClass}">${trendLabel}</span>
+                <span class="velocity-unit">${velocities.length >= 4 ? 'recent vs earlier' : 'need 4+ sprints'}</span>
+              </div>
+            </div>
+            <div class="completion-bars">
+              ${sprintMetrics.map(m => `
+                <div class="completion-bar-item" title="${m.title}: ${m.completedTasks}/${m.totalTasks} tasks (${m.completionRate}%)">
+                  <span class="completion-bar-label">${m.title.replace(/^Sprint\s*/i, 'S')}</span>
+                  <div class="completion-bar-track">
+                    <div class="completion-bar-fill" style="width:${m.completionRate}%"></div>
+                  </div>
+                  <span class="completion-bar-pct">${m.completionRate}%</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : '';
+
+          chartWrapper.innerHTML = `
+            <h3 class="chart-title" style="color: var(--project-color-${index + 1})">${project.name} (${selectedYear})</h3>
+            ${summaryHTML}
+            <sprint-points-chart class="project-sprint-chart" data-project-index="${index}"></sprint-points-chart>
+          `;
+          container.appendChild(chartWrapper);
+
+          const sprintChart = chartWrapper.querySelector('sprint-points-chart');
+          if (sprintChart) {
+            if (filteredSprints.length === 0) {
+              sprintChart.remove();
+              chartWrapper.insertAdjacentHTML('beforeend', `<div class="no-data-message">No hay sprints con actividad en ${selectedYear}</div>`);
+            } else {
+              sprintChart.sprints = filteredSprints;
+              sprintChart.bugsBySprint = sprintMetrics.map(m => m.bugsResolved);
+            }
+          }
         } catch (error) {
-const chartWrapper = document.createElement('div');
+          const chartWrapper = document.createElement('div');
           chartWrapper.className = 'chart-wrapper';
           chartWrapper.innerHTML = `
             <h3 class="chart-title" style="color: var(--project-color-${index + 1})">${project.name}</h3>
@@ -2586,6 +2698,109 @@ const emptyMessage = document.getElementById('developerSprintChartEmpty');
   .chart-wrapper[data-project-index="2"] gantt-chart,
   .chart-wrapper[data-project-index="2"] sprint-points-chart {
     --chart-color: var(--project-color-3);
+  }
+
+  /* Sprint range controls */
+  .sprint-range-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-secondary, #f8f9fa);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+  }
+  .sprint-range-controls label {
+    font-weight: 500;
+    color: var(--text-secondary, #666);
+  }
+  .sprint-range-controls select {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    min-width: 120px;
+  }
+
+  /* Velocity summary cards */
+  .velocity-summary {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .velocity-card {
+    flex: 1;
+    background: var(--bg-secondary, #f8f9fa);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    border: 1px solid var(--border-color, #e5e7eb);
+  }
+  .velocity-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-secondary, #666);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+  }
+  .velocity-value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary, #1a1a2e);
+  }
+  .velocity-value.trend-positive { color: #059669; }
+  .velocity-value.trend-negative { color: #dc2626; }
+  .velocity-value.trend-neutral { color: var(--text-secondary, #666); }
+  .velocity-unit {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-muted, #999);
+  }
+
+  /* Completion rate bars */
+  .completion-bars {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: var(--bg-secondary, #f8f9fa);
+    border-radius: 8px;
+  }
+  .completion-bar-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 1 1 calc(50% - 0.4rem);
+    min-width: 200px;
+  }
+  .completion-bar-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #666);
+    min-width: 40px;
+    text-align: right;
+  }
+  .completion-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--border-color, #e5e7eb);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .completion-bar-fill {
+    height: 100%;
+    background: var(--brand-primary, #6366f1);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+  .completion-bar-pct {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary, #333);
+    min-width: 32px;
   }
 
 </style>
