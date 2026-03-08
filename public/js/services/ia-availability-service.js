@@ -1,8 +1,8 @@
 import { dalService } from './dal-service.js';
-import { IA_CONFIG } from '../../ia-config.js';
+
 class IaAvailabilityService {
   constructor() {
-    this.available = IA_CONFIG?.fallbackEnabled || true;
+    this.available = false;
     this.initialized = false;
     this._initPromise = null;
   }
@@ -24,14 +24,9 @@ class IaAvailabilityService {
   }
 
   async _loadAvailability() {
-    try {
-      const enabled = await dalService.config.getIAEnabled();
-      this.available = enabled;
-      this.initialized = true;
-    } catch (err) {
-      this.available = IA_CONFIG?.fallbackEnabled || true;
-      this.initialized = true;
-    }
+    const enabled = await dalService.config.getIAEnabled();
+    this.available = enabled;
+    this.initialized = true;
     return this.available;
   }
 }

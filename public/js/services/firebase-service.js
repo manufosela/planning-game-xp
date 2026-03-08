@@ -1,4 +1,4 @@
-// Firebase SDK imports: only for getRef(), subscribeToPath(), subscribeToCards() and Firestore counters.
+// Firebase SDK imports: only for getRef(), subscribeToPath() and Firestore counters.
 // All other RTDB operations go through dalService.
 import { database, ref, onValue, databaseFirestore, getDoc, setDoc, doc, runTransaction, auth, firebaseConfig, superAdminEmail } from '../../firebase-config.js';
 import { dalService } from './dal-service.js';
@@ -1610,9 +1610,8 @@ throw new Error(`FALLO CRÍTICO: No se pudieron crear contadores para ${projectI
         });
       }
     }
-    // Fallback for non-standard paths
-    const cardsRef = ref(database, cardPath);
-    return onValue(cardsRef, this._handleCardsSnapshot.bind(this, callback));
+    // Non-standard card path — reject explicitly
+    throw new Error(`subscribeToCards: unsupported path format "${cardPath}". Expected /cards/{projectId}/{SECTION}_{projectId}`);
   },
   /**
    * Obtiene las suites de QA para un proyecto.
@@ -1914,7 +1913,8 @@ throw new Error(`FALLO CRÍTICO: No se pudieron crear contadores para ${projectI
 
       return value.split(',').map(p => p.trim()).filter(p => p.length > 0);
     } catch (error) {
-      return null; // On error, allow access to all (fail open)
+      console.error('[FirebaseService] Error loading user projects, denying access:', error);
+      return []; // On error, deny access (fail closed)
     }
   },
 
@@ -1923,13 +1923,11 @@ throw new Error(`FALLO CRÍTICO: No se pudieron crear contadores para ${projectI
    * @returns {string} Comma-separated project names
    */
   async getDefaultProjects() {
-    try {
-      const value = await dalService.config.getDefaultProjects();
-      if (value) return value;
-    } catch (error) {
-      // Fall through to default
+    const value = await dalService.config.getDefaultProjects();
+    if (!value) {
+      throw new Error('No default projects configured in RTDB (/data/config/defaultProjects)');
     }
-    return APP_CONSTANTS.DEFAULT_USER_PROJECTS.join(', '); // Fallback from constants
+    return value;
   },
 
   /**

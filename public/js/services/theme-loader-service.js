@@ -40,8 +40,6 @@ import { ThemeManagerService } from './theme-manager-service.js';
 import { getContrastColor } from '../utils/color-utils.js';
 import { dalService } from './dal-service.js';
 
-const CONFIG_PATH = '/theme-config.json';
-const RTDB_PATH = '/config/theme';
 const LS_THEME_CONFIG_KEY = 'pgxp-theme-config';
 
 class ThemeLoader {
@@ -79,30 +77,15 @@ class ThemeLoader {
   }
 
   /**
-   * Try RTDB first, then fall back to static JSON
+   * Load theme from RTDB.
    * @returns {Promise<Object|null>}
    */
   async _loadFromSources() {
-    // Try RTDB first
-    try {
-      const data = await dalService.config.getTheme();
-      if (data) {
-        return data;
-      }
-    } catch {
-      // RTDB unavailable, fall through to static fallback
+    const data = await dalService.config.getTheme();
+    if (data) {
+      return data;
     }
-
-    // Fallback to static JSON
-    try {
-      const response = await fetch(CONFIG_PATH);
-      if (response.ok) {
-        return response.json();
-      }
-    } catch {
-      // Static file also unavailable
-    }
-
+    console.warn('[ThemeLoaderService] No theme config found in RTDB');
     return null;
   }
 
