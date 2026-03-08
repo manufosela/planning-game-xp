@@ -5,6 +5,7 @@ import os from 'os';
 
 const ROOT_DIR = path.resolve(import.meta.dirname, '../..');
 const SETUP_MCP_SCRIPT = path.resolve(ROOT_DIR, 'scripts/setup-mcp.cjs');
+const SETUP_MCP_HELPERS = path.resolve(ROOT_DIR, 'scripts/setup-mcp-helpers.cjs');
 const SETUP_SCRIPT = path.resolve(ROOT_DIR, 'scripts/setup.cjs');
 
 describe('MCP multi-instance setup', () => {
@@ -23,7 +24,6 @@ describe('MCP multi-instance setup', () => {
 
   it('should generate server name from instance name', () => {
     const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
-    // Verify the pattern: planning-game-{instanceName}
     expect(content).toContain('`planning-game-${instanceName}`');
   });
 
@@ -35,7 +35,6 @@ describe('MCP multi-instance setup', () => {
 
   it('should not modify existing MCP entries when adding new one', () => {
     const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
-    // Should only remove the specific serverName before re-adding
     expect(content).toContain('claude mcp remove');
     expect(content).toMatch(/remove.*serverName/s);
   });
@@ -46,9 +45,14 @@ describe('MCP multi-instance setup', () => {
     expect(pkg.scripts['setup:mcp']).toContain('setup-mcp.cjs');
   });
 
+  it('setup-mcp.cjs should import setupMcpUser from helpers', () => {
+    const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
+    expect(content).toContain("require('./setup-mcp-helpers.cjs')");
+    expect(content).toContain('setupMcpUser');
+  });
+
   it('setup.cjs should have full MCP setup in step 9', () => {
     const content = fs.readFileSync(SETUP_SCRIPT, 'utf8');
-    // Should contain the real implementation, not just a link to docs
     expect(content).toContain('claude mcp add');
     expect(content).toContain('MCP_INSTANCE_DIR');
     expect(content).toContain('smoke-test.js');
@@ -71,34 +75,81 @@ describe('MCP multi-instance setup', () => {
     expect(content).toContain('serviceAccountKey.json');
     expect(content).toContain('Firebase Console');
   });
+
+  it('setup.cjs should call setupMcpUser from helpers', () => {
+    const content = fs.readFileSync(SETUP_SCRIPT, 'utf8');
+    expect(content).toContain("require('./setup-mcp-helpers.cjs')");
+    expect(content).toContain('setupMcpUser');
+  });
 });
 
-describe('setup-mcp.cjs - mcp.user.json generation', () => {
-  it('should include fetchUsers function that reads from /users/', () => {
-    const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
+describe('setup-mcp-helpers.cjs - shared MCP user setup', () => {
+  it('helpers file should exist', () => {
+    expect(fs.existsSync(SETUP_MCP_HELPERS)).toBe(true);
+  });
+
+  it('should export fetchUsers and setupMcpUser', () => {
+    const content = fs.readFileSync(SETUP_MCP_HELPERS, 'utf8');
+    expect(content).toContain('module.exports');
+    expect(content).toContain('fetchUsers');
+    expect(content).toContain('setupMcpUser');
+  });
+
+  it('fetchUsers should read from /users/ model', () => {
+    const content = fs.readFileSync(SETUP_MCP_HELPERS, 'utf8');
     expect(content).toContain('async function fetchUsers');
     expect(content).toContain("/users'");
   });
 
-  it('should fallback to /projects/ if /users/ is empty', () => {
-    const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
+  it('fetchUsers should fallback to /projects/ if /users/ is empty', () => {
+    const content = fs.readFileSync(SETUP_MCP_HELPERS, 'utf8');
     expect(content).toContain("/projects'");
     expect(content).toContain('Fallback');
   });
 
-  it('should include stakeholderId in user data', () => {
-    const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
-    expect(content).toContain('stakeholderId');
-    expect(content).toContain('userData.stakeholderId');
+  it('fetchUsers should include stakeholderId', () => {
+    const content = fs.readFileSync(SETUP_MCP_HELPERS, 'utf8');
+    expect(content).toMatch(/devId:\s*userData\.developerId/);
+    expect(content).toMatch(/stakeholderId:\s*userData\.stakeholderId/);
   });
 
-  it('should include setupMcpUser function', () => {
-    const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
-    expect(content).toContain('async function setupMcpUser');
-    expect(content).toContain('mcp.user.json');
+  it('fetchUsers should skip inactive users', () => {
+    const content = fs.readFileSync(SETUP_MCP_HELPERS, 'utf8');
+    expect(content).toContain('userData.active === false');
   });
 
-  it('should call setupMcpUser before smoke test', () => {
+  it('setupMcpUser should accept options object', () => {
+    const content = fs.readFileSync(SETUP_MCP_HELPERS, 'utf8');
+    expect(content).toContain('{ question, print, instanceDir, keyPath, databaseURL }');
+  });
+
+  it('setupMcpUser should check existing mcp.user.json before overwriting', () => {
+    const content = fs.readFileSync(SETUP_MCP_HELPERS, 'utf8');
+    expect(content).toContain('Configuracion actual encontrada');
+    expect(content).toContain('Actualizar configuracion');
+  });
+
+  it('setupMcpUser should handle empty email gracefully', () => {
+    const content = fs.readFileSync(SETUP_MCP_HELPERS, 'utf8');
+    expect(content).toContain('Email vacio');
+  });
+
+  it('setupMcpUser should write all required fields', () => {
+    const content = fs.readFileSync(SETUP_MCP_HELPERS, 'utf8');
+    expect(content).toContain('developerId: matchedUser.devId');
+    expect(content).toContain('stakeholderId: matchedUser.stakeholderId');
+    expect(content).toContain('name: matchedUser.name');
+    expect(content).toContain('email: matchedUser.email');
+  });
+
+  it('setupMcpUser should display stakeholder info when found', () => {
+    const content = fs.readFileSync(SETUP_MCP_HELPERS, 'utf8');
+    expect(content).toContain('Stakeholder:');
+  });
+});
+
+describe('setup-mcp.cjs - setupMcpUser call order', () => {
+  it('setup-mcp.cjs should call setupMcpUser before smoke test', () => {
     const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
     const setupMcpUserCallIndex = content.indexOf('await setupMcpUser(');
     const smokeTestIndex = content.indexOf('smoke-test.js');
@@ -107,45 +158,17 @@ describe('setup-mcp.cjs - mcp.user.json generation', () => {
     expect(setupMcpUserCallIndex).toBeLessThan(smokeTestIndex);
   });
 
-  it('should write mcp.user.json with correct format', () => {
-    const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
-    // Must include all four fields in the userData object
-    expect(content).toContain('developerId: matchedUser.devId');
-    expect(content).toContain('stakeholderId: matchedUser.stakeholderId');
-    expect(content).toContain('name: matchedUser.name');
-    expect(content).toContain('email: matchedUser.email');
-  });
-
-  it('should check existing mcp.user.json before overwriting', () => {
-    const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
-    expect(content).toContain('Configuracion actual encontrada');
-    expect(content).toContain('Actualizar configuracion');
-  });
-
-  it('should handle empty email gracefully', () => {
-    const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
-    expect(content).toContain('Email vacio');
-  });
-
-  it('should display stakeholder info when found', () => {
-    const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
-    expect(content).toContain('Stakeholder:');
-  });
-
-  it('fetchUsers should return stakeholderId from /users/ model', () => {
-    const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
-    // Verify fetchUsers extracts stakeholderId
-    expect(content).toMatch(/devId:\s*userData\.developerId/);
-    expect(content).toMatch(/stakeholderId:\s*userData\.stakeholderId/);
-  });
-
-  it('fetchUsers should skip inactive users', () => {
-    const content = fs.readFileSync(SETUP_MCP_SCRIPT, 'utf8');
-    expect(content).toContain('userData.active === false');
+  it('setup.cjs should call setupMcpUser before smoke test', () => {
+    const content = fs.readFileSync(SETUP_SCRIPT, 'utf8');
+    const setupMcpUserCallIndex = content.indexOf('setupMcpUser(');
+    const smokeTestIndex = content.indexOf('smoke-test.js');
+    expect(setupMcpUserCallIndex).toBeGreaterThan(-1);
+    expect(smokeTestIndex).toBeGreaterThan(-1);
+    expect(setupMcpUserCallIndex).toBeLessThan(smokeTestIndex);
   });
 });
 
-describe('setup-mcp.cjs - mcp.user.json file operations', () => {
+describe('mcp.user.json file operations', () => {
   let tmpDir;
 
   beforeEach(() => {

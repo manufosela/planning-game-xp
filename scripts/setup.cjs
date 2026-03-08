@@ -579,7 +579,17 @@ class SetupWizard {
       return;
     }
 
-    // Step 5: Run smoke test
+    // Step 5: Configure mcp.user.json (developer identity)
+    const { setupMcpUser } = require('./setup-mcp-helpers.cjs');
+    await setupMcpUser({
+      question: (prompt, defaultValue) => this.question(prompt, defaultValue),
+      print: (msg) => this.print(msg),
+      instanceDir,
+      keyPath,
+      databaseURL
+    });
+
+    // Step 6: Run smoke test
     this.print('\n  Ejecutando test de verificación...');
     try {
       const smokeResult = execSync('node mcp/scripts/smoke-test.js', {
