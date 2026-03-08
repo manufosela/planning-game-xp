@@ -49,6 +49,7 @@ const { handleParseDocumentForCards } = require('./handlers/ia-document-parser')
 const { handleGenerateDevPlan } = require('./handlers/ia-dev-plan');
 const { handleConvertDescriptionToUserStory } = require('./handlers/ia-user-story');
 const { handleGetProjectEpics } = require('./handlers/ia-epics-api');
+const { handlePublicProjectCards } = require('./handlers/public-project-cards');
 
 // Admin handlers (extracted from this file)
 const { handleResyncAllViews } = require('./handlers/admin-views');
@@ -487,6 +488,16 @@ exports.getProjectEpics = onRequest({
     db: getDatabase(),
     logger,
     apiKeyValue: CREATE_CARD_API_KEY.value()
+  });
+});
+
+exports.publicProjectCards = onRequest({
+  region: "europe-west1",
+  cors: true
+}, async (req, res) => {
+  return handlePublicProjectCards(req, res, {
+    db: getDatabase(),
+    logger
   });
 });
 
