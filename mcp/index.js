@@ -14,8 +14,15 @@ function getInstanceName() {
   return basename(instanceDir);
 }
 
-// Initialize Firebase
-initFirebase();
+// ── Pre-flight: Initialize Firebase ──
+try {
+  initFirebase();
+} catch (err) {
+  process.stderr.write(`\n[MCP] Failed to initialize Firebase: ${err.message}\n`);
+  process.stderr.write('[MCP] The MCP server cannot start without a valid Firebase connection.\n');
+  process.stderr.write('[MCP] Run pg_doctor (or npm run mcp:test) to diagnose the issue.\n\n');
+  process.exit(1);
+}
 
 // Check for updates at startup (logs to stderr if update available)
 checkVersionAtStartup();
@@ -25,6 +32,11 @@ const instanceName = getInstanceName();
 const serverName = instanceName ? `planning-game-${instanceName}` : 'planning-gamexp';
 
 // Create and start the MCP server
-const server = createMcpServer(serverName);
-const transport = new StdioServerTransport();
-await server.connect(transport);
+try {
+  const server = createMcpServer(serverName);
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+} catch (err) {
+  process.stderr.write(`\n[MCP] Failed to start MCP server: ${err.message}\n`);
+  process.exit(1);
+}

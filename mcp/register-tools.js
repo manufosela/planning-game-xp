@@ -17,6 +17,8 @@ import { deleteUserSchema, deleteUser } from './tools/delete-user.js';
 import { checkForUpdates, getUpdateNoticeOnce, getMcpStatus, getLocalVersion, updateMcp, resetNotificationFlag, setLatestVersionInFirebase } from './version-check.js';
 import { USAGE_RULES_CONTENT } from './usage-rules.js';
 import { isMcpUserConfigured } from './user.js';
+import { pgDoctorSchema, pgDoctor } from './tools/doctor.js';
+import { pgConfigSchema, pgConfig } from './tools/config.js';
 
 // Track calls for periodic update checks
 let callCount = 0;
@@ -351,6 +353,15 @@ export function createMcpServer(serverName) {
   server.tool('delete_user', 'Delete a user from /users/ and clean up legacy permission paths (/data/appAdmins, appUploaders, betaUsers). Does NOT delete Firebase Auth account.', deleteUserSchema.shape, wrapWithUpdateNotice(async (params) => {
     return await deleteUser(params);
   }));
+
+  // ── Diagnostic tools ──
+  server.tool('pg_doctor', 'Run comprehensive diagnostics on the MCP server: checks Node.js, Firebase credentials, connectivity, dependencies, user config, version, and git. Use this to troubleshoot issues.', pgDoctorSchema.shape, async () => {
+    return await pgDoctor();
+  });
+
+  server.tool('pg_config', 'View MCP server configuration: instance name, Firebase project, credentials path, user config, environment variables. Use action "get" with a key for specific values.', pgConfigSchema.shape, async (params) => {
+    return await pgConfig(params);
+  });
 
   // ── Usage Rules resource ──
   server.resource(

@@ -32,8 +32,38 @@ export function resolveCredentialsPath() {
 
 export function initFirebase() {
   const credentialsPath = resolveCredentialsPath();
-  const serviceAccount = JSON.parse(readFileSync(credentialsPath, 'utf8'));
-  firebaseProjectId = serviceAccount.project_id || null;
+
+  if (!existsSync(credentialsPath)) {
+    const msg = [
+      '[MCP FATAL] serviceAccountKey.json not found.',
+      `  Expected at: ${credentialsPath}`,
+      '',
+      '  How to fix:',
+      '  1. Go to Firebase Console > Project Settings > Service Accounts',
+      '  2. Click "Generate new private key"',
+      '  3. Save the file as serviceAccountKey.json in your instance directory',
+      '  4. Restart the MCP server',
+    ].join('\n');
+    process.stderr.write(msg + '\n');
+    throw new Error(`serviceAccountKey.json not found at ${credentialsPath}`);
+  }
+
+  let serviceAccount;
+  try {
+    serviceAccount = JSON.parse(readFileSync(credentialsPath, 'utf8'));
+  } catch (err) {
+    const msg = `[MCP FATAL] serviceAccountKey.json is invalid JSON: ${err.message}\n  Path: ${credentialsPath}`;
+    process.stderr.write(msg + '\n');
+    throw new Error(`Invalid serviceAccountKey.json: ${err.message}`);
+  }
+
+  if (!serviceAccount.project_id) {
+    const msg = '[MCP FATAL] serviceAccountKey.json is missing the "project_id" field.';
+    process.stderr.write(msg + '\n');
+    throw new Error('serviceAccountKey.json missing project_id');
+  }
+
+  firebaseProjectId = serviceAccount.project_id;
 
   const databaseURL = process.env.FIREBASE_DATABASE_URL ||
     `https://${serviceAccount.project_id}-default-rtdb.europe-west1.firebasedatabase.app`;
