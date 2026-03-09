@@ -101,8 +101,6 @@ export class AppController {
     this.sectionsNeedReload = {};
     this.hasAppAccess = Boolean(window.isAppAdmin);
     this.cardAutoOpened = false;
-    this.bugFiltersSetup = false; // Flag to prevent triple BugFilters setup execution
-    this.taskFiltersSetup = false; // Flag to prevent triple TaskFilters setup execution
     this.initialViewApplied = {
       tasks: false,
       bugs: false
@@ -730,11 +728,7 @@ return filters;
     }
     this.viewFactory.switchView(view, 'tasks', this.config);
     URLStateManager.updateState({ view });
-    if (view === 'list') {
-      requestAnimationFrame(() => this.setupTaskFilters());
-    } else {
-      this.resetTaskFilters();
-    }
+    this._ensureUnifiedFilters('tasks');
   }
 
   async toggleBugsView(view) {
@@ -744,11 +738,7 @@ return filters;
     }
     this.viewFactory.switchView(view, 'bugs', this.config);
     URLStateManager.updateState({ view });
-    if (view === 'list') {
-      requestAnimationFrame(() => this.setupBugFilters());
-    } else {
-      this.resetBugFilters();
-    }
+    this._ensureUnifiedFilters('bugs');
   }
 
   toggleEpicView(view) {
@@ -788,51 +778,12 @@ return filters;
   }
 
   /**
-   * Set up filters for bugs section using unified-filters component
+   * Ensure the unified-filters component exists for a section.
+   * Creates it if missing, reuses if already present.
+   * @param {string} section - 'tasks' or 'bugs'
    */
-  setupBugFilters() {
-    if (this.bugFiltersSetup) return;
-
-    const bugsListView = document.getElementById('bugsCardsList');
-    const bugsListBtn = document.getElementById('bugsListViewBtn');
-
-    if (bugsListView && bugsListBtn?.classList.contains('active')) {
-      this.bugFiltersSetup = true;
-      this._createUnifiedFilters('bugs');
-    }
-  }
-
-  /**
-   * Reset bug filters via UnifiedFilterService
-   */
-  resetBugFilters() {
-    const service = getUnifiedFilterService();
-    service.clearAllFilters(this.projectId, 'bug');
-    this.bugFiltersSetup = false;
-  }
-
-  /**
-   * Set up filters for tasks section using unified-filters component
-   */
-  setupTaskFilters() {
-    if (this.taskFiltersSetup) return;
-
-    const tasksListView = document.getElementById('tasksCardsList');
-    const tasksListBtn = document.getElementById('listViewBtn');
-
-    if (tasksListView && tasksListBtn?.classList.contains('active')) {
-      this.taskFiltersSetup = true;
-      this._createUnifiedFilters('tasks');
-    }
-  }
-
-  /**
-   * Reset task filters via UnifiedFilterService
-   */
-  resetTaskFilters() {
-    const service = getUnifiedFilterService();
-    service.clearAllFilters(this.projectId, 'task');
-    this.taskFiltersSetup = false;
+  _ensureUnifiedFilters(section) {
+    this._createUnifiedFilters(section);
   }
 
   /**
@@ -842,13 +793,17 @@ return filters;
   _createUnifiedFilters(section) {
     const containerId = section === 'tasks' ? 'tasksFilters' : 'bugsFilters';
     const filtersContainer = document.getElementById(containerId);
+    console.warn('[DEBUG-FILTERS] _createUnifiedFilters', { section, containerId, found: !!filtersContainer });
     if (!filtersContainer) return;
 
     const cardType = section === 'tasks' ? 'task' : 'bug';
 
     // Check if unified-filters already exists
     const existing = filtersContainer.querySelector('unified-filters');
-    if (existing && existing.getAttribute('card-type') === cardType) return;
+    if (existing && existing.getAttribute('card-type') === cardType) {
+      console.warn('[DEBUG-FILTERS] unified-filters already exists for', cardType);
+      return;
+    }
 
     filtersContainer.innerHTML = '';
 
@@ -860,6 +815,7 @@ return filters;
     filterComponent.setAttribute('year', savedYear || new Date().getFullYear());
 
     filtersContainer.appendChild(filterComponent);
+    console.warn('[DEBUG-FILTERS] unified-filters CREATED for', cardType, 'projectId:', this.projectId);
   }
 
   showNotification(message, type = 'info') {
@@ -1134,11 +1090,9 @@ this.showNotification('No se pudo generar el enlace IA', 'error');
 
   handleCardsRenderedForFilters(event) {
     const { section } = event.detail;
-    // Cards are already rendered, setup filters immediately
-    if (section === 'bugs') {
-      this.setupBugFilters();
-    } else if (section === 'tasks') {
-      this.setupTaskFilters();
+    // Cards are already rendered, ensure filters exist
+    if (section === 'bugs' || section === 'tasks') {
+      this._ensureUnifiedFilters(section);
     }
   }
 
@@ -1703,9 +1657,6 @@ try {
         bugs: false
       };
       globalThis.globalDeveloperList = simpleData.developerList || [];
-
-      this.taskFiltersSetup = false;
-      this.bugFiltersSetup = false;
 
       await this.ensureGlobalVariables();
 

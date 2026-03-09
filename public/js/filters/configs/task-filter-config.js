@@ -8,14 +8,13 @@ import { developerMatcher, validatorMatcher } from '../matchers/developer-matche
 import { sprintMatcher } from '../matchers/sprint-matcher.js';
 import { epicMatcher } from '../matchers/epic-matcher.js';
 import { repositoryLabelMatcher } from '../matchers/repository-matcher.js';
-import { APP_CONSTANTS } from '../../constants/app-constants.js';
 
 /**
  * Get status options for tasks
  * @returns {Promise<Array>}
  */
 async function getStatusOptions() {
-  const statusList = globalThis.statusList || APP_CONSTANTS.TASK_STATUS_LIST;
+  const statusList = window.statusLists?.['task-card'] || {};
   return Object.keys(statusList).map(key => ({
     value: key,
     label: statusList[key]?.label || key

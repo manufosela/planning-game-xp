@@ -85,8 +85,15 @@ class ThemeLoader {
     if (data) {
       return data;
     }
-    console.warn('[ThemeLoaderService] No theme config found in RTDB');
-    return null;
+    // RTDB has no theme — load from static file and seed RTDB for future use
+    console.info('[ThemeLoaderService] No theme in RTDB, loading from /theme-config.json');
+    const response = await fetch('/theme-config.json');
+    if (!response.ok) {
+      throw new Error(`[ThemeLoaderService] Failed to load /theme-config.json: ${response.status}`);
+    }
+    const staticConfig = await response.json();
+    await dalService.config.setTheme(staticConfig);
+    return staticConfig;
   }
 
   /**

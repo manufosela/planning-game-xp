@@ -873,7 +873,7 @@ class EntityDirectoryService {
 
     // Fallback: read from project data
     try {
-      const project = await dalService.projects.get(projectId);
+      const project = await dalService.projects.getProject(projectId);
       if (project?.developers) {
         const data = project.developers;
         const projectIds = Array.isArray(data) ? data : Object.keys(data);
@@ -918,7 +918,7 @@ class EntityDirectoryService {
 
     // Fallback: read from project data
     try {
-      const project = await dalService.projects.get(projectId);
+      const project = await dalService.projects.getProject(projectId);
       if (project?.stakeholders) {
         const data = project.stakeholders;
         const projectIds = Array.isArray(data) ? data : Object.keys(data);
