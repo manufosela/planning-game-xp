@@ -793,17 +793,13 @@ return filters;
   _createUnifiedFilters(section) {
     const containerId = section === 'tasks' ? 'tasksFilters' : 'bugsFilters';
     const filtersContainer = document.getElementById(containerId);
-    console.warn('[DEBUG-FILTERS] _createUnifiedFilters', { section, containerId, found: !!filtersContainer });
     if (!filtersContainer) return;
 
     const cardType = section === 'tasks' ? 'task' : 'bug';
 
     // Check if unified-filters already exists
     const existing = filtersContainer.querySelector('unified-filters');
-    if (existing && existing.getAttribute('card-type') === cardType) {
-      console.warn('[DEBUG-FILTERS] unified-filters already exists for', cardType);
-      return;
-    }
+    if (existing && existing.getAttribute('card-type') === cardType) return;
 
     filtersContainer.innerHTML = '';
 
@@ -815,7 +811,6 @@ return filters;
     filterComponent.setAttribute('year', savedYear || new Date().getFullYear());
 
     filtersContainer.appendChild(filterComponent);
-    console.warn('[DEBUG-FILTERS] unified-filters CREATED for', cardType, 'projectId:', this.projectId);
   }
 
   showNotification(message, type = 'info') {

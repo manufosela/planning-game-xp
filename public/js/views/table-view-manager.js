@@ -40,7 +40,6 @@ export class TableViewManager {
     // Listen for unified filter changes to re-render
     window.addEventListener('unified-filters-changed', (event) => {
       const { projectId, cardType } = event.detail;
-      // Only re-render if the change is for our current project/section
       if (this._isCurrentProjectAndSection(projectId, cardType)) {
         this.renderCurrentView();
       }
@@ -904,15 +903,6 @@ return filteredCards;
     this.updateFilterCounters(filteredCards);
 
     // Update the unified-filters component results count if present
-    const uf = document.querySelector('unified-filters');
-    console.warn('[DEBUG-FILTERS] renderCurrentView done', {
-      section: this.currentSection,
-      cacheSize: Object.keys(this.cardsCache || {}).length,
-      yearFiltered: Object.keys(yearFilteredCards || {}).length,
-      filtered: Object.keys(filteredCards || {}).length,
-      unifiedFiltersInDOM: !!uf,
-      hasSetResultsCount: !!uf?.setResultsCount
-    });
     this._updateUnifiedFiltersCount(filteredCards);
 
     // Emit search results for CardSearch component
