@@ -1,6 +1,6 @@
 ---
 /**
- * Project detail page — shows cards, team, and card editing panel.
+ * Project detail page — full view system with tabs, filters, and multiple views.
  * Param: id (project ID from URL).
  */
 import App from '../../layouts/App.astro';
@@ -26,27 +26,37 @@ const { id } = Astro.params;
         <span class="project-abbr" id="project-abbr"></span>
       </div>
     </div>
-    <div class="project-actions">
-      <button class="tab-btn active" data-tab="cards" id="tab-cards">Cards</button>
-      <button class="tab-btn" data-tab="team" id="tab-team">Team</button>
+    <div class="project-header-right">
+      <pg-year id="year-selector"></pg-year>
+      <pg-view-switcher id="view-switcher"></pg-view-switcher>
+      <div class="header-tabs">
+        <button class="tab-btn active" data-tab="cards" id="tab-cards">Cards</button>
+        <button class="tab-btn" data-tab="team" id="tab-team">Team</button>
+      </div>
     </div>
   </div>
 
   <!-- Cards tab -->
   <div id="cards-tab">
-    <!-- Type filter bar -->
-    <div class="type-bar" id="type-bar">
-      <button class="type-btn active" data-type="all">All</button>
-      <button class="type-btn" data-type="task">Tasks</button>
-      <button class="type-btn" data-type="bug">Bugs</button>
-      <button class="type-btn" data-type="epic">Epics</button>
-      <button class="type-btn" data-type="sprint">Sprints</button>
-      <button class="type-btn" data-type="proposal">Proposals</button>
-      <button class="type-btn" data-type="qa">QA</button>
-    </div>
+    <!-- Type tabs -->
+    <pg-tabs id="type-tabs"></pg-tabs>
 
-    <!-- Card list -->
-    <div class="card-list" id="card-list"></div>
+    <!-- Filters -->
+    <pg-filters id="card-filters"></pg-filters>
+
+    <!-- View container -->
+    <div class="view-container" id="view-container">
+      <!-- table view -->
+      <pg-table id="view-table" hidden></pg-table>
+      <!-- kanban view -->
+      <pg-board id="view-kanban" mode="status" hidden></pg-board>
+      <!-- sprint view -->
+      <pg-board id="view-sprint" mode="sprint" hidden></pg-board>
+      <!-- gantt view -->
+      <pg-gantt id="view-gantt" hidden></pg-gantt>
+      <!-- list view -->
+      <div class="card-grid" id="view-list" hidden></div>
+    </div>
 
     <!-- Empty state -->
     <div class="empty-state" id="empty-cards" hidden>
@@ -84,24 +94,53 @@ const { id } = Astro.params;
     import '../../components/pg-badge.js';
     import '../../components/pg-team.js';
     import '../../components/pg-toast.js';
-    import { getProject, getCards, getTeam, getTagRegistry, addTeamMember, removeTeamMember } from '../../lib/firestore.js';
-    import { currentProject, cards as cardsSignal, currentCard, panelOpen } from '../../lib/store.js';
+    import '../../components/pg-tabs.js';
+    import '../../components/pg-view-switcher.js';
+    import '../../components/pg-year.js';
+    import '../../components/pg-filters.js';
+    import '../../components/pg-table.js';
+    import '../../components/pg-board.js';
+    import '../../components/pg-gantt.js';
+    import '../../components/pg-select.js';
+    import {
+      getProject, getCards, getTeam, getTagRegistry,
+      addTeamMember, removeTeamMember, updateCard,
+    } from '../../lib/firestore.js';
+    import {
+      currentProject, cards as cardsSignal, currentCard, panelOpen,
+      filters as filtersSignal, filteredCards, setFilters, authUser,
+    } from '../../lib/store.js';
     import { PgToast } from '../../components/pg-toast.js';
 
     const projectId = id === '_'
       ? window.location.pathname.split('/project/')[1]?.split('/')[0]
       : id;
 
-    const cardListEl = document.getElementById('card-list');
-    const emptyEl = document.getElementById('empty-cards');
+    // Elements
     const panelEl = document.getElementById('card-panel');
     const teamEl = document.getElementById('team-manager');
+    const emptyEl = document.getElementById('empty-cards');
+    const typeTabs = document.getElementById('type-tabs');
+    const filtersEl = document.getElementById('card-filters');
+    const viewSwitcher = document.getElementById('view-switcher');
+    const yearSelector = document.getElementById('year-selector');
+
+    // View elements
+    const viewTable = document.getElementById('view-table');
+    const viewKanban = document.getElementById('view-kanban');
+    const viewSprint = document.getElementById('view-sprint');
+    const viewGantt = document.getElementById('view-gantt');
+    const viewList = document.getElementById('view-list');
 
     let tagRegistry = [];
     let allCards = [];
-    let currentTypeFilter = 'all';
+    let team = [];
+    let currentView = viewSwitcher.current || 'table';
 
-    // Load project data
+    // -----------------------------------------------------------------------
+    // Data loading
+    // -----------------------------------------------------------------------
+
     async function loadProject() {
       try {
         const project = await getProject(projectId);
@@ -124,7 +163,9 @@ const { id } = Astro.params;
       try {
         allCards = await getCards(projectId);
         cardsSignal.value = allCards;
-        renderCards();
+        updateTypeTabs();
+        updateFilterOptions();
+        renderCurrentView();
       } catch (err) {
         console.error('Failed to load cards:', err);
       }
@@ -140,55 +181,188 @@ const { id } = Astro.params;
 
     async function loadTeam() {
       try {
-        const members = await getTeam(projectId);
-        teamEl.members = members;
+        team = await getTeam(projectId);
+        teamEl.members = team;
         teamEl.projectId = projectId;
+        updateFilterOptions();
       } catch (err) {
         console.error('Failed to load team:', err);
       }
     }
 
-    function renderCards() {
-      const filtered = currentTypeFilter === 'all'
-        ? allCards
-        : allCards.filter((c) => c.type === currentTypeFilter);
+    // -----------------------------------------------------------------------
+    // Type tabs
+    // -----------------------------------------------------------------------
 
-      if (filtered.length === 0) {
-        cardListEl.innerHTML = '';
-        emptyEl.hidden = false;
-        return;
+    function updateTypeTabs() {
+      const cards = allCards;
+      const counts = { task: 0, bug: 0, epic: 0, sprint: 0, proposal: 0, qa: 0 };
+      for (const c of cards) {
+        if (counts[c.type] != null) counts[c.type]++;
       }
 
-      emptyEl.hidden = true;
-      cardListEl.innerHTML = '';
+      typeTabs.tabs = [
+        { id: 'all', label: 'All', count: cards.length },
+        { id: 'task', label: 'Tasks', count: counts.task, color: 'var(--color-type-task)' },
+        { id: 'bug', label: 'Bugs', count: counts.bug, color: 'var(--color-type-bug)' },
+        { id: 'sprint', label: 'Sprints', count: counts.sprint, color: 'var(--color-type-sprint)' },
+        { id: 'epic', label: 'Epics', count: counts.epic, color: 'var(--color-type-epic)' },
+        { id: 'proposal', label: 'Proposals', count: counts.proposal, color: 'var(--color-type-proposal)' },
+        { id: 'qa', label: 'QA', count: counts.qa, color: 'var(--color-type-qa)' },
+      ];
+      typeTabs.active = filtersSignal.get().type ?? 'all';
+    }
 
-      for (const card of filtered) {
+    // -----------------------------------------------------------------------
+    // Filter options
+    // -----------------------------------------------------------------------
+
+    function updateFilterOptions() {
+      const devs = team
+        .filter((m) => m.role === 'developer' || m.role === 'both')
+        .map((m) => ({ id: m.id, name: m.name }));
+      filtersEl.developers = devs;
+
+      const sprints = allCards
+        .filter((c) => c.type === 'sprint')
+        .map((c) => ({ cardId: c.cardId, title: c.title }));
+      filtersEl.sprints = sprints;
+
+      const epics = allCards
+        .filter((c) => c.type === 'epic')
+        .map((c) => ({ cardId: c.cardId, title: c.title }));
+      filtersEl.epics = epics;
+
+      filtersEl.tags = tagRegistry;
+    }
+
+    // -----------------------------------------------------------------------
+    // View rendering
+    // -----------------------------------------------------------------------
+
+    function getFilteredCards() {
+      return filteredCards.get();
+    }
+
+    function renderCurrentView() {
+      const cards = getFilteredCards();
+      const hasCards = cards.length > 0;
+
+      // Hide all views
+      viewTable.hidden = true;
+      viewKanban.hidden = true;
+      viewSprint.hidden = true;
+      viewGantt.hidden = true;
+      viewList.hidden = true;
+      emptyEl.hidden = hasCards;
+
+      if (!hasCards) return;
+
+      switch (currentView) {
+        case 'table':
+          viewTable.hidden = false;
+          viewTable.cards = cards;
+          viewTable.tagRegistry = tagRegistry;
+          break;
+
+        case 'kanban':
+          viewKanban.hidden = false;
+          viewKanban.cards = cards;
+          viewKanban.tagRegistry = tagRegistry;
+          break;
+
+        case 'sprint': {
+          viewSprint.hidden = false;
+          viewSprint.cards = cards;
+          viewSprint.tagRegistry = tagRegistry;
+          viewSprint.sprints = allCards.filter((c) => c.type === 'sprint');
+          break;
+        }
+
+        case 'gantt':
+          viewGantt.hidden = false;
+          viewGantt.cards = cards;
+          break;
+
+        case 'list':
+          viewList.hidden = false;
+          renderListView(cards);
+          break;
+      }
+    }
+
+    function renderListView(cards) {
+      viewList.innerHTML = '';
+      for (const card of cards) {
         const el = document.createElement('pg-card');
         el.card = card;
         el.mode = 'preview';
         el.tagRegistry = tagRegistry;
-        el.addEventListener('card-click', (e) => {
-          panelEl.card = e.detail.card;
-          panelEl.open = true;
-          panelEl.tagRegistry = tagRegistry;
-          currentCard.value = e.detail.card;
-          panelOpen.value = true;
-        });
-        cardListEl.append(el);
+        el.addEventListener('card-click', (e) => openPanel(e.detail.card));
+        viewList.append(el);
       }
     }
 
-    // Type filter bar
-    document.getElementById('type-bar').addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-type]');
-      if (!btn) return;
-      currentTypeFilter = btn.dataset.type;
-      document.querySelectorAll('.type-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderCards();
+    function openPanel(card) {
+      panelEl.card = card;
+      panelEl.open = true;
+      panelEl.tagRegistry = tagRegistry;
+      currentCard.value = card;
+      panelOpen.value = true;
+    }
+
+    // -----------------------------------------------------------------------
+    // Event handlers
+    // -----------------------------------------------------------------------
+
+    // Type tabs
+    typeTabs.addEventListener('tab-change', (e) => {
+      const type = e.detail.tab;
+      setFilters({ type: type === 'all' ? 'all' : type });
+      renderCurrentView();
     });
 
-    // Tab switching
+    // View switcher
+    viewSwitcher.addEventListener('view-change', (e) => {
+      currentView = e.detail.view;
+      renderCurrentView();
+    });
+
+    // Year selector
+    yearSelector.addEventListener('year-change', (e) => {
+      setFilters({ year: e.detail.year });
+      renderCurrentView();
+    });
+
+    // Filters
+    filtersEl.addEventListener('filters-change', () => {
+      renderCurrentView();
+    });
+
+    // Card select from table/board/gantt
+    document.addEventListener('card-select', (e) => {
+      openPanel(e.detail.card);
+    });
+
+    // Card move (drag-drop on board)
+    document.addEventListener('card-move', async (e) => {
+      const { cardId, field, value } = e.detail;
+      try {
+        const user = authUser.get();
+        const changedBy = {
+          uid: user?.email ?? 'anonymous',
+          name: user?.name ?? 'Anonymous',
+        };
+        await updateCard(projectId, cardId, { [field]: value }, changedBy);
+        PgToast.show(`Card moved to ${value || 'Backlog'}`, 'success');
+        await loadCards();
+      } catch (err) {
+        console.error('Failed to move card:', err);
+        PgToast.show('Failed to move card', 'error');
+      }
+    });
+
+    // Main tab switching (Cards / Team)
     document.getElementById('tab-cards').addEventListener('click', () => {
       document.getElementById('cards-tab').hidden = false;
       document.getElementById('team-tab').hidden = true;
@@ -255,8 +429,17 @@ const { id } = Astro.params;
       }
     });
 
+    // -----------------------------------------------------------------------
     // Initialize
-    Promise.all([loadProject(), loadTags()]).then(() => loadCards());
+    // -----------------------------------------------------------------------
+
+    // Set initial year from selector
+    setFilters({ year: yearSelector.value });
+
+    // Show initial view
+    currentView = viewSwitcher.current || 'table';
+
+    Promise.all([loadProject(), loadTags(), loadTeam()]).then(() => loadCards());
   </script>
 
   <style>
@@ -265,7 +448,7 @@ const { id } = Astro.params;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: var(--space-xl, 1.5rem);
+      margin-bottom: var(--space-lg, 1rem);
       gap: var(--space-md);
     }
 
@@ -273,6 +456,12 @@ const { id } = Astro.params;
       display: flex;
       align-items: center;
       gap: var(--space-sm, 0.5rem);
+    }
+
+    .project-header-right {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md, 0.75rem);
     }
 
     .back-link {
@@ -320,8 +509,8 @@ const { id } = Astro.params;
       letter-spacing: var(--tracking-wide, 0.025em);
     }
 
-    /* Tabs */
-    .project-actions {
+    /* Header tabs */
+    .header-tabs {
       display: flex;
       gap: 0;
       background: var(--color-surface-sunken, #f1f5f9);
@@ -351,41 +540,13 @@ const { id } = Astro.params;
       box-shadow: var(--shadow-sm);
     }
 
-    /* Type filter bar */
-    .type-bar {
-      display: flex;
-      gap: var(--space-2xs, 0.125rem);
-      margin-bottom: var(--space-lg, 1rem);
-      overflow-x: auto;
+    /* View container */
+    .view-container {
+      margin-top: var(--space-sm, 0.5rem);
     }
 
-    .type-btn {
-      padding: var(--space-xs, 0.25rem) var(--space-md, 0.75rem);
-      font-size: 0.75rem;
-      font-weight: var(--font-weight-medium, 500);
-      color: var(--color-text-secondary, #64748b);
-      background: transparent;
-      border: 1px solid transparent;
-      border-radius: var(--radius-full, 9999px);
-      cursor: pointer;
-      transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-      white-space: nowrap;
-    }
-
-    .type-btn:hover {
-      background: var(--color-surface-sunken, #f1f5f9);
-      color: var(--color-text, #0f172a);
-    }
-
-    .type-btn.active {
-      background: var(--color-surface-raised, #fff);
-      border-color: var(--color-border, #e2e8f0);
-      color: var(--color-text, #0f172a);
-      box-shadow: var(--shadow-sm);
-    }
-
-    /* Card list */
-    .card-list {
+    /* Card grid (list view) */
+    .card-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
       gap: var(--space-md, 0.75rem);
@@ -461,7 +622,12 @@ const { id } = Astro.params;
         align-items: flex-start;
       }
 
-      .card-list {
+      .project-header-right {
+        flex-wrap: wrap;
+        width: 100%;
+      }
+
+      .card-grid {
         grid-template-columns: 1fr;
       }
     }
