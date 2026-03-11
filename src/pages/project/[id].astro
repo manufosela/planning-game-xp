@@ -1,0 +1,58 @@
+---
+/**
+ * Project detail page — shows cards, board, and sprint views.
+ * Param: id (project ID from URL).
+ *
+ * For static build, getStaticPaths returns a placeholder entry.
+ * Actual project routing is handled client-side via the SPA rewrite in firebase.json.
+ */
+import App from '../../layouts/App.astro';
+
+export function getStaticPaths() {
+  // Placeholder — real projects are resolved client-side.
+  // The SPA rewrite in firebase.json catches all unknown routes.
+  return [{ params: { id: '_' } }];
+}
+
+const { id } = Astro.params;
+---
+
+<App title={`${id} — Planning Game`}>
+  <div class="page-header">
+    <h1>{id}</h1>
+    <span class="badge">Project</span>
+  </div>
+
+  <p class="placeholder">Project board and card views will be implemented in Phase 2.</p>
+
+  <style>
+    .page-header {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm, 0.5rem);
+      margin-bottom: var(--space-xl, 1.5rem);
+    }
+
+    .page-header h1 {
+      font-size: 1.5rem;
+      font-weight: var(--font-weight-bold, 700);
+      letter-spacing: var(--tracking-tight, -0.01em);
+    }
+
+    .badge {
+      font-size: 0.6875rem;
+      font-weight: var(--font-weight-medium, 500);
+      padding: var(--space-2xs, 0.125rem) var(--space-sm, 0.5rem);
+      border-radius: var(--radius-full, 9999px);
+      background: var(--color-primary-subtle, #eef2ff);
+      color: var(--color-primary, #4f46e5);
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-wide, 0.025em);
+    }
+
+    .placeholder {
+      color: var(--color-text-muted, #94a3b8);
+      font-size: 0.875rem;
+    }
+  </style>
+</App>

@@ -1,0 +1,46 @@
+# Houston Override — allows a human to force-approve a PR by commenting "/houston approve".
+# Bypasses BecarIA's REQUEST_CHANGES review.
+
+name: Houston Override
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  override:
+    if: >
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/houston approve')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dismiss BecarIA review and approve
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr_number = context.payload.issue.number;
+
+            // Find and dismiss becaria-reviewer reviews
+            const reviews = await github.rest.pulls.listReviews({
+              owner, repo, pull_number: pr_number
+            });
+
+            for (const review of reviews.data) {
+              if (review.user.login.includes('becaria-reviewer') && review.state === 'CHANGES_REQUESTED') {
+                await github.rest.pulls.dismissReview({
+                  owner, repo, pull_number: pr_number, review_id: review.id,
+                  message: `Dismissed by Houston Override (${context.payload.comment.user.login})`
+                });
+              }
+            }
+
+            // Approve the PR
+            await github.rest.pulls.createReview({
+              owner, repo, pull_number: pr_number,
+              event: 'APPROVE',
+              body: `Houston Override by @${context.payload.comment.user.login}`
+            });

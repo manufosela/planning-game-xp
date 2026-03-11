@@ -1,0 +1,58 @@
+# BecarIA Gateway — publishes PR comments and reviews from repository_dispatch events.
+# Triggered by Karajan Code pipeline via `gh api repos/{owner}/{repo}/dispatches`.
+#
+# Required secrets:
+#   BECARIA_APP_ID          — GitHub App ID for becaria-reviewer
+#   BECARIA_APP_PRIVATE_KEY — PEM private key for the GitHub App
+
+name: BecarIA Gateway
+
+on:
+  repository_dispatch:
+    types:
+      - becaria-comment
+      - becaria-review
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.BECARIA_APP_ID }}
+          private-key: ${{ secrets.BECARIA_APP_PRIVATE_KEY }}
+
+      - name: Post Comment
+        if: github.event.action == 'becaria-comment'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { pr_number, agent, body } = context.payload.client_payload;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr_number,
+              body: `**${agent}** (via BecarIA)\n\n${body}`
+            });
+
+      - name: Submit Review
+        if: github.event.action == 'becaria-review'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { pr_number, event, body, agent } = context.payload.client_payload;
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr_number,
+              event: event,
+              body: `**${agent}** (via BecarIA)\n\n${body}`
+            });

@@ -1,0 +1,67 @@
+---
+/**
+ * Main application layout.
+ * Wraps authenticated pages with nav bar and common imports.
+ */
+const { title = 'Planning Game XP V2', requireAuth = true } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>{title}</title>
+    {/* Prevent FOUC: read theme from localStorage before first paint */}
+    <script is:inline>
+      (function () {
+        var t = localStorage.getItem('pg-theme') || 'system';
+        var resolved = t === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : t;
+        document.documentElement.setAttribute('data-theme', resolved);
+      })();
+    </script>
+  </head>
+  <body>
+    <pg-nav id="main-nav"></pg-nav>
+
+    <main>
+      <slot />
+    </main>
+    <pg-toast></pg-toast>
+
+    {/* Import component JS — client only */}
+    <script type="module" define:vars={{ requireAuth }}>
+      import '../components/pg-nav.js';
+      import '../components/pg-theme-toggle.js';
+      import '../components/pg-toast.js';
+      import { onAuthStateChange } from '../lib/auth.js';
+      import { authUser } from '../lib/store.js';
+
+      onAuthStateChange((user) => {
+        authUser.set(user);
+        if (!user && requireAuth) {
+          window.location.href = '/login';
+          return;
+        }
+        if (user && window.location.pathname === '/login') {
+          window.location.href = '/projects';
+        }
+      });
+    </script>
+
+    <style>
+      @import '../styles/layers.css';
+      @import '../styles/tokens.css';
+      @import '../styles/base.css';
+
+      main {
+        max-width: 80rem;
+        margin: 0 auto;
+        padding: var(--space-xl, 1.5rem) var(--space-lg, 1rem);
+      }
+    </style>
+  </body>
+</html>
