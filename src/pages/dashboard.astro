@@ -1,6 +1,6 @@
 ---
 /**
- * Dashboard page — placeholder.
+ * Dashboard page — multi-project metrics and charts.
  */
 import App from '../layouts/App.astro';
 ---
@@ -10,7 +10,45 @@ import App from '../layouts/App.astro';
     <h1>Dashboard</h1>
   </div>
 
-  <p class="placeholder">Coming soon.</p>
+  <pg-dashboard id="dashboard"></pg-dashboard>
+
+  <script type="module">
+    import '../components/pg-dashboard.js';
+    import '../components/pg-chart.js';
+    import '../components/pg-select.js';
+    import '../components/pg-toast.js';
+    import { getProjects, getCards } from '../lib/firestore.js';
+    import { PgToast } from '../components/pg-toast.js';
+
+    const dashboardEl = document.getElementById('dashboard');
+    const currentYear = new Date().getFullYear();
+
+    async function loadDashboard() {
+      try {
+        const projects = await getProjects();
+        const activeProjects = projects.filter((p) => !p.archived);
+        dashboardEl.projects = activeProjects;
+        dashboardEl.selectedYear = currentYear;
+
+        // Load cards from all active projects
+        const allCards = [];
+        for (const project of activeProjects) {
+          try {
+            const cards = await getCards(project.id);
+            allCards.push(...cards);
+          } catch (err) {
+            console.error(`Failed to load cards for ${project.name}:`, err);
+          }
+        }
+        dashboardEl.cards = allCards;
+      } catch (err) {
+        console.error('Failed to load dashboard:', err);
+        PgToast.show('Failed to load dashboard data', 'error');
+      }
+    }
+
+    loadDashboard();
+  </script>
 
   <style>
     .page-header {
@@ -21,11 +59,6 @@ import App from '../layouts/App.astro';
       font-size: 1.5rem;
       font-weight: var(--font-weight-bold, 700);
       letter-spacing: var(--tracking-tight, -0.01em);
-    }
-
-    .placeholder {
-      color: var(--color-text-muted, #94a3b8);
-      font-size: 0.875rem;
     }
   </style>
 </App>

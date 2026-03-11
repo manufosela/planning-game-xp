@@ -32,6 +32,8 @@ const { id } = Astro.params;
       <div class="header-tabs">
         <button class="tab-btn active" data-tab="cards" id="tab-cards">Cards</button>
         <button class="tab-btn" data-tab="team" id="tab-team">Team</button>
+        <button class="tab-btn" data-tab="plans" id="tab-plans">Plans</button>
+        <button class="tab-btn" data-tab="adrs" id="tab-adrs">ADRs</button>
       </div>
     </div>
   </div>
@@ -85,6 +87,16 @@ const { id } = Astro.params;
     <pg-team id="team-manager"></pg-team>
   </div>
 
+  <!-- Plans tab -->
+  <div id="plans-tab" hidden>
+    <pg-plans id="plans-manager"></pg-plans>
+  </div>
+
+  <!-- ADRs tab -->
+  <div id="adrs-tab" hidden>
+    <pg-adrs id="adrs-manager"></pg-adrs>
+  </div>
+
   <!-- Card panel (right-side slide) -->
   <pg-card-panel id="card-panel"></pg-card-panel>
 
@@ -102,9 +114,13 @@ const { id } = Astro.params;
     import '../../components/pg-board.js';
     import '../../components/pg-gantt.js';
     import '../../components/pg-select.js';
+    import '../../components/pg-plans.js';
+    import '../../components/pg-adrs.js';
     import {
       getProject, getCards, getTeam, getTagRegistry,
       addTeamMember, removeTeamMember, updateCard,
+      getPlans, createPlan, updatePlan, deletePlan,
+      getAdrs, createAdr, updateAdr, deleteAdr,
     } from '../../lib/firestore.js';
     import {
       currentProject, cards as cardsSignal, currentCard, panelOpen,
@@ -119,6 +135,8 @@ const { id } = Astro.params;
     // Elements
     const panelEl = document.getElementById('card-panel');
     const teamEl = document.getElementById('team-manager');
+    const plansEl = document.getElementById('plans-manager');
+    const adrsEl = document.getElementById('adrs-manager');
     const emptyEl = document.getElementById('empty-cards');
     const typeTabs = document.getElementById('type-tabs');
     const filtersEl = document.getElementById('card-filters');
@@ -364,19 +382,31 @@ const { id } = Astro.params;
 
     // Main tab switching (Cards / Team)
     document.getElementById('tab-cards').addEventListener('click', () => {
-      document.getElementById('cards-tab').hidden = false;
-      document.getElementById('team-tab').hidden = true;
-      document.getElementById('tab-cards').classList.add('active');
-      document.getElementById('tab-team').classList.remove('active');
+      switchTab('cards');
     });
 
     document.getElementById('tab-team').addEventListener('click', () => {
-      document.getElementById('cards-tab').hidden = true;
-      document.getElementById('team-tab').hidden = false;
-      document.getElementById('tab-cards').classList.remove('active');
-      document.getElementById('tab-team').classList.add('active');
+      switchTab('team');
       loadTeam();
     });
+
+    document.getElementById('tab-plans').addEventListener('click', () => {
+      switchTab('plans');
+      loadPlans();
+    });
+
+    document.getElementById('tab-adrs').addEventListener('click', () => {
+      switchTab('adrs');
+      loadAdrs();
+    });
+
+    function switchTab(tab) {
+      const tabs = ['cards', 'team', 'plans', 'adrs'];
+      for (const t of tabs) {
+        document.getElementById(`${t}-tab`).hidden = t !== tab;
+        document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+      }
+    }
 
     // Panel events
     panelEl.addEventListener('panel-close', () => {
@@ -426,6 +456,100 @@ const { id } = Astro.params;
       } catch (err) {
         console.error('Failed to remove member:', err);
         PgToast.show('Failed to remove member', 'error');
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // Plans
+    // -----------------------------------------------------------------------
+
+    async function loadPlans() {
+      try {
+        const plans = await getPlans(projectId);
+        plansEl.plans = plans;
+        plansEl.projectId = projectId;
+      } catch (err) {
+        console.error('Failed to load plans:', err);
+      }
+    }
+
+    plansEl.addEventListener('plan-create', async (e) => {
+      try {
+        await createPlan(projectId, { ...e.detail.data, createdBy: 'user' });
+        PgToast.show('Plan created', 'success');
+        await loadPlans();
+      } catch (err) {
+        console.error('Failed to create plan:', err);
+        PgToast.show('Failed to create plan', 'error');
+      }
+    });
+
+    plansEl.addEventListener('plan-update', async (e) => {
+      try {
+        await updatePlan(projectId, e.detail.planId, e.detail.data);
+        PgToast.show('Plan updated', 'success');
+        await loadPlans();
+      } catch (err) {
+        console.error('Failed to update plan:', err);
+        PgToast.show('Failed to update plan', 'error');
+      }
+    });
+
+    plansEl.addEventListener('plan-delete', async (e) => {
+      try {
+        await deletePlan(projectId, e.detail.planId);
+        PgToast.show('Plan deleted', 'success');
+        await loadPlans();
+      } catch (err) {
+        console.error('Failed to delete plan:', err);
+        PgToast.show('Failed to delete plan', 'error');
+      }
+    });
+
+    // -----------------------------------------------------------------------
+    // ADRs
+    // -----------------------------------------------------------------------
+
+    async function loadAdrs() {
+      try {
+        const adrs = await getAdrs(projectId);
+        adrsEl.adrs = adrs;
+        adrsEl.projectId = projectId;
+      } catch (err) {
+        console.error('Failed to load ADRs:', err);
+      }
+    }
+
+    adrsEl.addEventListener('adr-create', async (e) => {
+      try {
+        await createAdr(projectId, { ...e.detail.data, createdBy: 'user' });
+        PgToast.show('ADR created', 'success');
+        await loadAdrs();
+      } catch (err) {
+        console.error('Failed to create ADR:', err);
+        PgToast.show('Failed to create ADR', 'error');
+      }
+    });
+
+    adrsEl.addEventListener('adr-update', async (e) => {
+      try {
+        await updateAdr(projectId, e.detail.adrId, e.detail.data);
+        PgToast.show('ADR updated', 'success');
+        await loadAdrs();
+      } catch (err) {
+        console.error('Failed to update ADR:', err);
+        PgToast.show('Failed to update ADR', 'error');
+      }
+    });
+
+    adrsEl.addEventListener('adr-delete', async (e) => {
+      try {
+        await deleteAdr(projectId, e.detail.adrId);
+        PgToast.show('ADR deleted', 'success');
+        await loadAdrs();
+      } catch (err) {
+        console.error('Failed to delete ADR:', err);
+        PgToast.show('Failed to delete ADR', 'error');
       }
     });
 

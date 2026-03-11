@@ -304,3 +304,101 @@ export interface TransitionResult {
   reason?: string;
   missing?: string[];
 }
+
+// ---------------------------------------------------------------------------
+// Plans
+// ---------------------------------------------------------------------------
+
+export type PlanStatus = 'draft' | 'accepted' | 'rejected';
+
+export interface PlanPhase {
+  title: string;
+  description: string;
+  estimatedPoints: number;
+  taskIds?: string[];
+}
+
+export interface Plan {
+  id?: string;
+  projectId: string;
+  title: string;
+  objective: string;
+  status: PlanStatus;
+  phases: PlanPhase[];
+  createdAt: Timestamp;
+  createdBy: string;
+  updatedAt: Timestamp;
+}
+
+// ---------------------------------------------------------------------------
+// ADRs (Architecture Decision Records)
+// ---------------------------------------------------------------------------
+
+export type AdrStatus = 'proposed' | 'accepted' | 'deprecated' | 'superseded';
+
+export interface Adr {
+  id?: string;
+  projectId: string;
+  title: string;
+  context: string;
+  decision: string;
+  consequences: string;
+  status: AdrStatus;
+  createdAt: Timestamp;
+  createdBy: string;
+  updatedAt: Timestamp;
+}
+
+// ---------------------------------------------------------------------------
+// Global Configuration
+// ---------------------------------------------------------------------------
+
+export type ConfigType = 'agent' | 'prompt' | 'instruction' | 'guideline';
+
+export interface ConfigVersion {
+  version: number;
+  content: string;
+  updatedAt: Timestamp;
+  updatedBy: string;
+}
+
+export interface GlobalConfig {
+  id?: string;
+  type: ConfigType;
+  name: string;
+  description: string;
+  content: string;
+  category?: string;
+  targetFile?: string;
+  version: number;
+  createdAt: Timestamp;
+  createdBy: string;
+  updatedAt: Timestamp;
+}
+
+// ---------------------------------------------------------------------------
+// Trash
+// ---------------------------------------------------------------------------
+
+export interface TrashedCard extends BaseCard {
+  deletedAt: Timestamp;
+}
+
+// ---------------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------------
+
+export interface HoursReportRow {
+  developer: string;
+  cardId: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  durationHours: number;
+}
+
+export interface PointsReportRow {
+  developer: string;
+  sprint: string;
+  completedPoints: number;
+}

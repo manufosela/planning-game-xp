@@ -440,3 +440,408 @@ export async function updateTagRegistry(projectId, tags) {
   const ref = doc(db, 'projects', projectId, 'settings', 'tags');
   await setDoc(ref, { tags }, { merge: false });
 }
+
+// ---------------------------------------------------------------------------
+// Plans
+// ---------------------------------------------------------------------------
+
+/**
+ * List plans for a project.
+ * @param {string} projectId
+ * @returns {Promise<Array<import('./types.d.ts').Plan & { id: string }>>}
+ */
+export async function getPlans(projectId) {
+  const db = getDb();
+  const ref = collection(db, 'projects', projectId, 'plans');
+  const q = query(ref, orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * Create a plan.
+ * @param {string} projectId
+ * @param {Omit<import('./types.d.ts').Plan, 'id' | 'createdAt' | 'updatedAt'>} data
+ * @returns {Promise<string>}
+ */
+export async function createPlan(projectId, data) {
+  const db = getDb();
+  const ref = collection(db, 'projects', projectId, 'plans');
+  const now = serverTimestamp();
+  const docRef = await addDoc(ref, { ...data, projectId, createdAt: now, updatedAt: now });
+  return docRef.id;
+}
+
+/**
+ * Update a plan.
+ * @param {string} projectId
+ * @param {string} planId
+ * @param {Partial<import('./types.d.ts').Plan>} data
+ * @returns {Promise<void>}
+ */
+export async function updatePlan(projectId, planId, data) {
+  const db = getDb();
+  const ref = doc(db, 'projects', projectId, 'plans', planId);
+  await updateDoc(ref, { ...data, updatedAt: serverTimestamp() });
+}
+
+/**
+ * Delete a plan.
+ * @param {string} projectId
+ * @param {string} planId
+ * @returns {Promise<void>}
+ */
+export async function deletePlan(projectId, planId) {
+  const db = getDb();
+  const ref = doc(db, 'projects', projectId, 'plans', planId);
+  await deleteDoc(ref);
+}
+
+// ---------------------------------------------------------------------------
+// ADRs (Architecture Decision Records)
+// ---------------------------------------------------------------------------
+
+/**
+ * List ADRs for a project.
+ * @param {string} projectId
+ * @returns {Promise<Array<import('./types.d.ts').Adr & { id: string }>>}
+ */
+export async function getAdrs(projectId) {
+  const db = getDb();
+  const ref = collection(db, 'projects', projectId, 'adrs');
+  const q = query(ref, orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * Create an ADR.
+ * @param {string} projectId
+ * @param {Omit<import('./types.d.ts').Adr, 'id' | 'createdAt' | 'updatedAt'>} data
+ * @returns {Promise<string>}
+ */
+export async function createAdr(projectId, data) {
+  const db = getDb();
+  const ref = collection(db, 'projects', projectId, 'adrs');
+  const now = serverTimestamp();
+  const docRef = await addDoc(ref, { ...data, projectId, createdAt: now, updatedAt: now });
+  return docRef.id;
+}
+
+/**
+ * Update an ADR.
+ * @param {string} projectId
+ * @param {string} adrId
+ * @param {Partial<import('./types.d.ts').Adr>} data
+ * @returns {Promise<void>}
+ */
+export async function updateAdr(projectId, adrId, data) {
+  const db = getDb();
+  const ref = doc(db, 'projects', projectId, 'adrs', adrId);
+  await updateDoc(ref, { ...data, updatedAt: serverTimestamp() });
+}
+
+/**
+ * Delete an ADR.
+ * @param {string} projectId
+ * @param {string} adrId
+ * @returns {Promise<void>}
+ */
+export async function deleteAdr(projectId, adrId) {
+  const db = getDb();
+  const ref = doc(db, 'projects', projectId, 'adrs', adrId);
+  await deleteDoc(ref);
+}
+
+// ---------------------------------------------------------------------------
+// Global Configuration
+// ---------------------------------------------------------------------------
+
+/**
+ * List global configs, optionally filtered by type.
+ * @param {{ type?: string }} [filters]
+ * @returns {Promise<Array<import('./types.d.ts').GlobalConfig & { id: string }>>}
+ */
+export async function getConfigs(filters = {}) {
+  const db = getDb();
+  const ref = collection(db, 'globalConfig');
+  const constraints = [];
+  if (filters.type) {
+    constraints.push(where('type', '==', filters.type));
+  }
+  const q = constraints.length > 0 ? query(ref, ...constraints) : query(ref);
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * Get a single global config.
+ * @param {string} configId
+ * @returns {Promise<(import('./types.d.ts').GlobalConfig & { id: string }) | null>}
+ */
+export async function getConfig(configId) {
+  const db = getDb();
+  const ref = doc(db, 'globalConfig', configId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() };
+}
+
+/**
+ * Create a global config.
+ * @param {Omit<import('./types.d.ts').GlobalConfig, 'id' | 'createdAt' | 'updatedAt' | 'version'>} data
+ * @returns {Promise<string>}
+ */
+export async function createConfig(data) {
+  const db = getDb();
+  const ref = collection(db, 'globalConfig');
+  const now = serverTimestamp();
+  const docRef = await addDoc(ref, { ...data, version: 1, createdAt: now, updatedAt: now });
+  return docRef.id;
+}
+
+/**
+ * Update a global config. For guidelines, auto-increments version and saves history.
+ * @param {string} configId
+ * @param {Partial<import('./types.d.ts').GlobalConfig>} data
+ * @param {{ uid: string; name: string }} changedBy
+ * @returns {Promise<void>}
+ */
+export async function updateConfig(configId, data, changedBy) {
+  const db = getDb();
+  const configRef = doc(db, 'globalConfig', configId);
+  const current = await getDoc(configRef);
+
+  if (!current.exists()) {
+    throw new Error(`Config ${configId} not found`);
+  }
+
+  const currentData = current.data();
+  const isGuideline = currentData.type === 'guideline';
+  const newVersion = isGuideline ? (currentData.version ?? 0) + 1 : currentData.version;
+
+  // Save version history if content changed
+  if (isGuideline && data.content && data.content !== currentData.content) {
+    const historyRef = collection(db, 'globalConfig', configId, 'versions');
+    await addDoc(historyRef, {
+      version: currentData.version ?? 1,
+      content: currentData.content,
+      updatedAt: currentData.updatedAt,
+      updatedBy: changedBy.uid,
+    });
+  }
+
+  await updateDoc(configRef, {
+    ...data,
+    version: newVersion,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Delete a global config.
+ * @param {string} configId
+ * @returns {Promise<void>}
+ */
+export async function deleteConfig(configId) {
+  const db = getDb();
+  const ref = doc(db, 'globalConfig', configId);
+  await deleteDoc(ref);
+}
+
+/**
+ * Get version history for a config.
+ * @param {string} configId
+ * @returns {Promise<Array<import('./types.d.ts').ConfigVersion & { id: string }>>}
+ */
+export async function getConfigVersions(configId) {
+  const db = getDb();
+  const ref = collection(db, 'globalConfig', configId, 'versions');
+  const q = query(ref, orderBy('version', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * Restore a config to a specific version.
+ * @param {string} configId
+ * @param {string} versionId
+ * @param {{ uid: string; name: string }} changedBy
+ * @returns {Promise<void>}
+ */
+export async function restoreConfigVersion(configId, versionId, changedBy) {
+  const db = getDb();
+  const versionRef = doc(db, 'globalConfig', configId, 'versions', versionId);
+  const snap = await getDoc(versionRef);
+  if (!snap.exists()) {
+    throw new Error(`Version ${versionId} not found for config ${configId}`);
+  }
+  const versionData = snap.data();
+  await updateConfig(configId, { content: versionData.content }, changedBy);
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
+/**
+ * List all users.
+ * @returns {Promise<Array<import('./types.d.ts').User & { id: string }>>}
+ */
+export async function getUsers() {
+  const db = getDb();
+  const ref = collection(db, 'users');
+  const snap = await getDocs(ref);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * Provision a new user.
+ * @param {{ email: string; name: string; role: import('./types.d.ts').UserRole; projects?: Record<string, import('./types.d.ts').ProjectRole> }} data
+ * @returns {Promise<string>}
+ */
+export async function provisionUser(data) {
+  const db = getDb();
+  const ref = collection(db, 'users');
+  const now = serverTimestamp();
+  const docRef = await addDoc(ref, {
+    name: data.name,
+    email: data.email,
+    role: data.role,
+    projects: data.projects ?? {},
+    preferences: { theme: 'system', defaultYear: new Date().getFullYear(), locale: 'en' },
+    createdAt: now,
+    lastLoginAt: now,
+  });
+  return docRef.id;
+}
+
+/**
+ * Delete a user.
+ * @param {string} userId
+ * @returns {Promise<void>}
+ */
+export async function deleteUser(userId) {
+  const db = getDb();
+  const ref = doc(db, 'users', userId);
+  await deleteDoc(ref);
+}
+
+// ---------------------------------------------------------------------------
+// Trash
+// ---------------------------------------------------------------------------
+
+/**
+ * Get all trashed cards for a project.
+ * @param {string} projectId
+ * @returns {Promise<Array<import('./types.d.ts').TrashedCard & { id: string }>>}
+ */
+export async function getTrash(projectId) {
+  const db = getDb();
+  const ref = collection(db, 'projects', projectId, 'trash');
+  const snap = await getDocs(ref);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * Restore a card from trash.
+ * @param {string} projectId
+ * @param {string} cardId
+ * @returns {Promise<void>}
+ */
+export async function restoreFromTrash(projectId, cardId) {
+  const db = getDb();
+  const trashRef = doc(db, 'projects', projectId, 'trash', cardId);
+  const snap = await getDoc(trashRef);
+
+  if (!snap.exists()) {
+    throw new Error(`Trashed card ${cardId} not found in project ${projectId}`);
+  }
+
+  const data = snap.data();
+  const { deletedAt, ...cardData } = data;
+
+  const cardRef = doc(db, 'projects', projectId, 'cards', cardId);
+  await setDoc(cardRef, { ...cardData, updatedAt: serverTimestamp() });
+  await deleteDoc(trashRef);
+}
+
+/**
+ * Permanently delete a card from trash.
+ * @param {string} projectId
+ * @param {string} cardId
+ * @returns {Promise<void>}
+ */
+export async function permanentDelete(projectId, cardId) {
+  const db = getDb();
+  const ref = doc(db, 'projects', projectId, 'trash', cardId);
+  await deleteDoc(ref);
+}
+
+// ---------------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate hours report from cards.
+ * @param {string} projectId
+ * @param {{ sprint?: string; year?: number }} [filters]
+ * @returns {Promise<import('./types.d.ts').HoursReportRow[]>}
+ */
+export async function getHoursReport(projectId, filters = {}) {
+  const cardFilters = { type: 'task', ...filters };
+  const allCards = await getCards(projectId, cardFilters);
+
+  return allCards
+    .filter((c) => c.startDate && c.endDate)
+    .map((c) => {
+      const task = /** @type {import('./types.d.ts').Task} */ (c);
+      const start = task.startDate?.toDate ? task.startDate.toDate() : new Date(task.startDate);
+      const end = task.endDate?.toDate ? task.endDate.toDate() : new Date(task.endDate);
+      const durationMs = end.getTime() - start.getTime();
+      return {
+        developer: task.developer?.name ?? 'Unassigned',
+        cardId: task.cardId,
+        title: task.title,
+        startDate: start.toISOString().slice(0, 10),
+        endDate: end.toISOString().slice(0, 10),
+        durationHours: Math.round((durationMs / 3_600_000) * 10) / 10,
+      };
+    });
+}
+
+/**
+ * Generate points report from cards.
+ * @param {string} projectId
+ * @param {{ year?: number }} [filters]
+ * @returns {Promise<import('./types.d.ts').PointsReportRow[]>}
+ */
+export async function getPointsReport(projectId, filters = {}) {
+  const cardFilters = { type: 'task', ...filters };
+  const allCards = await getCards(projectId, cardFilters);
+
+  /** @type {Map<string, Map<string, number>>} */
+  const devSprintMap = new Map();
+
+  for (const c of allCards) {
+    const task = /** @type {import('./types.d.ts').Task} */ (c);
+    if (task.status !== 'Done' && task.status !== 'Done&Validated') continue;
+
+    const dev = task.developer?.name ?? 'Unassigned';
+    const sprint = task.sprint ?? 'No Sprint';
+    const points = task.devPoints ?? 0;
+
+    if (!devSprintMap.has(dev)) devSprintMap.set(dev, new Map());
+    const sprintMap = devSprintMap.get(dev);
+    sprintMap.set(sprint, (sprintMap.get(sprint) ?? 0) + points);
+  }
+
+  /** @type {import('./types.d.ts').PointsReportRow[]} */
+  const rows = [];
+  for (const [developer, sprintMap] of devSprintMap) {
+    for (const [sprint, completedPoints] of sprintMap) {
+      rows.push({ developer, sprint, completedPoints });
+    }
+  }
+  return rows;
+}

@@ -1,6 +1,6 @@
 ---
 /**
- * Admin page — placeholder.
+ * Admin page — Users, Trash, and Reports management.
  */
 import App from '../layouts/App.astro';
 ---
@@ -10,7 +10,121 @@ import App from '../layouts/App.astro';
     <h1>Admin</h1>
   </div>
 
-  <p class="placeholder">Coming soon.</p>
+  <pg-admin id="admin-panel"></pg-admin>
+
+  <script type="module">
+    import '../components/pg-admin.js';
+    import '../components/pg-tabs.js';
+    import '../components/pg-badge.js';
+    import '../components/pg-select.js';
+    import '../components/pg-toast.js';
+    import {
+      getProjects, getUsers, provisionUser, deleteUser as deleteUserFn,
+      getTrash, restoreFromTrash, permanentDelete,
+      getHoursReport, getPointsReport,
+    } from '../lib/firestore.js';
+    import { PgToast } from '../components/pg-toast.js';
+    import { PgModal } from '../components/pg-modal.js';
+
+    const adminEl = document.getElementById('admin-panel');
+
+    async function loadInitialData() {
+      try {
+        const [projects, users] = await Promise.all([getProjects(), getUsers()]);
+        adminEl.projects = projects.filter((p) => !p.archived);
+        adminEl.users = users;
+      } catch (err) {
+        console.error('Failed to load admin data:', err);
+        PgToast.show('Failed to load admin data', 'error');
+      }
+    }
+
+    // User events
+    adminEl.addEventListener('user-provision', async (e) => {
+      try {
+        await provisionUser(e.detail.data);
+        PgToast.show('User provisioned', 'success');
+        adminEl.users = await getUsers();
+      } catch (err) {
+        console.error('Failed to provision user:', err);
+        PgToast.show('Failed to provision user', 'error');
+      }
+    });
+
+    adminEl.addEventListener('user-delete', async (e) => {
+      const confirmed = await PgModal.confirm({
+        title: 'Delete user',
+        message: 'This will permanently delete the user. Continue?',
+        confirmText: 'Delete',
+        variant: 'danger',
+      });
+      if (!confirmed) return;
+      try {
+        await deleteUserFn(e.detail.userId);
+        PgToast.show('User deleted', 'success');
+        adminEl.users = await getUsers();
+      } catch (err) {
+        console.error('Failed to delete user:', err);
+        PgToast.show('Failed to delete user', 'error');
+      }
+    });
+
+    // Trash events
+    adminEl.addEventListener('load-trash', async (e) => {
+      try {
+        adminEl.trash = await getTrash(e.detail.projectId);
+      } catch (err) {
+        console.error('Failed to load trash:', err);
+        PgToast.show('Failed to load trash', 'error');
+      }
+    });
+
+    adminEl.addEventListener('trash-restore', async (e) => {
+      try {
+        await restoreFromTrash(e.detail.projectId, e.detail.cardId);
+        PgToast.show('Card restored', 'success');
+        adminEl.trash = await getTrash(e.detail.projectId);
+      } catch (err) {
+        console.error('Failed to restore card:', err);
+        PgToast.show('Failed to restore card', 'error');
+      }
+    });
+
+    adminEl.addEventListener('trash-delete', async (e) => {
+      const confirmed = await PgModal.confirm({
+        title: 'Permanently delete',
+        message: 'This cannot be undone. Continue?',
+        confirmText: 'Delete Forever',
+        variant: 'danger',
+      });
+      if (!confirmed) return;
+      try {
+        await permanentDelete(e.detail.projectId, e.detail.cardId);
+        PgToast.show('Card permanently deleted', 'success');
+        adminEl.trash = await getTrash(e.detail.projectId);
+      } catch (err) {
+        console.error('Failed to delete card:', err);
+        PgToast.show('Failed to delete card', 'error');
+      }
+    });
+
+    // Reports events
+    adminEl.addEventListener('load-reports', async (e) => {
+      try {
+        const [hours, points] = await Promise.all([
+          getHoursReport(e.detail.projectId),
+          getPointsReport(e.detail.projectId),
+        ]);
+        adminEl.hoursReport = hours;
+        adminEl.pointsReport = points;
+      } catch (err) {
+        console.error('Failed to load reports:', err);
+        PgToast.show('Failed to load reports', 'error');
+      }
+    });
+
+    loadInitialData();
+  </script>
 
   <style>
     .page-header {
@@ -21,11 +135,6 @@ import App from '../layouts/App.astro';
       font-size: 1.5rem;
       font-weight: var(--font-weight-bold, 700);
       letter-spacing: var(--tracking-tight, -0.01em);
-    }
-
-    .placeholder {
-      color: var(--color-text-muted, #94a3b8);
-      font-size: 0.875rem;
     }
   </style>
 </App>

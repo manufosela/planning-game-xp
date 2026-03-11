@@ -8,3 +8,6 @@
 
 export { onCardUpdate } from './triggers/on-card-update.js';
 export { onStatusChange } from './triggers/on-status-change.js';
+export { generateAC } from './callable/generate-ac.js';
+export { analyzeBug } from './callable/analyze-bug.js';
+export { importCards } from './callable/import-cards.js';
