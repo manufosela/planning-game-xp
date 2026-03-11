@@ -1,16 +1,11 @@
 ---
 /**
- * Project detail page — shows cards, board, and sprint views.
+ * Project detail page — shows cards, team, and card editing panel.
  * Param: id (project ID from URL).
- *
- * For static build, getStaticPaths returns a placeholder entry.
- * Actual project routing is handled client-side via the SPA rewrite in firebase.json.
  */
 import App from '../../layouts/App.astro';
 
 export function getStaticPaths() {
-  // Placeholder — real projects are resolved client-side.
-  // The SPA rewrite in firebase.json catches all unknown routes.
   return [{ params: { id: '_' } }];
 }
 
@@ -18,28 +13,303 @@ const { id } = Astro.params;
 ---
 
 <App title={`${id} — Planning Game`}>
-  <div class="page-header">
-    <h1>{id}</h1>
-    <span class="badge">Project</span>
+  <!-- Project header -->
+  <div class="project-header" id="project-header">
+    <div class="project-header-left">
+      <a href="/projects" class="back-link" aria-label="Back to projects">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </a>
+      <div class="project-title-group">
+        <h1 id="project-name">{id}</h1>
+        <span class="project-abbr" id="project-abbr"></span>
+      </div>
+    </div>
+    <div class="project-actions">
+      <button class="tab-btn active" data-tab="cards" id="tab-cards">Cards</button>
+      <button class="tab-btn" data-tab="team" id="tab-team">Team</button>
+    </div>
   </div>
 
-  <p class="placeholder">Project board and card views will be implemented in Phase 2.</p>
+  <!-- Cards tab -->
+  <div id="cards-tab">
+    <!-- Type filter bar -->
+    <div class="type-bar" id="type-bar">
+      <button class="type-btn active" data-type="all">All</button>
+      <button class="type-btn" data-type="task">Tasks</button>
+      <button class="type-btn" data-type="bug">Bugs</button>
+      <button class="type-btn" data-type="epic">Epics</button>
+      <button class="type-btn" data-type="sprint">Sprints</button>
+      <button class="type-btn" data-type="proposal">Proposals</button>
+      <button class="type-btn" data-type="qa">QA</button>
+    </div>
+
+    <!-- Card list -->
+    <div class="card-list" id="card-list"></div>
+
+    <!-- Empty state -->
+    <div class="empty-state" id="empty-cards" hidden>
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+        </svg>
+      </div>
+      <h2>No cards yet</h2>
+      <p>Create your first card to start tracking work.</p>
+    </div>
+
+    <!-- FAB -->
+    <button class="fab" id="create-card-btn" aria-label="Create new card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Team tab -->
+  <div id="team-tab" hidden>
+    <pg-team id="team-manager"></pg-team>
+  </div>
+
+  <!-- Card panel (right-side slide) -->
+  <pg-card-panel id="card-panel"></pg-card-panel>
+
+  <script type="module" define:vars={{ id }}>
+    import '../../components/pg-card.js';
+    import '../../components/pg-card-panel.js';
+    import '../../components/pg-badge.js';
+    import '../../components/pg-team.js';
+    import '../../components/pg-toast.js';
+    import { getProject, getCards, getTeam, getTagRegistry, addTeamMember, removeTeamMember } from '../../lib/firestore.js';
+    import { currentProject, cards as cardsSignal, currentCard, panelOpen } from '../../lib/store.js';
+    import { PgToast } from '../../components/pg-toast.js';
+
+    const projectId = id === '_'
+      ? window.location.pathname.split('/project/')[1]?.split('/')[0]
+      : id;
+
+    const cardListEl = document.getElementById('card-list');
+    const emptyEl = document.getElementById('empty-cards');
+    const panelEl = document.getElementById('card-panel');
+    const teamEl = document.getElementById('team-manager');
+
+    let tagRegistry = [];
+    let allCards = [];
+    let currentTypeFilter = 'all';
+
+    // Load project data
+    async function loadProject() {
+      try {
+        const project = await getProject(projectId);
+        if (!project) {
+          PgToast.show('Project not found', 'error');
+          window.location.href = '/projects';
+          return;
+        }
+        currentProject.value = project;
+        document.getElementById('project-name').textContent = project.name;
+        document.getElementById('project-abbr').textContent = project.abbreviation;
+        document.title = `${project.name} — Planning Game`;
+      } catch (err) {
+        console.error('Failed to load project:', err);
+        PgToast.show('Failed to load project', 'error');
+      }
+    }
+
+    async function loadCards() {
+      try {
+        allCards = await getCards(projectId);
+        cardsSignal.value = allCards;
+        renderCards();
+      } catch (err) {
+        console.error('Failed to load cards:', err);
+      }
+    }
+
+    async function loadTags() {
+      try {
+        tagRegistry = await getTagRegistry(projectId);
+      } catch (err) {
+        console.error('Failed to load tags:', err);
+      }
+    }
+
+    async function loadTeam() {
+      try {
+        const members = await getTeam(projectId);
+        teamEl.members = members;
+        teamEl.projectId = projectId;
+      } catch (err) {
+        console.error('Failed to load team:', err);
+      }
+    }
+
+    function renderCards() {
+      const filtered = currentTypeFilter === 'all'
+        ? allCards
+        : allCards.filter((c) => c.type === currentTypeFilter);
+
+      if (filtered.length === 0) {
+        cardListEl.innerHTML = '';
+        emptyEl.hidden = false;
+        return;
+      }
+
+      emptyEl.hidden = true;
+      cardListEl.innerHTML = '';
+
+      for (const card of filtered) {
+        const el = document.createElement('pg-card');
+        el.card = card;
+        el.mode = 'preview';
+        el.tagRegistry = tagRegistry;
+        el.addEventListener('card-click', (e) => {
+          panelEl.card = e.detail.card;
+          panelEl.open = true;
+          panelEl.tagRegistry = tagRegistry;
+          currentCard.value = e.detail.card;
+          panelOpen.value = true;
+        });
+        cardListEl.append(el);
+      }
+    }
+
+    // Type filter bar
+    document.getElementById('type-bar').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-type]');
+      if (!btn) return;
+      currentTypeFilter = btn.dataset.type;
+      document.querySelectorAll('.type-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderCards();
+    });
+
+    // Tab switching
+    document.getElementById('tab-cards').addEventListener('click', () => {
+      document.getElementById('cards-tab').hidden = false;
+      document.getElementById('team-tab').hidden = true;
+      document.getElementById('tab-cards').classList.add('active');
+      document.getElementById('tab-team').classList.remove('active');
+    });
+
+    document.getElementById('tab-team').addEventListener('click', () => {
+      document.getElementById('cards-tab').hidden = true;
+      document.getElementById('team-tab').hidden = false;
+      document.getElementById('tab-cards').classList.remove('active');
+      document.getElementById('tab-team').classList.add('active');
+      loadTeam();
+    });
+
+    // Panel events
+    panelEl.addEventListener('panel-close', () => {
+      panelOpen.value = false;
+      currentCard.value = null;
+    });
+
+    panelEl.addEventListener('panel-delete', async (e) => {
+      const { PgModal } = await import('../../components/pg-modal.js');
+      const confirmed = await PgModal.confirm({
+        title: 'Delete card',
+        message: `Delete ${e.detail.card.cardId}? This will move it to trash.`,
+        confirmText: 'Delete',
+        variant: 'danger',
+      });
+      if (confirmed) {
+        try {
+          const { deleteCard } = await import('../../lib/firestore.js');
+          await deleteCard(projectId, e.detail.card.cardId);
+          PgToast.show('Card deleted', 'success');
+          panelEl.open = false;
+          await loadCards();
+        } catch (err) {
+          console.error('Failed to delete card:', err);
+          PgToast.show('Failed to delete card', 'error');
+        }
+      }
+    });
+
+    // Team events
+    teamEl.addEventListener('team-add', async (e) => {
+      try {
+        await addTeamMember(projectId, e.detail.member);
+        PgToast.show('Member added', 'success');
+        await loadTeam();
+      } catch (err) {
+        console.error('Failed to add member:', err);
+        PgToast.show('Failed to add member', 'error');
+      }
+    });
+
+    teamEl.addEventListener('team-remove', async (e) => {
+      try {
+        await removeTeamMember(projectId, e.detail.memberId);
+        PgToast.show('Member removed', 'success');
+        await loadTeam();
+      } catch (err) {
+        console.error('Failed to remove member:', err);
+        PgToast.show('Failed to remove member', 'error');
+      }
+    });
+
+    // Initialize
+    Promise.all([loadProject(), loadTags()]).then(() => loadCards());
+  </script>
 
   <style>
-    .page-header {
+    /* Project header */
+    .project-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--space-xl, 1.5rem);
+      gap: var(--space-md);
+    }
+
+    .project-header-left {
       display: flex;
       align-items: center;
       gap: var(--space-sm, 0.5rem);
-      margin-bottom: var(--space-xl, 1.5rem);
     }
 
-    .page-header h1 {
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      border-radius: var(--radius-md, 0.5rem);
+      color: var(--color-text-secondary, #64748b);
+      text-decoration: none;
+      transition: background var(--transition-fast, 150ms ease);
+    }
+
+    .back-link:hover {
+      background: var(--color-surface-sunken, #f1f5f9);
+      text-decoration: none;
+    }
+
+    .back-link svg {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+
+    .project-title-group {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm, 0.5rem);
+    }
+
+    .project-title-group h1 {
       font-size: 1.5rem;
       font-weight: var(--font-weight-bold, 700);
       letter-spacing: var(--tracking-tight, -0.01em);
     }
 
-    .badge {
+    .project-abbr {
       font-size: 0.6875rem;
       font-weight: var(--font-weight-medium, 500);
       padding: var(--space-2xs, 0.125rem) var(--space-sm, 0.5rem);
@@ -50,9 +320,150 @@ const { id } = Astro.params;
       letter-spacing: var(--tracking-wide, 0.025em);
     }
 
-    .placeholder {
+    /* Tabs */
+    .project-actions {
+      display: flex;
+      gap: 0;
+      background: var(--color-surface-sunken, #f1f5f9);
+      border-radius: var(--radius-md, 0.5rem);
+      padding: var(--space-2xs, 0.125rem);
+    }
+
+    .tab-btn {
+      padding: var(--space-xs, 0.25rem) var(--space-lg, 1rem);
+      font-size: 0.8125rem;
+      font-weight: var(--font-weight-medium, 500);
+      color: var(--color-text-secondary, #64748b);
+      background: transparent;
+      border: none;
+      border-radius: var(--radius-sm, 0.25rem);
+      cursor: pointer;
+      transition: background var(--transition-fast), color var(--transition-fast);
+    }
+
+    .tab-btn:hover {
+      color: var(--color-text, #0f172a);
+    }
+
+    .tab-btn.active {
+      background: var(--color-surface-raised, #fff);
+      color: var(--color-text, #0f172a);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Type filter bar */
+    .type-bar {
+      display: flex;
+      gap: var(--space-2xs, 0.125rem);
+      margin-bottom: var(--space-lg, 1rem);
+      overflow-x: auto;
+    }
+
+    .type-btn {
+      padding: var(--space-xs, 0.25rem) var(--space-md, 0.75rem);
+      font-size: 0.75rem;
+      font-weight: var(--font-weight-medium, 500);
+      color: var(--color-text-secondary, #64748b);
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--radius-full, 9999px);
+      cursor: pointer;
+      transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+      white-space: nowrap;
+    }
+
+    .type-btn:hover {
+      background: var(--color-surface-sunken, #f1f5f9);
+      color: var(--color-text, #0f172a);
+    }
+
+    .type-btn.active {
+      background: var(--color-surface-raised, #fff);
+      border-color: var(--color-border, #e2e8f0);
+      color: var(--color-text, #0f172a);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Card list */
+    .card-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+      gap: var(--space-md, 0.75rem);
+    }
+
+    /* Empty state */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-4xl, 4rem) var(--space-lg, 1rem);
+      text-align: center;
+    }
+
+    .empty-icon {
+      width: 3rem;
+      height: 3rem;
       color: var(--color-text-muted, #94a3b8);
+      margin-bottom: var(--space-lg, 1rem);
+    }
+
+    .empty-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .empty-state h2 {
+      font-size: 1.125rem;
+      font-weight: var(--font-weight-semibold, 600);
+      color: var(--color-text, #0f172a);
+      margin-bottom: var(--space-xs, 0.25rem);
+    }
+
+    .empty-state p {
       font-size: 0.875rem;
+      color: var(--color-text-muted, #94a3b8);
+    }
+
+    /* FAB */
+    .fab {
+      position: fixed;
+      bottom: var(--space-xl, 1.5rem);
+      right: var(--space-xl, 1.5rem);
+      width: 3rem;
+      height: 3rem;
+      border-radius: var(--radius-full, 9999px);
+      background: var(--color-primary, #4f46e5);
+      color: var(--color-primary-text, #fff);
+      border: none;
+      box-shadow: var(--shadow-lg);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background var(--transition-fast), box-shadow var(--transition-fast);
+      z-index: var(--z-sticky, 200);
+    }
+
+    .fab:hover {
+      background: var(--color-primary-hover, #4338ca);
+      box-shadow: var(--shadow-xl);
+    }
+
+    .fab svg {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+
+    @media (max-width: 640px) {
+      .project-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .card-list {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </App>

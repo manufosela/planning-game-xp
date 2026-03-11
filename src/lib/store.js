@@ -105,6 +105,24 @@ export const filteredCards = withValue(computed(() => {
 }));
 
 /**
+ * All projects loaded for the current user.
+ * @type {import('@lit-labs/signals').Signal<Array<import('./types.d.ts').Project & { id: string }>>}
+ */
+export const projects = withValue(signal(/** @type {Array<import('./types.d.ts').Project & { id: string }>} */ ([])));
+
+/**
+ * Currently selected card (for panel editing).
+ * @type {import('@lit-labs/signals').Signal<import('./types.d.ts').Card | null>}
+ */
+export const currentCard = withValue(signal(/** @type {import('./types.d.ts').Card | null} */ (null)));
+
+/**
+ * Whether the card panel is open.
+ * @type {import('@lit-labs/signals').Signal<boolean>}
+ */
+export const panelOpen = withValue(signal(false));
+
+/**
  * Current theme preference.
  * @type {import('@lit-labs/signals').Signal<import('./types.d.ts').ThemeMode>}
  */
