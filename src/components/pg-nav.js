@@ -9,6 +9,7 @@
 
 import { LitElement, html, css } from 'lit';
 import './pg-theme-toggle.js';
+import './pg-bell.js';
 
 class PgNav extends LitElement {
   static properties = {
@@ -273,6 +274,7 @@ class PgNav extends LitElement {
         <div class="spacer"></div>
 
         <div class="actions">
+          <pg-bell></pg-bell>
           <pg-theme-toggle></pg-theme-toggle>
 
           <div class="user-menu">

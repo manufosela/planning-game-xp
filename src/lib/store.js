@@ -155,3 +155,32 @@ export function resetFilters() {
     search: '',
   });
 }
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+/**
+ * User notifications list.
+ * @type {import('@lit-labs/signals').Signal<Array<import('./types.d.ts').Notification & { id: string }>>}
+ */
+export const notifications = withValue(
+  signal(/** @type {Array<import('./types.d.ts').Notification & { id: string }>} */ ([]))
+);
+
+/**
+ * Derived: count of unread notifications.
+ */
+export const unreadCount = withValue(computed(() => {
+  return notifications.get().filter((n) => !n.read).length;
+}));
+
+// ---------------------------------------------------------------------------
+// WIP (Work In Progress)
+// ---------------------------------------------------------------------------
+
+/**
+ * All "In Progress" cards across all projects.
+ * @type {import('@lit-labs/signals').Signal<import('./types.d.ts').Card[]>}
+ */
+export const wipTasks = withValue(signal(/** @type {import('./types.d.ts').Card[]} */ ([])));

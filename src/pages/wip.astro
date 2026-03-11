@@ -1,16 +1,77 @@
 ---
 /**
- * Wip page — placeholder.
+ * WIP page — Work In Progress dashboard.
+ * Shows all In Progress tasks grouped by developer and developer backlogs.
  */
 import App from '../layouts/App.astro';
 ---
 
-<App title="Wip — Planning Game">
+<App title="WIP — Planning Game">
   <div class="page-header">
-    <h1>Wip</h1>
+    <h1>Work In Progress</h1>
+    <p class="page-desc">Monitor active tasks and developer backlogs across all projects.</p>
   </div>
 
-  <p class="placeholder">Coming soon.</p>
+  <pg-wip id="wip-dashboard" active-tab="wip"></pg-wip>
+
+  <script type="module">
+    import '../components/pg-wip.js';
+    import { getProjects, getCards } from '../lib/firestore.js';
+    import { authUser } from '../lib/store.js';
+
+    const wipEl = document.querySelector('#wip-dashboard');
+
+    /**
+     * Load WIP and backlog data across all active projects.
+     */
+    async function loadWipData() {
+      const projects = await getProjects();
+      const activeProjects = projects.filter((p) => !p.archived);
+
+      const allWip = [];
+      const allBacklog = [];
+
+      const results = await Promise.all(
+        activeProjects.map(async (project) => {
+          const cards = await getCards(project.id);
+          return { projectId: project.id, abbreviation: project.abbreviation, cards };
+        })
+      );
+
+      for (const { projectId, abbreviation, cards } of results) {
+        for (const card of cards) {
+          if (card.type !== 'task' && card.type !== 'bug') continue;
+
+          const enriched = { ...card, projectId: abbreviation };
+
+          if (card.status === 'In Progress') {
+            allWip.push(enriched);
+          } else if (card.status === 'To Do' && card.developer) {
+            allBacklog.push(enriched);
+          }
+        }
+      }
+
+      wipEl.wipCards = allWip;
+      wipEl.backlogCards = allBacklog;
+    }
+
+    // Load data when auth is ready
+    const checkAuth = setInterval(() => {
+      if (authUser.get()) {
+        clearInterval(checkAuth);
+        loadWipData();
+      }
+    }, 100);
+
+    // Navigate to card on click
+    wipEl.addEventListener('card-navigate', (/** @type {CustomEvent} */ e) => {
+      const { projectId, cardId } = e.detail;
+      if (projectId) {
+        window.location.href = `/project/${projectId}?card=${cardId}`;
+      }
+    });
+  </script>
 
   <style>
     .page-header {
@@ -21,11 +82,13 @@ import App from '../layouts/App.astro';
       font-size: 1.5rem;
       font-weight: var(--font-weight-bold, 700);
       letter-spacing: var(--tracking-tight, -0.01em);
+      color: var(--color-text, #0f172a);
+      margin-bottom: var(--space-xs, 0.25rem);
     }
 
-    .placeholder {
-      color: var(--color-text-muted, #94a3b8);
+    .page-desc {
       font-size: 0.875rem;
+      color: var(--color-text-secondary, #64748b);
     }
   </style>
 </App>
