@@ -3,6 +3,9 @@
   "type": "module",
   "version": "1.165.0",
   "private": true,
+  "workspaces": [
+    "packages/domain"
+  ],
   "scripts": {
     "generate-sw": "node scripts/generate-sw.js",
     "update-version": "node scripts/update-version.cjs",

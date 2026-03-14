@@ -1,0 +1,17 @@
+{
+  "name": "@pgv2/domain",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Planning Game V2 domain layer — entities, value objects, services, validators",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "entities/",
+    "value-objects/",
+    "services/",
+    "validators/"
+  ]
+}
