@@ -18,6 +18,7 @@ export {
   TaskStatus,
   BugStatus,
   ProposalStatus,
+  LIFECYCLES,
   getStatuses,
   isValidStatus,
   getNextStatuses,

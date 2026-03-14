@@ -30,7 +30,7 @@ export const ProposalStatus = Object.freeze({
  * Valid status transitions per card type.
  * Key = from status, Value = array of allowed target statuses.
  */
-const LIFECYCLES = Object.freeze({
+export const LIFECYCLES = Object.freeze({
   'task-card': {
     [TaskStatus.TODO]: [TaskStatus.IN_PROGRESS],
     [TaskStatus.IN_PROGRESS]: [TaskStatus.TO_VALIDATE, TaskStatus.BLOCKED, TaskStatus.TODO],
