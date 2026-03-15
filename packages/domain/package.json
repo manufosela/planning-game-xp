@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./index.js",
+    "./services": "./services/index.js",
     "./ports": "./ports/index.d.ts"
   }
 }
