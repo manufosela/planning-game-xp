@@ -8,7 +8,6 @@
     "node": "22"
   },
   "scripts": {
-    "preinstall": "node scripts/sync-domain.js",
     "predeploy": "node scripts/sync-domain.js",
     "lint": "eslint .",
     "test": "vitest run"
