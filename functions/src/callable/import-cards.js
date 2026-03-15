@@ -10,6 +10,7 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getStatusesForType } from '@pgv2/domain/services';
 
 /** @type {Record<string, string>} */
 const TYPE_PREFIX = {
@@ -24,6 +25,17 @@ const TYPE_PREFIX = {
 const VALID_TYPES = Object.keys(TYPE_PREFIX);
 
 /**
+ * Get the correct initial/default status for a card type.
+ * Uses domain-defined statuses — the first status in the list is the initial state.
+ * @param {string} type
+ * @returns {string}
+ */
+export function getDefaultStatusForType(type) {
+  const statuses = getStatusesForType(type);
+  return statuses.length > 0 ? statuses[0] : 'To Do';
+}
+
+/**
  * Validate a card object has required fields.
  * Exported for unit testing.
  * @param {Record<string, any>} card
@@ -35,6 +47,13 @@ export function validateImportCard(card) {
   }
   if (!card.type || !VALID_TYPES.includes(card.type)) {
     return { valid: false, error: `Invalid type: ${card.type}. Must be one of: ${VALID_TYPES.join(', ')}` };
+  }
+  // Validate status against domain-defined statuses for the card type
+  if (card.status) {
+    const validStatuses = getStatusesForType(card.type);
+    if (validStatuses.length > 0 && !validStatuses.includes(card.status)) {
+      return { valid: false, error: `Invalid status "${card.status}" for type "${card.type}". Must be one of: ${validStatuses.join(', ')}` };
+    }
   }
   return { valid: true };
 }
@@ -102,7 +121,7 @@ export const importCards = onCall(
             ...card,
             cardId,
             title: card.title.trim(),
-            status: card.status ?? 'To Do',
+            status: card.status ?? getDefaultStatusForType(card.type),
             year: card.year ?? new Date().getFullYear(),
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),

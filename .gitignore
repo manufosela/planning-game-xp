@@ -8,3 +8,6 @@ dist/
 .DS_Store
 .github/
 coverage/
+functions/.domain/
+functions/.domain-dep-backup
+functions/package-lock.json
