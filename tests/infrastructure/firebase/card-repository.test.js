@@ -2,21 +2,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockGetDoc = vi.fn();
 const mockDoc = vi.fn();
+const mockUpdateDoc = vi.fn();
+const mockServerTimestamp = vi.fn(() => 'mock-server-timestamp');
 
 vi.mock('firebase/firestore', () => ({
   doc: (...args) => mockDoc(...args),
   getDoc: (...args) => mockGetDoc(...args),
+  updateDoc: (...args) => mockUpdateDoc(...args),
+  serverTimestamp: () => mockServerTimestamp(),
 }));
 
 vi.mock('../../../src/lib/firebase.js', () => ({
   getDb: vi.fn(() => 'mock-db'),
+  cardsRef: vi.fn(() => 'mock-cards-collection'),
 }));
 
 vi.mock('../../../src/lib/firestore.js', () => ({
   getCards: vi.fn(),
   getCard: vi.fn(),
   createCard: vi.fn(),
-  updateCard: vi.fn(),
   deleteCard: vi.fn(),
   restoreFromTrash: vi.fn(),
 }));
@@ -72,17 +76,36 @@ describe('FirebaseCardRepository', () => {
       await repo.saveCard('p1', card);
 
       expect(firestore.createCard).toHaveBeenCalledWith('p1', card);
-      expect(firestore.updateCard).not.toHaveBeenCalled();
+      expect(mockUpdateDoc).not.toHaveBeenCalled();
     });
 
-    it('calls updateCard for existing cards (with cardId)', async () => {
-      firestore.updateCard.mockResolvedValue(undefined);
+    it('calls updateDoc directly for existing cards (with cardId)', async () => {
+      mockDoc.mockReturnValue('card-doc-ref');
+      mockUpdateDoc.mockResolvedValue(undefined);
       const card = { cardId: 'c1', title: 'Updated' };
 
       await repo.saveCard('p1', card);
 
-      expect(firestore.updateCard).toHaveBeenCalledWith('p1', 'c1', { title: 'Updated' }, { uid: 'system', name: 'system' });
+      expect(mockDoc).toHaveBeenCalledWith('mock-cards-collection', 'c1');
+      expect(mockUpdateDoc).toHaveBeenCalledWith('card-doc-ref', {
+        title: 'Updated',
+        updatedAt: 'mock-server-timestamp',
+      });
       expect(firestore.createCard).not.toHaveBeenCalled();
+    });
+
+    it('includes updatedBy from card data when present', async () => {
+      mockDoc.mockReturnValue('card-doc-ref');
+      mockUpdateDoc.mockResolvedValue(undefined);
+      const card = { cardId: 'c1', title: 'Updated', updatedBy: 'user-123' };
+
+      await repo.saveCard('p1', card);
+
+      expect(mockUpdateDoc).toHaveBeenCalledWith('card-doc-ref', {
+        title: 'Updated',
+        updatedBy: 'user-123',
+        updatedAt: 'mock-server-timestamp',
+      });
     });
   });
 

@@ -1,10 +1,9 @@
-import { doc, getDoc } from 'firebase/firestore';
-import { getDb } from '../../lib/firebase.js';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { getDb, cardsRef } from '../../lib/firebase.js';
 import {
   getCards as fsGetCards,
   getCard as fsGetCard,
   createCard,
-  updateCard,
   deleteCard as fsDeleteCard,
   restoreFromTrash as fsRestoreFromTrash,
 } from '../../lib/firestore.js';
@@ -40,7 +39,8 @@ export class FirebaseCardRepository {
   async saveCard(projectId, card) {
     if (card.cardId) {
       const { cardId, ...data } = card;
-      await updateCard(projectId, cardId, data, { uid: 'system', name: 'system' });
+      const ref = doc(cardsRef(projectId), cardId);
+      await updateDoc(ref, { ...data, updatedAt: serverTimestamp() });
     } else {
       await createCard(projectId, card);
     }

@@ -119,6 +119,87 @@ describe('FirebaseStateTransitionRepository', () => {
       expect(result.bottlenecks[0].status).toBe('In Progress');
     });
 
+    it('applies type filter via where clause', async () => {
+      const cardDocs = [
+        { id: 'c1', data: () => ({ type: 'task' }) },
+      ];
+
+      let collectionCallCount = 0;
+      mockCollection.mockImplementation(() => {
+        collectionCallCount++;
+        return `collection-ref-${collectionCallCount}`;
+      });
+      mockWhere.mockReturnValue('where-constraint');
+      mockQuery.mockReturnValue('query-ref');
+      mockGetDocs
+        .mockResolvedValueOnce({ docs: cardDocs })
+        .mockResolvedValueOnce({ docs: [] });
+
+      await repo.getMetrics('p1', { type: 'task' });
+
+      expect(mockWhere).toHaveBeenCalledWith('type', '==', 'task');
+    });
+
+    it('skips cards not matching year/sprint/developer filters', async () => {
+      const cardDocs = [
+        { id: 'c1', data: () => ({ type: 'task', year: 2025, sprint: 's1', developer: 'd1' }) },
+        { id: 'c2', data: () => ({ type: 'task', year: 2026, sprint: 's2', developer: 'd2' }) },
+      ];
+
+      let collectionCallCount = 0;
+      mockCollection.mockImplementation(() => {
+        collectionCallCount++;
+        return `collection-ref-${collectionCallCount}`;
+      });
+      mockQuery.mockReturnValue('query-ref');
+      mockGetDocs
+        .mockResolvedValueOnce({ docs: cardDocs })
+        .mockResolvedValueOnce({
+          docs: [{ data: () => ({ fromStatus: 'To Do', toStatus: 'IP', durationInPreviousStatus: 100 }) }],
+        });
+
+      const result = await repo.getMetrics('p1', { year: 2026, sprint: 's2', developer: 'd2' });
+
+      // Only c2 matches all filters, so only 1 transition set fetched
+      expect(result.transitionCounts).toEqual({ 'To Do->IP': 1 });
+    });
+
+    it('skips cards not matching sprint filter (year matches)', async () => {
+      const cardDocs = [
+        { id: 'c1', data: () => ({ type: 'task', year: 2026, sprint: 's1', developer: 'd1' }) },
+      ];
+
+      let collectionCallCount = 0;
+      mockCollection.mockImplementation(() => {
+        collectionCallCount++;
+        return `collection-ref-${collectionCallCount}`;
+      });
+      mockQuery.mockReturnValue('query-ref');
+      mockGetDocs.mockResolvedValueOnce({ docs: cardDocs });
+
+      const result = await repo.getMetrics('p1', { year: 2026, sprint: 's2' });
+
+      expect(result.transitionCounts).toEqual({});
+    });
+
+    it('skips cards not matching developer filter (year and sprint match)', async () => {
+      const cardDocs = [
+        { id: 'c1', data: () => ({ type: 'task', year: 2026, sprint: 's1', developer: 'd1' }) },
+      ];
+
+      let collectionCallCount = 0;
+      mockCollection.mockImplementation(() => {
+        collectionCallCount++;
+        return `collection-ref-${collectionCallCount}`;
+      });
+      mockQuery.mockReturnValue('query-ref');
+      mockGetDocs.mockResolvedValueOnce({ docs: cardDocs });
+
+      const result = await repo.getMetrics('p1', { year: 2026, sprint: 's1', developer: 'd2' });
+
+      expect(result.transitionCounts).toEqual({});
+    });
+
     it('returns empty metrics when no transitions', async () => {
       mockCollection.mockReturnValue('collection-ref');
       mockQuery.mockReturnValue('query-ref');
