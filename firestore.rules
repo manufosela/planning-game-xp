@@ -15,8 +15,22 @@ service cloud.firestore {
         && projectId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.projects;
     }
 
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['superadmin', 'admin'];
+    }
+
     match /users/{uid} {
       allow read, write: if isSelf(uid);
+
+      match /notifications/{notifId} {
+        allow read, write: if isSelf(uid);
+      }
+
+      match /backlog/{itemId} {
+        allow read, write: if isSelf(uid);
+      }
     }
 
     match /projects/{projectId} {
@@ -28,6 +42,10 @@ service cloud.firestore {
         match /history/{historyId} {
           allow read: if isProjectMember(projectId);
           allow write: if isProjectMember(projectId);
+        }
+
+        match /stateTransitions/{id} {
+          allow read, write: if isProjectMember(projectId);
         }
       }
 
@@ -46,11 +64,20 @@ service cloud.firestore {
       match /settings/{settingId} {
         allow read, write: if isProjectMember(projectId);
       }
+
+      match /trash/{cardId} {
+        allow read, write: if isProjectMember(projectId);
+      }
     }
 
-    match /global/config/{configId} {
+    match /globalConfig/{configId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn();
+      allow write: if isAdmin();
+
+      match /versions/{versionId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+      }
     }
 
     match /counters/{counterId} {
