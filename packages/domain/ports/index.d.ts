@@ -1,3 +1,10 @@
+export { Card, CardType, TeamMember, TagRegistry } from '../entities/card';
+export { User } from '../entities/user';
+export { Plan } from '../entities/plan';
+export { ADR } from '../entities/adr';
+export { Project } from '../entities/project';
+export { GlobalConfig } from '../entities/global-config';
+export { Timestamp } from '../entities/timestamp';
 export { QueryFilters, CardRepository } from './card-repository';
 export { ProjectRepository } from './project-repository';
 export { TeamRepository } from './team-repository';

@@ -19,7 +19,11 @@ export class FirebaseCardRepository {
    * @returns {Promise<import('@pgv2/domain/ports').Card[]>}
    */
   async getCards(projectId, filters) {
-    return fsGetCards(projectId, filters);
+    if (!filters) return fsGetCards(projectId, filters);
+    const { developer, ...rest } = filters;
+    const mapped = { ...rest };
+    if (developer) mapped.developerId = developer;
+    return fsGetCards(projectId, mapped);
   }
 
   /**
@@ -40,7 +44,7 @@ export class FirebaseCardRepository {
     if (card.cardId) {
       const { cardId, ...data } = card;
       const ref = doc(cardsRef(projectId), cardId);
-      await updateDoc(ref, { ...data, updatedAt: serverTimestamp() });
+      await updateDoc(ref, { ...data, updatedAt: serverTimestamp(), updatedBy: card.updatedBy ?? '' });
     } else {
       await createCard(projectId, card);
     }

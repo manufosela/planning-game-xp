@@ -54,6 +54,31 @@ describe('FirebaseCardRepository', () => {
       await repo.getCards('p1');
       expect(firestore.getCards).toHaveBeenCalledWith('p1', undefined);
     });
+
+    it('maps developer filter to developerId for firestore helper', async () => {
+      firestore.getCards.mockResolvedValue([]);
+      const filters = { developer: 'dev_001', type: 'task' };
+
+      await repo.getCards('p1', filters);
+
+      expect(firestore.getCards).toHaveBeenCalledWith('p1', {
+        type: 'task',
+        developerId: 'dev_001',
+      });
+    });
+
+    it('passes other filters through unchanged', async () => {
+      firestore.getCards.mockResolvedValue([]);
+      const filters = { type: 'bug', status: 'Created', sprint: 'SPR-001' };
+
+      await repo.getCards('p1', filters);
+
+      expect(firestore.getCards).toHaveBeenCalledWith('p1', {
+        type: 'bug',
+        status: 'Created',
+        sprint: 'SPR-001',
+      });
+    });
   });
 
   describe('getCard', () => {
@@ -90,6 +115,7 @@ describe('FirebaseCardRepository', () => {
       expect(mockUpdateDoc).toHaveBeenCalledWith('card-doc-ref', {
         title: 'Updated',
         updatedAt: 'mock-server-timestamp',
+        updatedBy: '',
       });
       expect(firestore.createCard).not.toHaveBeenCalled();
     });
