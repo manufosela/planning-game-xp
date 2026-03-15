@@ -10,3 +10,4 @@ dist/
 coverage/
 functions/.domain/
 functions/.domain-dep-backup
+functions/package-lock.json
