@@ -8,7 +8,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@pgv2/domain': fileURLToPath(new URL('./.domain', import.meta.url)),
+      '@pgv2/domain': fileURLToPath(new URL('../packages/domain', import.meta.url)),
     },
   },
 });

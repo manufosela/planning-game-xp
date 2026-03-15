@@ -9,3 +9,4 @@ dist/
 .github/
 coverage/
 functions/.domain/
+functions/.domain-dep-backup
