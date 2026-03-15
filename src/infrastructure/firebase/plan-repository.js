@@ -15,7 +15,8 @@ export class FirebasePlanRepository {
    * @returns {Promise<import('@pgv2/domain/ports').Plan[]>}
    */
   async getPlans(projectId) {
-    return fsGetPlans(projectId);
+    const plans = await fsGetPlans(projectId);
+    return plans.map(({ id, ...rest }) => ({ planId: id, ...rest }));
   }
 
   /**
@@ -25,7 +26,10 @@ export class FirebasePlanRepository {
    */
   async getPlan(projectId, planId) {
     const plans = await fsGetPlans(projectId);
-    return plans.find((p) => p.planId === planId) ?? null;
+    const found = plans.find((p) => p.id === planId);
+    if (!found) return null;
+    const { id, ...rest } = found;
+    return { planId: id, ...rest };
   }
 
   /**

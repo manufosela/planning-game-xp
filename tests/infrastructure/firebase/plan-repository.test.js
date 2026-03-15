@@ -19,24 +19,22 @@ describe('FirebasePlanRepository', () => {
   });
 
   describe('getPlans', () => {
-    it('delegates to firestore.getPlans', async () => {
-      const plans = [{ planId: 'pl1', title: 'Plan 1' }];
-      firestore.getPlans.mockResolvedValue(plans);
+    it('maps id to planId from firestore result', async () => {
+      firestore.getPlans.mockResolvedValue([{ id: 'pl1', title: 'Plan 1' }]);
 
       const result = await repo.getPlans('p1');
 
       expect(firestore.getPlans).toHaveBeenCalledWith('p1');
-      expect(result).toEqual(plans);
+      expect(result).toEqual([{ planId: 'pl1', title: 'Plan 1' }]);
     });
   });
 
   describe('getPlan', () => {
-    it('finds plan by id from getPlans result', async () => {
-      const plans = [
-        { planId: 'pl1', title: 'Plan 1' },
-        { planId: 'pl2', title: 'Plan 2' },
-      ];
-      firestore.getPlans.mockResolvedValue(plans);
+    it('finds plan by id from getPlans result and maps id to planId', async () => {
+      firestore.getPlans.mockResolvedValue([
+        { id: 'pl1', title: 'Plan 1' },
+        { id: 'pl2', title: 'Plan 2' },
+      ]);
 
       const result = await repo.getPlan('p1', 'pl2');
 

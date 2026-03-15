@@ -15,7 +15,8 @@ export class FirebaseAdrRepository {
    * @returns {Promise<import('@pgv2/domain/ports').ADR[]>}
    */
   async getAdrs(projectId) {
-    return fsGetAdrs(projectId);
+    const adrs = await fsGetAdrs(projectId);
+    return adrs.map(({ id, ...rest }) => ({ adrId: id, ...rest }));
   }
 
   /**
@@ -25,7 +26,10 @@ export class FirebaseAdrRepository {
    */
   async getAdr(projectId, adrId) {
     const adrs = await fsGetAdrs(projectId);
-    return adrs.find((a) => a.adrId === adrId) ?? null;
+    const found = adrs.find((a) => a.id === adrId);
+    if (!found) return null;
+    const { id, ...rest } = found;
+    return { adrId: id, ...rest };
   }
 
   /**

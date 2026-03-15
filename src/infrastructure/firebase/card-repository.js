@@ -1,10 +1,11 @@
+import { doc, getDoc } from 'firebase/firestore';
+import { getDb } from '../../lib/firebase.js';
 import {
   getCards as fsGetCards,
   getCard as fsGetCard,
   createCard,
   updateCard,
   deleteCard as fsDeleteCard,
-  generateCardId,
   restoreFromTrash as fsRestoreFromTrash,
 } from '../../lib/firestore.js';
 
@@ -39,7 +40,7 @@ export class FirebaseCardRepository {
   async saveCard(projectId, card) {
     if (card.cardId) {
       const { cardId, ...data } = card;
-      await updateCard(projectId, cardId, data);
+      await updateCard(projectId, cardId, data, { uid: 'system', name: 'system' });
     } else {
       await createCard(projectId, card);
     }
@@ -60,10 +61,8 @@ export class FirebaseCardRepository {
    * @returns {Promise<number>}
    */
   async getNextCardNumber(projectId, type) {
-    const generatedId = await generateCardId(projectId, type);
-    // generateCardId returns e.g. "PLN-TSK-0042", extract the number
-    const match = generatedId.match(/(\d+)$/);
-    return match ? parseInt(match[1], 10) : 0;
+    const counterSnap = await getDoc(doc(getDb(), 'counters', projectId));
+    return (counterSnap.data()?.[type] ?? 0) + 1;
   }
 
   /**

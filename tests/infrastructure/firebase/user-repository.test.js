@@ -67,14 +67,13 @@ describe('FirebaseUserRepository', () => {
   });
 
   describe('getUsers', () => {
-    it('delegates to firestore.getUsers', async () => {
-      const users = [{ uid: 'u1' }, { uid: 'u2' }];
-      firestore.getUsers.mockResolvedValue(users);
+    it('maps id to uid from firestore result', async () => {
+      firestore.getUsers.mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]);
 
       const result = await repo.getUsers();
 
       expect(firestore.getUsers).toHaveBeenCalledOnce();
-      expect(result).toEqual(users);
+      expect(result).toEqual([{ uid: 'u1' }, { uid: 'u2' }]);
     });
   });
 

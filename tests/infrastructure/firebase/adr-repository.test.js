@@ -19,24 +19,22 @@ describe('FirebaseAdrRepository', () => {
   });
 
   describe('getAdrs', () => {
-    it('delegates to firestore.getAdrs', async () => {
-      const adrs = [{ adrId: 'a1', title: 'ADR 1' }];
-      firestore.getAdrs.mockResolvedValue(adrs);
+    it('maps id to adrId from firestore result', async () => {
+      firestore.getAdrs.mockResolvedValue([{ id: 'a1', title: 'ADR 1' }]);
 
       const result = await repo.getAdrs('p1');
 
       expect(firestore.getAdrs).toHaveBeenCalledWith('p1');
-      expect(result).toEqual(adrs);
+      expect(result).toEqual([{ adrId: 'a1', title: 'ADR 1' }]);
     });
   });
 
   describe('getAdr', () => {
-    it('finds ADR by id from getAdrs result', async () => {
-      const adrs = [
-        { adrId: 'a1', title: 'ADR 1' },
-        { adrId: 'a2', title: 'ADR 2' },
-      ];
-      firestore.getAdrs.mockResolvedValue(adrs);
+    it('finds ADR by id from getAdrs result and maps id to adrId', async () => {
+      firestore.getAdrs.mockResolvedValue([
+        { id: 'a1', title: 'ADR 1' },
+        { id: 'a2', title: 'ADR 2' },
+      ]);
 
       const result = await repo.getAdr('p1', 'a2');
       expect(result).toEqual({ adrId: 'a2', title: 'ADR 2' });

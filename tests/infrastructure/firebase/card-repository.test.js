@@ -1,12 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const mockGetDoc = vi.fn();
+const mockDoc = vi.fn();
+
+vi.mock('firebase/firestore', () => ({
+  doc: (...args) => mockDoc(...args),
+  getDoc: (...args) => mockGetDoc(...args),
+}));
+
+vi.mock('../../../src/lib/firebase.js', () => ({
+  getDb: vi.fn(() => 'mock-db'),
+}));
+
 vi.mock('../../../src/lib/firestore.js', () => ({
   getCards: vi.fn(),
   getCard: vi.fn(),
   createCard: vi.fn(),
   updateCard: vi.fn(),
   deleteCard: vi.fn(),
-  generateCardId: vi.fn(),
   restoreFromTrash: vi.fn(),
 }));
 
@@ -70,7 +81,7 @@ describe('FirebaseCardRepository', () => {
 
       await repo.saveCard('p1', card);
 
-      expect(firestore.updateCard).toHaveBeenCalledWith('p1', 'c1', { title: 'Updated' });
+      expect(firestore.updateCard).toHaveBeenCalledWith('p1', 'c1', { title: 'Updated' }, { uid: 'system', name: 'system' });
       expect(firestore.createCard).not.toHaveBeenCalled();
     });
   });
@@ -86,20 +97,36 @@ describe('FirebaseCardRepository', () => {
   });
 
   describe('getNextCardNumber', () => {
-    it('extracts number from generated card ID', async () => {
-      firestore.generateCardId.mockResolvedValue('PLN-TSK-0042');
+    it('reads counter without mutating and returns next number', async () => {
+      mockDoc.mockReturnValue('counter-ref');
+      mockGetDoc.mockResolvedValue({
+        data: () => ({ task: 41 }),
+      });
 
       const result = await repo.getNextCardNumber('p1', 'task');
 
-      expect(firestore.generateCardId).toHaveBeenCalledWith('p1', 'task');
+      expect(mockDoc).toHaveBeenCalledWith('mock-db', 'counters', 'p1');
       expect(result).toBe(42);
     });
 
-    it('returns 0 if no number found', async () => {
-      firestore.generateCardId.mockResolvedValue('invalid');
+    it('returns 1 when counter type is missing', async () => {
+      mockDoc.mockReturnValue('counter-ref');
+      mockGetDoc.mockResolvedValue({
+        data: () => ({}),
+      });
 
       const result = await repo.getNextCardNumber('p1', 'task');
-      expect(result).toBe(0);
+      expect(result).toBe(1);
+    });
+
+    it('returns 1 when counter data is null', async () => {
+      mockDoc.mockReturnValue('counter-ref');
+      mockGetDoc.mockResolvedValue({
+        data: () => null,
+      });
+
+      const result = await repo.getNextCardNumber('p1', 'task');
+      expect(result).toBe(1);
     });
   });
 

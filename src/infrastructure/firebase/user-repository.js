@@ -33,7 +33,8 @@ export class FirebaseUserRepository {
 
   /** @returns {Promise<import('@pgv2/domain/ports').User[]>} */
   async getUsers() {
-    return fsGetUsers();
+    const users = await fsGetUsers();
+    return users.map(({ id, ...rest }) => ({ uid: id, ...rest }));
   }
 
   /**
