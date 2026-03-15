@@ -12,6 +12,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <title>Sign in — Planning Game</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#4f46e5" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -66,6 +68,31 @@
           </button>
         </div>
 
+        <div class="divider">
+          <span>or sign in with email</span>
+        </div>
+
+        <form id="email-form" class="email-form">
+          <input
+            type="email"
+            id="email-input"
+            placeholder="Email"
+            required
+            autocomplete="email"
+          />
+          <input
+            type="password"
+            id="password-input"
+            placeholder="Password"
+            required
+            autocomplete="current-password"
+          />
+          <button type="submit" class="btn btn-email">Sign in</button>
+          <button type="button" id="btn-register" class="btn-link">
+            Create account
+          </button>
+        </form>
+
         <p class="error" id="error-msg" hidden></p>
       </div>
 
@@ -76,6 +103,12 @@
       import '../components/pg-theme-toggle.js';
       import '../components/pg-toast.js';
       import { signInWithGoogle, signInWithMicrosoft, onAuthStateChange } from '../lib/auth.js';
+      import {
+        signInWithEmailAndPassword,
+        createUserWithEmailAndPassword,
+      } from 'firebase/auth';
+      import { getFirebaseAuth } from '../lib/firebase.js';
+      const auth = getFirebaseAuth();
 
       // If already signed in, redirect
       onAuthStateChange((user) => {
@@ -99,6 +132,36 @@
       document.getElementById('btn-microsoft')?.addEventListener('click', async () => {
         try {
           await signInWithMicrosoft();
+          window.location.href = '/projects';
+        } catch (err) {
+          errorMsg.textContent = /** @type {Error} */ (err).message;
+          errorMsg.hidden = false;
+        }
+      });
+
+      // Email/password sign-in
+      const emailInput = /** @type {HTMLInputElement} */ (document.getElementById('email-input'));
+      const passwordInput = /** @type {HTMLInputElement} */ (document.getElementById('password-input'));
+
+      document.getElementById('email-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+          await signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
+          window.location.href = '/projects';
+        } catch (err) {
+          errorMsg.textContent = /** @type {Error} */ (err).message;
+          errorMsg.hidden = false;
+        }
+      });
+
+      document.getElementById('btn-register')?.addEventListener('click', async () => {
+        if (!emailInput.value || !passwordInput.value) {
+          errorMsg.textContent = 'Please enter email and password first';
+          errorMsg.hidden = false;
+          return;
+        }
+        try {
+          await createUserWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
           window.location.href = '/projects';
         } catch (err) {
           errorMsg.textContent = /** @type {Error} */ (err).message;
@@ -189,6 +252,72 @@
 
       .btn:active {
         transform: translateY(1px);
+      }
+
+      .divider {
+        display: flex;
+        align-items: center;
+        gap: var(--space-md, 0.75rem);
+        margin: var(--space-xl, 1.5rem) 0;
+        font-size: 0.75rem;
+        color: var(--color-text-muted, #94a3b8);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .divider::before,
+      .divider::after {
+        content: '';
+        flex: 1;
+        border-top: 1px solid var(--color-border, #e2e8f0);
+      }
+
+      .email-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm, 0.5rem);
+      }
+
+      .email-form input {
+        width: 100%;
+        padding: var(--space-md, 0.75rem);
+        border-radius: var(--radius-md, 0.5rem);
+        border: 1px solid var(--color-border, #e2e8f0);
+        background: var(--color-surface-raised, #fff);
+        font-size: 0.875rem;
+        color: var(--color-text, #0f172a);
+        outline: none;
+        transition: border-color var(--transition-fast, 150ms ease);
+        box-sizing: border-box;
+      }
+
+      .email-form input:focus {
+        border-color: var(--color-primary, #4f46e5);
+        box-shadow: 0 0 0 2px var(--color-primary-subtle, #eef2ff);
+      }
+
+      .btn-email {
+        background: var(--color-primary, #4f46e5);
+        color: #fff;
+        border-color: var(--color-primary, #4f46e5);
+      }
+
+      .btn-email:hover {
+        background: var(--color-primary-hover, #4338ca);
+        border-color: var(--color-primary-hover, #4338ca);
+      }
+
+      .btn-link {
+        background: none;
+        border: none;
+        color: var(--color-primary, #4f46e5);
+        font-size: 0.8125rem;
+        cursor: pointer;
+        padding: var(--space-xs, 0.25rem);
+      }
+
+      .btn-link:hover {
+        text-decoration: underline;
       }
 
       .error {
