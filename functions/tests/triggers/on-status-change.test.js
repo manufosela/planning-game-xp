@@ -177,6 +177,124 @@ describe('onStatusChange — backlog management', () => {
     expect(mockDocUpdate).not.toHaveBeenCalled();
     expect(mockDocSet).not.toHaveBeenCalled();
   });
+
+  it('creates backlog entry when developer is assigned to a To Do card', async () => {
+    // Backlog doc does not exist yet
+    mockDocGet.mockResolvedValue({ exists: false });
+
+    const before = {
+      status: 'To Do',
+      developer: null,
+      validator: null,
+      updatedBy: 'dev_001',
+      type: 'task',
+      title: 'Test task',
+    };
+    const after = { ...before, developer: { id: 'dev_002' } };
+
+    await triggerHandler(makeEvent(before, after));
+
+    expect(mockDocSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: ['proj1:PLN-TSK-0001'],
+        items: {
+          'proj1:PLN-TSK-0001': expect.objectContaining({
+            cardId: 'PLN-TSK-0001',
+            projectId: 'proj1',
+            status: 'To Do',
+          }),
+        },
+      }),
+    );
+  });
+
+  it('updates existing backlog when developer is assigned', async () => {
+    mockDocGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        order: ['proj1:PLN-TSK-0099'],
+        items: { 'proj1:PLN-TSK-0099': { cardId: 'PLN-TSK-0099' } },
+      }),
+    });
+
+    const before = {
+      status: 'To Do',
+      developer: null,
+      validator: null,
+      updatedBy: 'dev_001',
+      type: 'task',
+      title: 'Test task',
+    };
+    const after = { ...before, developer: { id: 'dev_002' } };
+
+    await triggerHandler(makeEvent(before, after));
+
+    expect(mockDocUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: ['proj1:PLN-TSK-0099', 'proj1:PLN-TSK-0001'],
+      }),
+    );
+  });
+
+  it('removes card from backlog when status moves to In Progress', async () => {
+    mockDocGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        order: ['proj1:PLN-TSK-0001', 'proj1:PLN-TSK-0099'],
+        items: {
+          'proj1:PLN-TSK-0001': { cardId: 'PLN-TSK-0001' },
+          'proj1:PLN-TSK-0099': { cardId: 'PLN-TSK-0099' },
+        },
+      }),
+    });
+
+    const before = {
+      status: 'To Do',
+      developer: { id: 'dev_001' },
+      validator: null,
+      updatedBy: 'dev_001',
+      type: 'task',
+      title: 'Test task',
+    };
+    const after = { ...before, status: 'In Progress' };
+
+    await triggerHandler(makeEvent(before, after));
+
+    // Should remove from backlog (order without the card)
+    expect(mockDocUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: ['proj1:PLN-TSK-0099'],
+      }),
+    );
+  });
+
+  it('removes card from backlog when status moves to Done', async () => {
+    mockDocGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        order: ['proj1:PLN-TSK-0001'],
+        items: { 'proj1:PLN-TSK-0001': { cardId: 'PLN-TSK-0001' } },
+      }),
+    });
+
+    const before = {
+      status: 'In Progress',
+      developer: { id: 'dev_001' },
+      validator: null,
+      updatedBy: 'stk_001',
+      type: 'task',
+      title: 'Test task',
+    };
+    const after = { ...before, status: 'Done' };
+
+    await triggerHandler(makeEvent(before, after));
+
+    expect(mockDocUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: [],
+      }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
