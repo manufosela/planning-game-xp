@@ -1,0 +1,61 @@
+---
+/**
+ * Main SPA entry point — hosts the pg-app web component.
+ * All authenticated routes are handled by the client-side router inside pg-app.
+ */
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Planning Game — Agile project management for XP teams" />
+    <title>Planning Game</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#4f46e5" />
+
+    {/* Prevent FOUC: read theme from localStorage before first paint */}
+    <script is:inline>
+      (function () {
+        var t = localStorage.getItem('pg-theme') || 'system';
+        var resolved = t === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : t;
+        document.documentElement.setAttribute('data-theme', resolved);
+      })();
+    </script>
+  </head>
+  <body>
+    <pg-app></pg-app>
+
+    <script type="module">
+      import '../presentation/pg-app.js';
+      import { init } from '../bootstrap.js';
+
+      // Register service worker
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {
+          // SW registration is optional — fail silently
+        });
+      }
+
+      // Initialize auth listener and load initial data
+      init();
+    </script>
+
+    <style>
+      @import '../styles/layers.css';
+      @import '../styles/tokens.css';
+      @import '../styles/base.css';
+    </style>
+  </body>
+</html>
