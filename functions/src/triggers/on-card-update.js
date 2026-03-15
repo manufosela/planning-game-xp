@@ -15,34 +15,13 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { initializeApp, getApps } from 'firebase-admin/app';
+import { canTransition, getRequiredFields } from '@pgv2/domain/services';
 
 if (getApps().length === 0) {
   initializeApp();
 }
 
 const db = getFirestore();
-
-// ---------------------------------------------------------------------------
-// Task transition rules (mirrors src/lib/transitions.js)
-// ---------------------------------------------------------------------------
-
-/** @type {Record<string, string[]>} */
-const VALID_TASK_TRANSITIONS = {
-  'To Do': ['In Progress', 'Blocked'],
-  'In Progress': ['To Validate', 'To Do', 'Blocked'],
-  'To Validate': ['Done', 'Done&Validated', 'Reopened'],
-  'Done': ['Done&Validated'],
-  'Reopened': ['In Progress', 'To Do'],
-  'Blocked': ['To Do', 'In Progress'],
-};
-
-/** @type {Record<string, string[]>} */
-const VALID_BUG_TRANSITIONS = {
-  'Created': ['Assigned'],
-  'Assigned': ['Fixed'],
-  'Fixed': ['Verified'],
-  'Verified': ['Closed'],
-};
 
 // ---------------------------------------------------------------------------
 // Trigger
@@ -66,9 +45,15 @@ export const onCardUpdate = onDocumentUpdated(
     const cardType = afterData.type;
     const cardRef = db.doc(`projects/${projectId}/cards/${cardId}`);
 
-    // 1. Validate transition
-    const isValid = validateTransition(cardType, oldStatus, newStatus);
-    if (!isValid) {
+    // 1. Validate transition using domain service
+    // Use a system user for server-side validation (no user-level permission check)
+    const systemUser = { uid: 'system', role: 'superadmin' };
+    const transitionResult = canTransition(
+      { ...afterData, type: cardType, status: oldStatus },
+      newStatus,
+      systemUser,
+    );
+    if (!transitionResult.allowed) {
       // Revert the status change
       await cardRef.update({
         status: oldStatus,
@@ -79,7 +64,7 @@ export const onCardUpdate = onDocumentUpdated(
       if (afterData.developer?.id) {
         await writeNotification(afterData.developer.id, {
           title: 'Invalid status transition',
-          message: `Card ${cardId}: transition from "${oldStatus}" to "${newStatus}" is not allowed. Status reverted.`,
+          message: `Card ${cardId}: ${transitionResult.reason}. Status reverted.`,
           type: 'warning',
           cardRef: `${projectId}/${cardId}`,
         });
@@ -137,20 +122,6 @@ export const onCardUpdate = onDocumentUpdated(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Validate whether a status transition is allowed.
- * @param {string} cardType
- * @param {string} from
- * @param {string} to
- * @returns {boolean}
- */
-function validateTransition(cardType, from, to) {
-  const rules = cardType === 'bug' ? VALID_BUG_TRANSITIONS : VALID_TASK_TRANSITIONS;
-  const allowed = rules[from];
-  if (!allowed) return false;
-  return allowed.includes(to);
-}
 
 /**
  * Check if developer has another "In Progress" task across all projects.
