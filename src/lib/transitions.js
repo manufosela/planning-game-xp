@@ -9,4 +9,4 @@ export {
   getRequiredFields,
   isValidatorAction,
   TRANSITION_RULES,
-} from '../../packages/domain/services/transitions.js';
+} from '@pgv2/domain/services';

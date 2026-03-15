@@ -12,4 +12,4 @@ export {
   canChangeStatus,
   canAssignDeveloper,
   canEditPastYear,
-} from '../../packages/domain/services/permissions.js';
+} from '@pgv2/domain/services';

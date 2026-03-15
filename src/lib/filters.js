@@ -8,4 +8,4 @@ export {
   matchesSearch,
   matchesTags,
   applyFilters,
-} from '../../packages/domain/services/filters.js';
+} from '@pgv2/domain/services';
