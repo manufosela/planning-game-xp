@@ -6,9 +6,40 @@
  * @module presentation/pg-app
  */
 
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
 import { currentRoute, initRouter, navigate } from './router.js';
 import { registerShortcuts, unregisterShortcuts } from './keyboard-shortcuts.js';
+
+// Import ALL existing components so they register their custom elements
+import '../components/pg-nav.js';
+import '../components/pg-toast.js';
+import '../components/pg-project.js';
+import '../components/pg-table.js';
+import '../components/pg-board.js';
+import '../components/pg-gantt.js';
+import '../components/pg-filters.js';
+import '../components/pg-view-switcher.js';
+import '../components/pg-tabs.js';
+import '../components/pg-card.js';
+import '../components/pg-card-panel.js';
+import '../components/pg-dashboard.js';
+import '../components/pg-chart.js';
+import '../components/pg-wip.js';
+import '../components/pg-admin.js';
+import '../components/pg-team.js';
+import '../components/pg-config.js';
+import '../components/pg-plans.js';
+import '../components/pg-adrs.js';
+import '../components/pg-bell.js';
+import '../components/pg-form.js';
+import '../components/pg-select.js';
+import '../components/pg-modal.js';
+import '../components/pg-badge.js';
+import '../components/pg-theme-toggle.js';
+import '../components/pg-upload.js';
+import '../components/pg-year.js';
+import '../components/pg-status-transition.js';
+import './pg-command.js';
 
 // ---------------------------------------------------------------------------
 // Route-to-component mapping (exported for testing)
@@ -19,11 +50,11 @@ import { registerShortcuts, unregisterShortcuts } from './keyboard-shortcuts.js'
  * @type {Record<string, string>}
  */
 export const ROUTE_COMPONENTS = {
-  projects: 'pg-projects-view',
-  project: 'pg-project-view',
-  dashboard: 'pg-dashboard-view',
-  wip: 'pg-wip-view',
-  admin: 'pg-admin-view',
+  projects: 'pg-project',
+  project: 'pg-project',
+  dashboard: 'pg-dashboard',
+  wip: 'pg-wip',
+  admin: 'pg-admin',
   login: 'pg-login-view',
 };
 
@@ -35,6 +66,8 @@ export class PgApp extends LitElement {
   static properties = {
     _authenticated: { state: true },
     _routeName: { state: true },
+    _currentView: { state: true },
+    _projectId: { state: true },
   };
 
   static styles = css`
@@ -56,6 +89,18 @@ export class PgApp extends LitElement {
       padding: var(--space-lg, 1rem);
     }
 
+    .project-toolbar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md, 0.5rem);
+      margin-bottom: var(--space-md, 0.5rem);
+    }
+
+    .view-container {
+      position: relative;
+      flex: 1;
+    }
+
     .loading {
       display: flex;
       align-items: center;
@@ -70,24 +115,52 @@ export class PgApp extends LitElement {
     super();
     this._authenticated = false;
     this._routeName = 'projects';
+    this._currentView = 'table';
+    this._projectId = '';
 
-    /** @type {(() => void) | null} */
-    this._unsubRoute = null;
+    /** @type {number | null} */
+    this._rafId = null;
   }
 
   connectedCallback() {
     super.connectedCallback();
     initRouter();
     registerShortcuts();
-
-    // Subscribe to route changes by polling the signal
-    // (In a real Lit + signals setup, SignalWatcher handles this automatically)
-    this._routeName = currentRoute.get().name;
+    this._syncRoute();
+    this._startRoutePolling();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     unregisterShortcuts();
+    this._stopRoutePolling();
+  }
+
+  /** Sync internal state from currentRoute signal. */
+  _syncRoute() {
+    const route = currentRoute.get();
+    this._routeName = route.name;
+    this._projectId = route.params?.id || '';
+  }
+
+  /** Poll currentRoute signal via rAF to detect changes. */
+  _startRoutePolling() {
+    if (typeof globalThis.requestAnimationFrame === 'undefined') return;
+    const poll = () => {
+      const route = currentRoute.get();
+      if (route.name !== this._routeName || (route.params?.id || '') !== this._projectId) {
+        this._syncRoute();
+      }
+      this._rafId = globalThis.requestAnimationFrame(poll);
+    };
+    this._rafId = globalThis.requestAnimationFrame(poll);
+  }
+
+  _stopRoutePolling() {
+    if (this._rafId != null && typeof globalThis.cancelAnimationFrame !== 'undefined') {
+      globalThis.cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
   }
 
   /**
@@ -101,24 +174,68 @@ export class PgApp extends LitElement {
     }
   }
 
+  /** Handle view-change events from pg-view-switcher. */
+  _onViewChange(/** @type {CustomEvent} */ e) {
+    this._currentView = e.detail?.view || 'table';
+  }
+
+  /**
+   * Render the current card view (table, board, or gantt).
+   * @returns {import('lit').TemplateResult}
+   */
+  _renderCardView() {
+    switch (this._currentView) {
+      case 'board':
+        return html`<pg-board .projectId=${this._projectId}></pg-board>`;
+      case 'gantt':
+        return html`<pg-gantt .projectId=${this._projectId}></pg-gantt>`;
+      default:
+        return html`<pg-table .projectId=${this._projectId}></pg-table>`;
+    }
+  }
+
   /**
    * Render the content for the current route.
    * @returns {import('lit').TemplateResult}
    */
   _renderRoute() {
-    const route = currentRoute.get();
-    const tag = ROUTE_COMPONENTS[route.name];
-    if (!tag) {
-      return html`<div>Page not found</div>`;
+    switch (this._routeName) {
+      case 'projects':
+        return html`<pg-project></pg-project>`;
+
+      case 'project':
+        return html`
+          <pg-tabs .projectId=${this._projectId}></pg-tabs>
+          <div class="project-toolbar">
+            <pg-filters .projectId=${this._projectId}></pg-filters>
+            <pg-view-switcher
+              .current=${this._currentView}
+              @view-change=${this._onViewChange}
+            ></pg-view-switcher>
+          </div>
+          <div class="view-container">
+            ${this._renderCardView()}
+          </div>
+          <pg-card-panel .projectId=${this._projectId}></pg-card-panel>
+        `;
+
+      case 'dashboard':
+        return html`<pg-dashboard .projectId=${this._projectId}></pg-dashboard>`;
+
+      case 'wip':
+        return html`<pg-wip .projectId=${this._projectId}></pg-wip>`;
+
+      case 'admin':
+        return html`<pg-admin></pg-admin>`;
+
+      default:
+        return html`<div>Page not found</div>`;
     }
-    // Use unsafeStatic for dynamic tag names in a real app.
-    // Here we use a slot-based approach for simplicity.
-    return html`<slot name=${route.name}></slot>`;
   }
 
   render() {
     if (!this._authenticated) {
-      return html`<slot name="login"></slot>`;
+      return html`<div class="loading">Authenticating…</div>`;
     }
 
     return html`

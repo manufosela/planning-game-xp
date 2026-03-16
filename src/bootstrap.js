@@ -115,11 +115,18 @@ export const container = {
 // ---------------------------------------------------------------------------
 
 /**
- * Initializes the Firebase auth listener and updates the store on auth changes.
+ * Initializes the Firebase auth listener, updates the store, and
+ * connects auth state to the pg-app element.
  * @returns {Function} unsubscribe function
  */
 export function init() {
   return manageAuth.onAuthChange((user) => {
     store.authUser.value = user;
+
+    // Connect auth state to pg-app element
+    const pgApp = /** @type {any} */ (document.querySelector('pg-app'));
+    if (pgApp?.setAuthenticated) {
+      pgApp.setAuthenticated(!!user);
+    }
   });
 }
