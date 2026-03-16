@@ -41,6 +41,10 @@ export function getFirebaseApp() {
  * @returns {import('firebase/firestore').Firestore}
  */
 export function getDb() {
+  const databaseId = import.meta.env.PUBLIC_FIREBASE_DATABASE_ID;
+  if (databaseId && databaseId !== '(default)') {
+    return getFirestore(getFirebaseApp(), databaseId);
+  }
   return getFirestore(getFirebaseApp());
 }
 

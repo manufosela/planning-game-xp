@@ -4,6 +4,10 @@ dist/
 .env
 .env.*
 !.env.example
+# Instance manager
+.last-instance
+planning-game-instances/*/serviceAccountKey.json
+planning-game-instances/*/emulator-data/
 *.log
 .DS_Store
 .github/

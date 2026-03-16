@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isProjectMember(projectId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && projectId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.projects;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['superadmin', 'admin'];
+    }
+
+    match /users/{uid} {
+      allow read, write: if isSelf(uid);
+
+      match /notifications/{notifId} {
+        allow read, write: if isSelf(uid);
+      }
+
+      match /backlog/{itemId} {
+        allow read, write: if isSelf(uid);
+      }
+    }
+
+    match /projects/{projectId} {
+      allow read, write: if isProjectMember(projectId);
+
+      match /cards/{cardId} {
+        allow read, write: if isProjectMember(projectId);
+
+        match /history/{historyId} {
+          allow read: if isProjectMember(projectId);
+          allow write: if isProjectMember(projectId);
+        }
+
+        match /stateTransitions/{id} {
+          allow read, write: if isProjectMember(projectId);
+        }
+      }
+
+      match /team/{memberId} {
+        allow read, write: if isProjectMember(projectId);
+      }
+
+      match /plans/{planId} {
+        allow read, write: if isProjectMember(projectId);
+      }
+
+      match /adrs/{adrId} {
+        allow read, write: if isProjectMember(projectId);
+      }
+
+      match /settings/{settingId} {
+        allow read, write: if isProjectMember(projectId);
+      }
+
+      match /trash/{cardId} {
+        allow read, write: if isProjectMember(projectId);
+      }
+    }
+
+    match /globalConfig/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+
+      match /versions/{versionId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+      }
+    }
+
+    match /counters/{counterId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}
