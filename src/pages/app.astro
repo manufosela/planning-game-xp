@@ -48,8 +48,10 @@
         });
       }
 
-      // Initialize auth listener and load initial data
-      init();
+      // Wait for pg-app to be defined, then initialize auth
+      customElements.whenDefined('pg-app').then(() => {
+        init();
+      });
     </script>
 
     <style>
