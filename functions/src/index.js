@@ -11,3 +11,5 @@ export { onStatusChange } from './triggers/on-status-change.js';
 export { generateAC } from './callable/generate-ac.js';
 export { analyzeBug } from './callable/analyze-bug.js';
 export { importCards } from './callable/import-cards.js';
+export { createNewInstance } from './callable/create-instance.js';
+export { approveUser, rejectUser, requestInstance } from './callable/approve-user.js';
