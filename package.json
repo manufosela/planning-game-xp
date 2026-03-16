@@ -5,6 +5,8 @@
   "type": "module",
   "workspaces": ["packages/*", "functions"],
   "scripts": {
+    "predev": "node scripts/instance-manager.js select",
+    "prebuild": "node scripts/instance-manager.js select",
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",
@@ -12,7 +14,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "instance:select": "node scripts/instance-manager.js select",
+    "instance:verify": "node scripts/instance-manager.js verify",
+    "instance:use": "node scripts/instance-manager.js use",
+    "instance:create": "node scripts/instance-manager.js create",
+    "instance:list": "node scripts/instance-manager.js list"
   },
   "dependencies": {
     "@astrojs/lit": "^4.0.0",
