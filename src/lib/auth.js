@@ -9,6 +9,7 @@ import {
   OAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  getIdTokenResult,
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { ContextProvider, createContext } from '@lit/context';
@@ -153,6 +154,21 @@ export function authGuard(user, redirectTo = '/login') {
   }
 
   return { allowed: true };
+}
+
+/**
+ * Extract custom claims (instance, instanceRole, platformAdmin) from user's ID token.
+ * @param {import('firebase/auth').User} user
+ * @returns {Promise<{ instance?: string, instanceRole?: string, platformAdmin?: boolean }>}
+ */
+export async function getIdTokenClaims(user) {
+  const tokenResult = await getIdTokenResult(user);
+  const { instance, instanceRole, platformAdmin } = tokenResult.claims;
+  return {
+    instance: /** @type {string | undefined} */ (instance),
+    instanceRole: /** @type {string | undefined} */ (instanceRole),
+    platformAdmin: /** @type {boolean | undefined} */ (platformAdmin),
+  };
 }
 
 /**

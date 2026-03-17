@@ -9,6 +9,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { currentRoute, initRouter, navigate } from './router.js';
 import { registerShortcuts, unregisterShortcuts } from './keyboard-shortcuts.js';
+import { currentInstance } from '../lib/store.js';
 
 // Import ALL existing components so they register their custom elements
 import '../components/pg-nav.js';
@@ -65,6 +66,7 @@ export const ROUTE_COMPONENTS = {
 export class PgApp extends LitElement {
   static properties = {
     _authenticated: { state: true },
+    _hasInstance: { state: true },
     _routeName: { state: true },
     _currentView: { state: true },
     _projectId: { state: true },
@@ -109,11 +111,43 @@ export class PgApp extends LitElement {
       color: var(--color-text-muted, #94a3b8);
       font-size: 0.875rem;
     }
+
+    .instance-gate {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: var(--space-md, 0.75rem);
+      padding: var(--space-xl, 2rem);
+      text-align: center;
+    }
+
+    .instance-gate h2 {
+      font-size: var(--font-size-xl, 1.25rem);
+      font-weight: 600;
+      color: var(--color-text, #0f172a);
+      margin: 0;
+    }
+
+    .instance-gate p {
+      font-size: var(--font-size-sm, 0.875rem);
+      color: var(--color-text-muted, #64748b);
+      margin: 0;
+      max-width: 28rem;
+      line-height: 1.5;
+    }
+
+    .instance-gate .icon {
+      font-size: 2.5rem;
+      opacity: 0.6;
+    }
   `;
 
   constructor() {
     super();
     this._authenticated = false;
+    this._hasInstance = false;
     this._routeName = 'projects';
     this._currentView = 'table';
     this._projectId = '';
@@ -170,8 +204,14 @@ export class PgApp extends LitElement {
   setAuthenticated(authenticated) {
     this._authenticated = authenticated;
     if (!authenticated) {
+      this._hasInstance = false;
       navigate('/login');
+      return;
     }
+    // Check instance: signal from claims OR fallback to env var
+    const instance = currentInstance.get();
+    const envDb = import.meta.env.PUBLIC_FIREBASE_DATABASE_ID;
+    this._hasInstance = !!(instance || (envDb && envDb !== '(default)'));
   }
 
   /** Handle view-change events from pg-view-switcher. */
@@ -233,9 +273,28 @@ export class PgApp extends LitElement {
     }
   }
 
+  /** Render the "no instance" gate screen. */
+  _renderInstanceGate() {
+    return html`
+      <div class="instance-gate">
+        <span class="icon" aria-hidden="true">&#x1f512;</span>
+        <h2>Pending instance assignment</h2>
+        <p>
+          Your account is authenticated but has no instance assigned yet.
+          Please contact your administrator to get access, or wait for your
+          request to be approved.
+        </p>
+      </div>
+    `;
+  }
+
   render() {
     if (!this._authenticated) {
       return html`<div class="loading">Authenticating…</div>`;
+    }
+
+    if (!this._hasInstance) {
+      return this._renderInstanceGate();
     }
 
     return html`

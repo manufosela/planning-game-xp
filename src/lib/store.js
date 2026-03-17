@@ -157,6 +157,47 @@ export function resetFilters() {
 }
 
 // ---------------------------------------------------------------------------
+// Instance / Custom Claims
+// ---------------------------------------------------------------------------
+
+/**
+ * Current tenant instance from Custom Claims (e.g. 'geniova').
+ * @type {import('@lit-labs/signals').Signal<string | null> & { value: string | null }}
+ */
+export const currentInstance = withValue(signal(/** @type {string | null} */ (null)));
+
+/**
+ * User role within the current instance.
+ * @type {import('@lit-labs/signals').Signal<string | null> & { value: string | null }}
+ */
+export const instanceRole = withValue(signal(/** @type {string | null} */ (null)));
+
+/**
+ * Whether the user is a platform-wide admin.
+ * @type {import('@lit-labs/signals').Signal<boolean> & { value: boolean }}
+ */
+export const platformAdmin = withValue(signal(false));
+
+/**
+ * Set instance claims from ID token result.
+ * @param {{ instance?: string, instanceRole?: string, platformAdmin?: boolean }} claims
+ */
+export function setInstanceClaims(claims) {
+  currentInstance.set(claims.instance ?? null);
+  instanceRole.set(claims.instanceRole ?? null);
+  platformAdmin.set(claims.platformAdmin ?? false);
+}
+
+/**
+ * Clear all instance claims (on logout).
+ */
+export function clearInstanceClaims() {
+  currentInstance.set(null);
+  instanceRole.set(null);
+  platformAdmin.set(false);
+}
+
+// ---------------------------------------------------------------------------
 // Notifications
 // ---------------------------------------------------------------------------
 

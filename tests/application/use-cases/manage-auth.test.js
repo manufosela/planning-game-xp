@@ -46,9 +46,10 @@ describe('ManageAuth', () => {
     await internalCallback({ uid: 'u1', email: 'test@test.com' });
 
     expect(userRepo.get).toHaveBeenCalledWith('u1');
-    expect(callback).toHaveBeenCalledWith({
-      uid: 'u1', email: 'test@test.com', role: 'developer',
-    });
+    expect(callback).toHaveBeenCalledWith(
+      { uid: 'u1', email: 'test@test.com', role: 'developer' },
+      {},
+    );
     expect(typeof unsubscribe).toBe('function');
   });
 

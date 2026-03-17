@@ -4,6 +4,7 @@ import {
   signOut as authSignOut,
   onAuthStateChange,
   getCurrentUser as authGetCurrentUser,
+  getIdTokenClaims,
 } from '../../lib/auth.js';
 
 /**
@@ -57,5 +58,17 @@ export class FirebaseAuthAdapter {
   getCurrentUser() {
     const firebaseUser = authGetCurrentUser();
     return toAuthUser(firebaseUser);
+  }
+
+  /**
+   * Extract custom claims from a Firebase user's ID token.
+   * @param {import('firebase/auth').User | null} user
+   * @returns {Promise<{ instance?: string, instanceRole?: string, platformAdmin?: boolean }>}
+   */
+  async getCustomClaims(user) {
+    if (!user) {
+      return { instance: undefined, instanceRole: undefined, platformAdmin: undefined };
+    }
+    return getIdTokenClaims(user);
   }
 }

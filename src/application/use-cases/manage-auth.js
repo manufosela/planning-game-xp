@@ -33,7 +33,7 @@ export class ManageAuth {
   /**
    * Subscribe to auth state changes. Enriches the Firebase auth user
    * with the full user profile from Firestore.
-   * @param {(user: any) => void} callback
+   * @param {(user: any, claims?: { instance?: string, instanceRole?: string, platformAdmin?: boolean }) => void} callback
    * @returns {Function} unsubscribe
    */
   onAuthChange(callback) {
@@ -42,8 +42,14 @@ export class ManageAuth {
         callback(null);
         return;
       }
-      const profile = await this._userRepo.get(firebaseUser.uid);
-      callback(profile);
+
+      // Extract custom claims in parallel with profile fetch
+      const [profile, claims] = await Promise.all([
+        this._userRepo.get(firebaseUser.uid),
+        this._authPort.getCustomClaims?.(firebaseUser) ?? Promise.resolve({}),
+      ]);
+
+      callback(profile, claims);
     });
   }
 }

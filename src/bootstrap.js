@@ -120,8 +120,15 @@ export const container = {
  * @returns {Function} unsubscribe function
  */
 export function init() {
-  return manageAuth.onAuthChange((user) => {
+  return manageAuth.onAuthChange((user, claims) => {
     store.authUser.value = user;
+
+    // Set instance claims from token (or clear on logout)
+    if (user && claims) {
+      store.setInstanceClaims(claims);
+    } else {
+      store.clearInstanceClaims();
+    }
 
     // Connect auth state to pg-app element
     const pgApp = /** @type {any} */ (document.querySelector('pg-app'));

@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { currentInstance } from './store.js';
 
 const REQUIRED_KEYS = [
   'PUBLIC_FIREBASE_API_KEY',
@@ -41,6 +42,12 @@ export function getFirebaseApp() {
  * @returns {import('firebase/firestore').Firestore}
  */
 export function getDb() {
+  // Priority: Custom Claim signal > env var > default
+  const claimInstance = currentInstance.get();
+  if (claimInstance) {
+    return getFirestore(getFirebaseApp(), claimInstance);
+  }
+
   const databaseId = import.meta.env.PUBLIC_FIREBASE_DATABASE_ID;
   if (databaseId && databaseId !== '(default)') {
     return getFirestore(getFirebaseApp(), databaseId);
