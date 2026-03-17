@@ -13,15 +13,14 @@
  */
 
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { canTransition, getRequiredFields } from '@pgv2/domain/services';
+import { getTenantDbFromEvent } from '../helpers/tenant-db.js';
 
 if (getApps().length === 0) {
   initializeApp();
 }
-
-const db = getFirestore();
 
 // ---------------------------------------------------------------------------
 // Trigger
@@ -42,6 +41,7 @@ export const onCardUpdate = onDocumentUpdated(
     // Only process status changes
     if (oldStatus === newStatus) return;
 
+    const db = getTenantDbFromEvent(event);
     const cardType = afterData.type;
     const cardRef = db.doc(`projects/${projectId}/cards/${cardId}`);
 
@@ -62,7 +62,7 @@ export const onCardUpdate = onDocumentUpdated(
 
       // Write notification about the revert
       if (afterData.developer?.id) {
-        await writeNotification(afterData.developer.id, {
+        await writeNotification(db, afterData.developer.id, {
           title: 'Invalid status transition',
           message: `Card ${cardId}: ${transitionResult.reason}. Status reverted.`,
           type: 'warning',
@@ -75,7 +75,7 @@ export const onCardUpdate = onDocumentUpdated(
     // 2. WIP enforcement for "In Progress"
     if (newStatus === 'In Progress' && afterData.developer?.id) {
       const devId = afterData.developer.id;
-      const hasOtherWip = await checkDeveloperWip(devId, projectId, cardId);
+      const hasOtherWip = await checkDeveloperWip(db, devId, projectId, cardId);
 
       if (hasOtherWip) {
         // Revert
@@ -84,7 +84,7 @@ export const onCardUpdate = onDocumentUpdated(
           updatedAt: FieldValue.serverTimestamp(),
         });
 
-        await writeNotification(devId, {
+        await writeNotification(db, devId, {
           title: 'WIP limit exceeded',
           message: `Card ${cardId}: you already have another task "In Progress". Complete or pause it first.`,
           type: 'warning',
@@ -99,7 +99,7 @@ export const onCardUpdate = onDocumentUpdated(
 
     // 4. Notify validator on "To Validate"
     if (newStatus === 'To Validate' && afterData.validator?.id) {
-      await writeNotification(afterData.validator.id, {
+      await writeNotification(db, afterData.validator.id, {
         title: 'Card ready for validation',
         message: `${cardId} "${afterData.title}" is ready for your review.`,
         type: 'action',
@@ -109,7 +109,7 @@ export const onCardUpdate = onDocumentUpdated(
 
     // 5. Notify developer on "Reopened"
     if (newStatus === 'Reopened' && afterData.developer?.id) {
-      await writeNotification(afterData.developer.id, {
+      await writeNotification(db, afterData.developer.id, {
         title: 'Card reopened',
         message: `${cardId} "${afterData.title}" has been reopened and needs rework.`,
         type: 'action',
@@ -125,12 +125,13 @@ export const onCardUpdate = onDocumentUpdated(
 
 /**
  * Check if developer has another "In Progress" task across all projects.
+ * @param {import('firebase-admin/firestore').Firestore} db
  * @param {string} devId
  * @param {string} currentProjectId
  * @param {string} currentCardId
  * @returns {Promise<boolean>}
  */
-async function checkDeveloperWip(devId, currentProjectId, currentCardId) {
+async function checkDeveloperWip(db, devId, currentProjectId, currentCardId) {
   // Get all projects
   const projectsSnap = await db.collection('projects').get();
 
@@ -197,11 +198,12 @@ async function trackWorkCycle(cardRef, cardData, oldStatus, newStatus) {
 
 /**
  * Write a notification document to a user's notifications subcollection.
+ * @param {import('firebase-admin/firestore').Firestore} db
  * @param {string} userId
  * @param {{ title: string; message: string; type: string; cardRef: string }} data
  * @returns {Promise<void>}
  */
-async function writeNotification(userId, data) {
+async function writeNotification(db, userId, data) {
   const notifRef = db.collection('users').doc(userId).collection('notifications');
   await notifRef.add({
     ...data,

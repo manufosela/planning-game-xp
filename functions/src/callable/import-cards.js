@@ -9,8 +9,9 @@
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
 import { getStatusesForType } from '@pgv2/domain/services';
+import { getTenantDb } from '../helpers/tenant-db.js';
 
 /** @type {Record<string, string>} */
 const TYPE_PREFIX = {
@@ -73,7 +74,7 @@ export const importCards = onCall(
       throw new HttpsError('invalid-argument', 'Maximum 500 cards per import.');
     }
 
-    const db = getFirestore();
+    const db = getTenantDb(request);
     const projectSnap = await db.doc(`projects/${projectId}`).get();
 
     if (!projectSnap.exists) {

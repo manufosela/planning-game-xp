@@ -9,15 +9,14 @@
  */
 
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { initializeApp, getApps } from 'firebase-admin/app';
+import { getTenantDbFromEvent } from '../helpers/tenant-db.js';
 
 if (getApps().length === 0) {
   initializeApp();
 }
-
-const db = getFirestore();
 
 // ---------------------------------------------------------------------------
 // Trigger
@@ -37,14 +36,16 @@ export const onStatusChange = onDocumentUpdated(
     const oldDevId = beforeData.developer?.id;
     const newDevId = afterData.developer?.id;
 
+    const db = getTenantDbFromEvent(event);
+
     // Handle status change notifications
     if (oldStatus !== newStatus) {
-      await sendStatusChangeNotification(projectId, cardId, afterData, oldStatus, newStatus);
+      await sendStatusChangeNotification(db, projectId, cardId, afterData, oldStatus, newStatus);
     }
 
     // Handle developer assignment changes (backlog management)
     if (oldDevId !== newDevId || oldStatus !== newStatus) {
-      await updateDeveloperBacklog(projectId, cardId, beforeData, afterData, oldDevId, newDevId);
+      await updateDeveloperBacklog(db, projectId, cardId, beforeData, afterData, oldDevId, newDevId);
     }
   }
 );
@@ -55,6 +56,7 @@ export const onStatusChange = onDocumentUpdated(
 
 /**
  * Send FCM push notification on status change.
+ * @param {import('firebase-admin/firestore').Firestore} db
  * @param {string} projectId
  * @param {string} cardId
  * @param {Record<string, unknown>} cardData
@@ -62,7 +64,7 @@ export const onStatusChange = onDocumentUpdated(
  * @param {string} newStatus
  * @returns {Promise<void>}
  */
-async function sendStatusChangeNotification(projectId, cardId, cardData, oldStatus, newStatus) {
+async function sendStatusChangeNotification(db, projectId, cardId, cardData, oldStatus, newStatus) {
   // Determine who should receive the notification
   const recipientIds = new Set();
 
@@ -120,6 +122,7 @@ async function sendStatusChangeNotification(projectId, cardId, cardData, oldStat
 
 /**
  * Update developer backlog when card assignment or status changes.
+ * @param {import('firebase-admin/firestore').Firestore} db
  * @param {string} projectId
  * @param {string} cardId
  * @param {Record<string, unknown>} beforeData
@@ -128,18 +131,18 @@ async function sendStatusChangeNotification(projectId, cardId, cardData, oldStat
  * @param {string | undefined} newDevId
  * @returns {Promise<void>}
  */
-async function updateDeveloperBacklog(projectId, cardId, beforeData, afterData, oldDevId, newDevId) {
+async function updateDeveloperBacklog(db, projectId, cardId, beforeData, afterData, oldDevId, newDevId) {
   const oldStatus = /** @type {string} */ (beforeData.status);
   const newStatus = /** @type {string} */ (afterData.status);
 
   // Remove from old developer's backlog if developer changed or status leaves backlog
   if (oldDevId && (oldDevId !== newDevId || shouldLeaveBacklog(newStatus))) {
-    await removeFromBacklog(oldDevId, `${projectId}:${cardId}`);
+    await removeFromBacklog(db, oldDevId, `${projectId}:${cardId}`);
   }
 
   // Add to new developer's backlog if status warrants it
   if (newDevId && shouldBeInBacklog(newStatus)) {
-    await addToBacklog(newDevId, `${projectId}:${cardId}`, {
+    await addToBacklog(db, newDevId, `${projectId}:${cardId}`, {
       cardId,
       projectId,
       cardType: /** @type {string} */ (afterData.type),
@@ -150,7 +153,7 @@ async function updateDeveloperBacklog(projectId, cardId, beforeData, afterData, 
 
   // Remove from backlog on completion
   if (newDevId && shouldLeaveBacklog(newStatus) && !shouldLeaveBacklog(oldStatus)) {
-    await removeFromBacklog(newDevId, `${projectId}:${cardId}`);
+    await removeFromBacklog(db, newDevId, `${projectId}:${cardId}`);
   }
 }
 
@@ -174,12 +177,13 @@ function shouldLeaveBacklog(status) {
 
 /**
  * Add a card to a developer's backlog.
+ * @param {import('firebase-admin/firestore').Firestore} db
  * @param {string} devId
  * @param {string} cardKey
  * @param {{ cardId: string; projectId: string; cardType: string; title: string; status: string }} item
  * @returns {Promise<void>}
  */
-async function addToBacklog(devId, cardKey, item) {
+async function addToBacklog(db, devId, cardKey, item) {
   const backlogRef = db.doc(`developerBacklogs/${devId}`);
   const snap = await backlogRef.get();
 
@@ -205,11 +209,12 @@ async function addToBacklog(devId, cardKey, item) {
 
 /**
  * Remove a card from a developer's backlog.
+ * @param {import('firebase-admin/firestore').Firestore} db
  * @param {string} devId
  * @param {string} cardKey
  * @returns {Promise<void>}
  */
-async function removeFromBacklog(devId, cardKey) {
+async function removeFromBacklog(db, devId, cardKey) {
   const backlogRef = db.doc(`developerBacklogs/${devId}`);
   const snap = await backlogRef.get();
 
