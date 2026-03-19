@@ -109,6 +109,20 @@ describe('timestamp-utils', () => {
 
       expect(result).toBe('2026-02-07T14:30:45');
     });
+
+    it('should convert UTC (Z suffix) timestamp to local time', () => {
+      const input = '2026-02-09T14:30:00Z';
+      const date = new Date(input);
+      const expected = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+      expect(generateTimestamp(input, 'start')).toBe(expected);
+    });
+
+    it('should convert timezone offset timestamp to local time', () => {
+      const input = '2026-02-09T14:30:00+05:00';
+      const date = new Date(input);
+      const expected = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+      expect(generateTimestamp(input, 'start')).toBe(expected);
+    });
   });
 
   describe('extractDateTimeLocal', () => {
@@ -137,8 +151,22 @@ describe('timestamp-utils', () => {
       expect(extractDateTimeLocal(undefined)).toBe('');
     });
 
-    it('should handle ISO string with timezone', () => {
-      expect(extractDateTimeLocal('2026-02-09T14:30:45.000Z')).toBe('2026-02-09T14:30');
+    it('should convert UTC timestamp (Z suffix) to local time', () => {
+      const input = '2026-02-09T14:30:45.000Z';
+      const date = new Date(input);
+      const expected = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+      expect(extractDateTimeLocal(input)).toBe(expected);
+    });
+
+    it('should convert timezone offset timestamp to local time', () => {
+      const input = '2026-02-09T14:30:45+05:00';
+      const date = new Date(input);
+      const expected = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+      expect(extractDateTimeLocal(input)).toBe(expected);
+    });
+
+    it('should not alter local time strings (no timezone suffix)', () => {
+      expect(extractDateTimeLocal('2026-02-09T14:30:45')).toBe('2026-02-09T14:30');
     });
   });
 

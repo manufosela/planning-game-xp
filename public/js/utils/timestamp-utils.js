@@ -21,6 +21,14 @@ const DEFAULT_END_TIME = '17:00:00';
 export function generateTimestamp(date = new Date(), context = 'start') {
   // If the string already includes a time part (from datetime-local input), preserve it
   if (typeof date === 'string' && date.includes('T')) {
+    // If timestamp has UTC indicator (Z) or timezone offset, convert to local time
+    // so all stored timestamps are consistently in local time without timezone suffix
+    if (_hasTimezone(date)) {
+      const dateObj = new Date(date);
+      if (!isNaN(dateObj.getTime())) {
+        return `${_formatDate(dateObj)}T${_formatTime(dateObj)}`;
+      }
+    }
     const datePart = date.split('T')[0];
     const timePart = date.split('T')[1];
     // datetime-local gives HH:mm, normalize to HH:mm:ss
@@ -65,6 +73,19 @@ export function extractDateTimeLocal(timestamp, context = 'start') {
   if (!timestamp.includes('T')) {
     const defaultTime = context === 'end' ? '17:00' : '09:00';
     return `${timestamp}T${defaultTime}`;
+  }
+  // If timestamp has UTC indicator (Z) or timezone offset, convert to local time
+  // datetime-local inputs work in local time, so UTC must be converted
+  if (_hasTimezone(timestamp)) {
+    const date = new Date(timestamp);
+    if (!isNaN(date.getTime())) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const h = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      return `${y}-${m}-${d}T${h}:${min}`;
+    }
   }
   return timestamp.substring(0, 16); // YYYY-MM-DDTHH:mm
 }
@@ -112,4 +133,11 @@ function _parseDate(str) {
   const datePart = str.split('T')[0];
   const [year, month, day] = datePart.split('-').map(Number);
   return new Date(year, month - 1, day);
+}
+
+function _hasTimezone(str) {
+  if (str.endsWith('Z')) return true;
+  // Check for +HH:mm or -HH:mm offset after the time part (position 19+)
+  const offsetMatch = str.match(/[+-]\d{2}:\d{2}$/);
+  return offsetMatch !== null && str.indexOf(offsetMatch[0]) > 10;
 }
