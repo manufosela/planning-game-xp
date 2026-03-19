@@ -9,6 +9,7 @@ import {
   PROPOSAL_SCHEMA,
   EPIC_SCHEMA,
   QA_SCHEMA,
+  SPRINT_SCHEMA,
   CARD_SCHEMAS
 } from '@/schemas/card-field-schemas.js';
 
@@ -227,10 +228,11 @@ describe('Card Field Schemas', () => {
       expect(CARD_SCHEMAS['proposal-card']).toBe(PROPOSAL_SCHEMA);
       expect(CARD_SCHEMAS['epic-card']).toBe(EPIC_SCHEMA);
       expect(CARD_SCHEMAS['qa-card']).toBe(QA_SCHEMA);
+      expect(CARD_SCHEMAS['sprint-card']).toBe(SPRINT_SCHEMA);
     });
 
-    it('should have 5 card types', () => {
-      expect(Object.keys(CARD_SCHEMAS).length).toBe(5);
+    it('should have 6 card types', () => {
+      expect(Object.keys(CARD_SCHEMAS).length).toBe(6);
     });
   });
 });

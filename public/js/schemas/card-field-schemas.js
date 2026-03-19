@@ -97,11 +97,23 @@ export const QA_SCHEMA = {
   VIEW_FIELDS: [] // QA items don't have optimized views
 };
 
+export const SPRINT_SCHEMA = {
+  PERSISTENT_FIELDS: [
+    ...BASE_PERSISTENT_FIELDS,
+    'retrospective', 'businessPoints', 'devPoints',
+    'realBusinessPoints', 'realDevPoints', 'year',
+    'demoVideo', 'demoVideoUrl', 'demoSummary',
+    'group', 'section'
+  ],
+  VIEW_FIELDS: [] // Sprints don't have optimized views
+};
+
 // Map card types to schemas (using both cardType values and tag names)
 export const CARD_SCHEMAS = {
   'task-card': TASK_SCHEMA,
   'bug-card': BUG_SCHEMA,
   'proposal-card': PROPOSAL_SCHEMA,
   'epic-card': EPIC_SCHEMA,
-  'qa-card': QA_SCHEMA
+  'qa-card': QA_SCHEMA,
+  'sprint-card': SPRINT_SCHEMA
 };

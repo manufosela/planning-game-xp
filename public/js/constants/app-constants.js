@@ -60,11 +60,41 @@ export const APP_CONSTANTS = {
   // Reopened is a special status for tasks that were validated but need rework
   TASK_STATUS_ORDER: ['To Do', 'In Progress', 'Pausado', 'To Validate', 'Done&Validated', 'Blocked', 'Reopened'],
 
+  // Task Status List (object format used by filter configs as fallback when globalThis.statusList is not yet populated)
+  TASK_STATUS_LIST: {
+    'To Do': { label: 'To Do' },
+    'In Progress': { label: 'In Progress' },
+    'Pausado': { label: 'Pausado' },
+    'To Validate': { label: 'To Validate' },
+    'Done&Validated': { label: 'Done&Validated' },
+    'Blocked': { label: 'Blocked' },
+    'Reopened': { label: 'Reopened' }
+  },
+
   // Bug Status Order (logical workflow order — aligned with shared/constants.js)
   BUG_STATUS_ORDER: ['Created', 'Assigned', 'Fixed', 'Verified', 'Closed'],
 
+  // Bug Status List (object format used by filter configs as fallback)
+  BUG_STATUS_LIST: {
+    'Created': { label: 'Created' },
+    'Assigned': { label: 'Assigned' },
+    'Fixed': { label: 'Fixed' },
+    'Verified': { label: 'Verified' },
+    'Closed': { label: 'Closed' }
+  },
+
   // Bug Priority Order (severity order)
   BUG_PRIORITY_ORDER: ['Application Blocker', 'Department Blocker', 'Individual Blocker', 'User Experience Issue', 'Workflow Improvement', 'Workaround Available Issue'],
+
+  // Bug Priority List (object format used by filter configs as fallback)
+  BUG_PRIORITY_LIST: {
+    'Application Blocker': { label: 'Application Blocker' },
+    'Department Blocker': { label: 'Department Blocker' },
+    'Individual Blocker': { label: 'Individual Blocker' },
+    'User Experience Issue': { label: 'User Experience Issue' },
+    'Workflow Improvement': { label: 'Workflow Improvement' },
+    'Workaround Available Issue': { label: 'Workaround Available Issue' }
+  },
 
   // Completed statuses - used to exclude cards from year migration
   // Tasks/bugs with these statuses are considered "finished" and won't be migrated to the next year
