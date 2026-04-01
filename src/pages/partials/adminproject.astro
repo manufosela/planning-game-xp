@@ -1380,6 +1380,8 @@ async function showEditProjectModal(projectName) {
       projectForm.iaAvailable = projectData.iaEnabled || projectForm.iaAvailable;
       projectForm.archived = Boolean(projectData.archived);
       projectForm.isPublic = Boolean(projectData.public);
+      projectForm.publicToken = projectData.publicToken || '';
+      projectForm.currentProjectName = projectName;
       projectForm.teamSpecs = Array.isArray(projectData.teamSpecs) ? projectData.teamSpecs : [];
       projectForm.requestUpdate();
     };
@@ -1503,6 +1505,7 @@ async function updateProject(projectForm, originalProjectName, originalData) {
       updatedBy: auth.currentUser?.email || 'unknown',
       archived: originalData?.archived || false,
       public: formData.isPublic || false,
+      publicToken: formData.publicToken || null,
       teamSpecs: formData.teamSpecs || []
     };
 

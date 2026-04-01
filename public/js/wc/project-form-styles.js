@@ -323,6 +323,84 @@ export const ProjectFormStyles = css`
     cursor: pointer;
   }
 
+  /* Share section */
+  .share-section {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .share-url-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .share-url-input {
+    flex: 1;
+    padding: 0.4rem 0.6rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    border: 1px solid var(--border-default);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    cursor: text;
+  }
+
+  .btn-copy {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.78rem;
+    border: 1px solid var(--border-default);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .btn-copy:hover { border-color: var(--accent-primary); color: var(--text-primary); }
+
+  .share-token-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .token-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+  }
+  .token-label code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+  }
+
+  .btn-token {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+    border: 1px solid var(--accent-primary);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--accent-primary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-token:hover { background: var(--accent-primary); color: white; }
+  .btn-token-remove { border-color: var(--status-error-text); color: var(--status-error-text); }
+  .btn-token-remove:hover { background: var(--status-error-text); color: white; }
+
+  .share-hint {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+
   /* Global config selectors */
   .config-selector {
     display: flex;

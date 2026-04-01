@@ -60,6 +60,10 @@ export class ProjectForm extends LitElement {
       hasCards: { type: Boolean },
       // Public project (visible via public API)
       isPublic: { type: Boolean },
+      // Public access token for protected sharing
+      publicToken: { type: String },
+      // Current project name (for building shareable URL)
+      currentProjectName: { type: String },
       // Team specs checklist (configurable per project)
       teamSpecs: { type: Array },
       _newSpecText: { type: String, state: true },
@@ -122,6 +126,9 @@ export class ProjectForm extends LitElement {
     this.isLoading = true;
     this.archived = false;
     this.isPublic = false;
+    this.publicToken = '';
+    this.currentProjectName = '';
+    this._showCopyFeedback = false;
     this.teamSpecs = [];
     this._newSpecText = '';
     this.hasCards = false;
@@ -474,6 +481,7 @@ export class ProjectForm extends LitElement {
               />
               <label for="isPublic">Proyecto público (visible en API pública)</label>
             </div>
+            ${this._renderShareSection()}
           ` : ''}
         </div>
 
@@ -1376,6 +1384,78 @@ export class ProjectForm extends LitElement {
     this.isPublic = e.target.checked;
   }
 
+  _getShareableUrl() {
+    const projectName = this.currentProjectName || this.projectName;
+    if (!projectName) return '';
+    const base = `${location.origin}/public/?project=${encodeURIComponent(projectName)}`;
+    if (!this.isPublic && this.publicToken) {
+      return `${base}&token=${this.publicToken}`;
+    }
+    return base;
+  }
+
+  _generateToken() {
+    this.publicToken = crypto.randomUUID();
+  }
+
+  _removeToken() {
+    this.publicToken = '';
+  }
+
+  async _copyShareUrl() {
+    const url = this._getShareableUrl();
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      this._showCopyFeedback = true;
+      this.requestUpdate();
+      setTimeout(() => { this._showCopyFeedback = false; this.requestUpdate(); }, 2000);
+    } catch {
+      // Fallback for insecure contexts
+      const input = document.createElement('input');
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+    }
+  }
+
+  _renderShareSection() {
+    if (!this.isPublic && !this.publicToken) return '';
+
+    const url = this._getShareableUrl();
+    const hasUrl = url && (this.isPublic || this.publicToken);
+
+    return html`
+      <div class="share-section">
+        ${hasUrl ? html`
+          <div class="share-url-row">
+            <input type="text" class="share-url-input" .value=${url} readonly />
+            <button type="button" class="btn-copy" @click=${this._copyShareUrl}
+              title="Copiar URL">${this._showCopyFeedback ? 'Copiado' : 'Copiar'}</button>
+          </div>
+        ` : ''}
+        ${!this.isPublic ? html`
+          <div class="share-token-row">
+            ${this.publicToken ? html`
+              <span class="token-label">Token: <code>${this.publicToken.substring(0, 8)}...</code></span>
+              <button type="button" class="btn-token btn-token-remove" @click=${this._removeToken}>Eliminar token</button>
+            ` : html`
+              <span class="token-label">Acceso protegido por token</span>
+              <button type="button" class="btn-token" @click=${this._generateToken}>Generar token</button>
+            `}
+          </div>
+        ` : ''}
+        ${this.isPublic ? html`
+          <span class="share-hint">Cualquiera con este enlace puede ver el estado del proyecto</span>
+        ` : html`
+          <span class="share-hint">Solo accesible con el token en la URL</span>
+        `}
+      </div>
+    `;
+  }
+
   _addSpec() {
     const text = (this._newSpecText || '').trim();
     if (!text) return;
@@ -1568,6 +1648,7 @@ export class ProjectForm extends LitElement {
       useIa: this.useIa && this.iaAvailable,
       businessContext: (this.businessContext || '').trim(),
       isPublic: this.isPublic,
+      publicToken: this.publicToken || '',
       teamSpecs: this.teamSpecs || []
     };
   }
