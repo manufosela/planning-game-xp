@@ -50,6 +50,7 @@ const { handleGenerateDevPlan } = require('./handlers/ia-dev-plan');
 const { handleConvertDescriptionToUserStory } = require('./handlers/ia-user-story');
 const { handleGetProjectEpics } = require('./handlers/ia-epics-api');
 const { handlePublicProjectCards } = require('./handlers/public-project-cards');
+const { handlePublicAppVersions } = require('./handlers/public-app-versions');
 
 // Admin handlers (extracted from this file)
 const { handleResyncAllViews } = require('./handlers/admin-views');
@@ -496,6 +497,16 @@ exports.publicProjectCards = onRequest({
   cors: true
 }, async (req, res) => {
   return handlePublicProjectCards(req, res, {
+    db: getDatabase(),
+    logger
+  });
+});
+
+exports.publicAppVersions = onRequest({
+  region: "europe-west1",
+  cors: true
+}, async (req, res) => {
+  return handlePublicAppVersions(req, res, {
     db: getDatabase(),
     logger
   });

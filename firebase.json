@@ -30,6 +30,10 @@
       {
         "source": "/api/public/**",
         "function": "publicProjectCards"
+      },
+      {
+        "source": "/api/apps/**",
+        "function": "publicAppVersions"
       }
     ],
     "headers": [
