@@ -58,8 +58,10 @@ export class ProjectForm extends LitElement {
       archived: { type: Boolean },
       // Whether the project has existing cards (locks abbreviation + name)
       hasCards: { type: Boolean },
-      // Public project (visible via public API)
+      // Public project (read-only view for stakeholders)
       isPublic: { type: Boolean },
+      // Public API for app versions
+      isPublicAppApi: { type: Boolean },
       // Team specs checklist (configurable per project)
       teamSpecs: { type: Array },
       _newSpecText: { type: String, state: true },
@@ -122,6 +124,7 @@ export class ProjectForm extends LitElement {
     this.isLoading = true;
     this.archived = false;
     this.isPublic = false;
+    this.isPublicAppApi = false;
     this.teamSpecs = [];
     this._newSpecText = '';
     this.hasCards = false;
@@ -472,7 +475,18 @@ export class ProjectForm extends LitElement {
                 .checked=${this.isPublic}
                 @change=${this._handleIsPublicChange}
               />
-              <label for="isPublic">Proyecto público (visible en API pública)</label>
+              <label for="isPublic">Proyecto público (vista read-only para stakeholders)</label>
+            </div>
+          ` : ''}
+          ${this.allowExecutables ? html`
+            <div class="checkbox-group">
+              <input
+                type="checkbox"
+                id="isPublicAppApi"
+                .checked=${this.isPublicAppApi}
+                @change=${(e) => { this.isPublicAppApi = e.target.checked; }}
+              />
+              <label for="isPublicAppApi">API pública de apps (versiones accesibles sin login)</label>
             </div>
           ` : ''}
         </div>
@@ -1568,6 +1582,7 @@ export class ProjectForm extends LitElement {
       useIa: this.useIa && this.iaAvailable,
       businessContext: (this.businessContext || '').trim(),
       isPublic: this.isPublic,
+      isPublicAppApi: this.isPublicAppApi,
       teamSpecs: this.teamSpecs || []
     };
   }

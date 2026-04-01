@@ -69,9 +69,12 @@ async function handlePublicAppVersions(req, res, { db, logger }) {
 
     const project = projectSnap.val();
 
-    // Access control: only projects with apps enabled
+    // Access control: project must have apps enabled AND public app API active
     if (project.allowExecutables !== true) {
       return res.status(403).json({ error: 'This project does not have apps enabled.' });
+    }
+    if (project.publicAppApi !== true) {
+      return res.status(403).json({ error: 'This project does not have public app API enabled.' });
     }
 
     if (fileKey) {

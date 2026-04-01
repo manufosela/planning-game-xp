@@ -113,7 +113,7 @@ describe('publicAppVersions', () => {
 
     it('should return 403 when allowExecutables is not true', async () => {
       const db = createMockDb({
-        projects: { MyProject: { name: 'My Project', allowExecutables: false } }
+        projects: { MyProject: { name: 'My Project', allowExecutables: false, publicAppApi: true } }
       });
       const req = createMockReq({ path: '/MyProject/versions' });
       const res = createMockRes();
@@ -131,9 +131,19 @@ describe('publicAppVersions', () => {
       expect(res.statusCode).toBe(403);
     });
 
+    it('should return 403 when publicAppApi is not true', async () => {
+      const db = createMockDb({
+        projects: { MyProject: { name: 'My Project', allowExecutables: true, publicAppApi: false } }
+      });
+      const req = createMockReq({ path: '/MyProject/versions' });
+      const res = createMockRes();
+      await handlePublicAppVersions(req, res, { db, logger: mockLogger });
+      expect(res.statusCode).toBe(403);
+    });
+
     it('should return empty versions array when no metadata exists', async () => {
       const db = createMockDb({
-        projects: { MyProject: { name: 'My Project', allowExecutables: true } }
+        projects: { MyProject: { name: 'My Project', allowExecutables: true, publicAppApi: true } }
       });
       const req = createMockReq({ path: '/MyProject/versions' });
       const res = createMockRes();
@@ -144,7 +154,7 @@ describe('publicAppVersions', () => {
 
     it('should return only approved versions', async () => {
       const db = createMockDb({
-        projects: { MyProject: { name: 'Test App', allowExecutables: true } },
+        projects: { MyProject: { name: 'Test App', allowExecutables: true, publicAppApi: true } },
         appMetadata: {
           MyProject: {
             '-key1': { fileName: 'app-v1.0.exe', type: 'release', status: 'approved', changelog: 'v1', uploadedAt: '2026-01-01' },
@@ -178,7 +188,7 @@ describe('publicAppVersions', () => {
 
     it('should return version detail for approved version', async () => {
       const db = createMockDb({
-        projects: { MyProject: { name: 'Test App', allowExecutables: true } },
+        projects: { MyProject: { name: 'Test App', allowExecutables: true, publicAppApi: true } },
         appMetadata: {
           MyProject: {
             '-key1': { fileName: 'app-v1.0.exe', type: 'release', status: 'approved', changelog: 'First release', uploadedAt: '2026-01-01', uploadedBy: 'secret@email.com' }
@@ -201,7 +211,7 @@ describe('publicAppVersions', () => {
 
     it('should return 404 for non-approved version detail', async () => {
       const db = createMockDb({
-        projects: { MyProject: { name: 'Test App', allowExecutables: true } },
+        projects: { MyProject: { name: 'Test App', allowExecutables: true, publicAppApi: true } },
         appMetadata: {
           MyProject: {
             '-key1': { fileName: 'app-v1.0.exe', type: 'beta', status: 'pending' }
@@ -216,7 +226,7 @@ describe('publicAppVersions', () => {
 
     it('should return 404 for non-existent fileKey', async () => {
       const db = createMockDb({
-        projects: { MyProject: { name: 'Test App', allowExecutables: true } },
+        projects: { MyProject: { name: 'Test App', allowExecutables: true, publicAppApi: true } },
         appMetadata: { MyProject: {} }
       });
       const req = createMockReq({ path: '/MyProject/versions/-nonexistent' });
@@ -227,7 +237,7 @@ describe('publicAppVersions', () => {
 
     it('should handle URL-encoded projectId', async () => {
       const db = createMockDb({
-        projects: { 'My Project': { name: 'My Project', allowExecutables: true } },
+        projects: { 'My Project': { name: 'My Project', allowExecutables: true, publicAppApi: true } },
         appMetadata: { 'My Project': {} }
       });
       const req = createMockReq({ path: '/My%20Project/versions' });
