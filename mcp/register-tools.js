@@ -16,6 +16,7 @@ import { provisionUserSchema, provisionUser } from './tools/provision-user.js';
 import { deleteUserSchema, deleteUser } from './tools/delete-user.js';
 import { checkForUpdates, getUpdateNoticeOnce, getMcpStatus, getLocalVersion, updateMcp, resetNotificationFlag, setLatestVersionInFirebase } from './version-check.js';
 import { USAGE_RULES_CONTENT } from './usage-rules.js';
+import { generateAiInstructions } from './ai-instructions.js';
 import { isMcpUserConfigured } from './user.js';
 import { pgDoctorSchema, pgDoctor } from './tools/doctor.js';
 import { pgConfigSchema, pgConfig } from './tools/config.js';
@@ -135,10 +136,15 @@ function wrapWithProjectAndNotice(handler) {
  * @returns {McpServer}
  */
 export function createMcpServer(serverName) {
-  const server = new McpServer({
-    name: serverName || 'planning-gamexp',
-    version: getLocalVersion()
-  });
+  const server = new McpServer(
+    {
+      name: serverName || 'planning-gamexp',
+      version: getLocalVersion()
+    },
+    {
+      instructions: generateAiInstructions()
+    }
+  );
 
   // ── Project tools ──
   server.tool('list_projects', 'List all projects with name, abbreviation, and developers', listProjectsSchema.shape, wrapWithUpdateNotice(async () => {
