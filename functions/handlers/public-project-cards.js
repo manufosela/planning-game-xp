@@ -70,12 +70,16 @@ async function handlePublicProjectCards(req, res, { db, logger }) {
 
     const project = projectSnap.val();
 
-    // Access control: public projects are open, protected projects require a token
-    if (!project.public) {
-      const token = req.query.token;
-      if (!project.publicToken || !token || token !== project.publicToken) {
-        return res.status(403).json({ error: 'Project is not public. Use a shared link with token to access protected projects.' });
-      }
+    // Access control: publicApi, publicView (source=view), legacy public, or token
+    const source = req.query.source;
+    const token = req.query.token;
+    const isApiAllowed = project.publicApi === true;
+    const isViewAllowed = project.publicView === true && source === 'view';
+    const isLegacyPublic = project.public === true;
+    const isTokenValid = project.publicToken && token && token === project.publicToken;
+
+    if (!isApiAllowed && !isViewAllowed && !isLegacyPublic && !isTokenValid) {
+      return res.status(403).json({ error: 'Project is not public. Use a shared link with token to access protected projects.' });
     }
 
     // Optional type filter

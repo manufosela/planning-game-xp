@@ -58,8 +58,10 @@ export class ProjectForm extends LitElement {
       archived: { type: Boolean },
       // Whether the project has existing cards (locks abbreviation + name)
       hasCards: { type: Boolean },
-      // Public project (visible via public API)
-      isPublic: { type: Boolean },
+      // Public view (read-only page for stakeholders)
+      isPublicView: { type: Boolean },
+      // Public API (endpoint for agents/integrations)
+      isPublicApi: { type: Boolean },
       // Public access token for protected sharing
       publicToken: { type: String },
       // Current project name (for building shareable URL)
@@ -125,10 +127,11 @@ export class ProjectForm extends LitElement {
     this.newStakeholderEmail = '';
     this.isLoading = true;
     this.archived = false;
-    this.isPublic = false;
+    this.isPublicView = false;
+    this.isPublicApi = false;
     this.publicToken = '';
     this.currentProjectName = '';
-    this._showCopyFeedback = false;
+    this._copiedField = '';
     this.teamSpecs = [];
     this._newSpecText = '';
     this.hasCards = false;
@@ -475,11 +478,20 @@ export class ProjectForm extends LitElement {
             <div class="checkbox-group">
               <input
                 type="checkbox"
-                id="isPublic"
-                .checked=${this.isPublic}
-                @change=${this._handleIsPublicChange}
+                id="isPublicView"
+                .checked=${this.isPublicView}
+                @change=${(e) => { this.isPublicView = e.target.checked; }}
               />
-              <label for="isPublic">Proyecto público (visible en API pública)</label>
+              <label for="isPublicView">Vista pública (página read-only para stakeholders)</label>
+            </div>
+            <div class="checkbox-group">
+              <input
+                type="checkbox"
+                id="isPublicApi"
+                .checked=${this.isPublicApi}
+                @change=${(e) => { this.isPublicApi = e.target.checked; }}
+              />
+              <label for="isPublicApi">API pública (endpoint para agentes e integraciones)</label>
             </div>
             ${this._renderShareSection()}
           ` : ''}
@@ -1380,18 +1392,15 @@ export class ProjectForm extends LitElement {
     this.allowExecutables = e.target.checked;
   }
 
-  _handleIsPublicChange(e) {
-    this.isPublic = e.target.checked;
-  }
-
-  _getShareableUrl() {
+  _getShareableUrl(type) {
     const projectName = this.currentProjectName || this.projectName;
     if (!projectName) return '';
-    const base = `${location.origin}/public/?project=${encodeURIComponent(projectName)}`;
-    if (!this.isPublic && this.publicToken) {
-      return `${base}&token=${this.publicToken}`;
+    if (type === 'view') {
+      const base = `${location.origin}/public/?project=${encodeURIComponent(projectName)}`;
+      return this.publicToken ? `${base}&token=${this.publicToken}` : base;
     }
-    return base;
+    // API URL
+    return `${location.origin}/api/public/${encodeURIComponent(projectName)}/cards`;
   }
 
   _generateToken() {
@@ -1402,16 +1411,11 @@ export class ProjectForm extends LitElement {
     this.publicToken = '';
   }
 
-  async _copyShareUrl() {
-    const url = this._getShareableUrl();
+  async _copyUrl(url, field = 'view') {
     if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
-      this._showCopyFeedback = true;
-      this.requestUpdate();
-      setTimeout(() => { this._showCopyFeedback = false; this.requestUpdate(); }, 2000);
     } catch {
-      // Fallback for insecure contexts
       const input = document.createElement('input');
       input.value = url;
       document.body.appendChild(input);
@@ -1419,39 +1423,51 @@ export class ProjectForm extends LitElement {
       document.execCommand('copy');
       document.body.removeChild(input);
     }
+    this._copiedField = field;
+    this.requestUpdate();
+    setTimeout(() => { this._copiedField = ''; this.requestUpdate(); }, 2000);
   }
 
   _renderShareSection() {
-    if (!this.isPublic && !this.publicToken) return '';
+    if (!this.isPublicView && !this.isPublicApi && !this.publicToken) return '';
 
-    const url = this._getShareableUrl();
-    const hasUrl = url && (this.isPublic || this.publicToken);
+    const viewUrl = this._getShareableUrl('view');
+    const apiUrl = this._getShareableUrl('api');
 
     return html`
       <div class="share-section">
-        ${hasUrl ? html`
-          <div class="share-url-row">
-            <input type="text" class="share-url-input" .value=${url} readonly />
-            <button type="button" class="btn-copy" @click=${this._copyShareUrl}
-              title="Copiar URL">${this._showCopyFeedback ? 'Copiado' : 'Copiar'}</button>
+        ${this.isPublicView ? html`
+          <div class="share-url-group">
+            <span class="share-url-label">Vista pública</span>
+            <div class="share-url-row">
+              <input type="text" class="share-url-input" .value=${viewUrl} readonly />
+              <button type="button" class="btn-copy" @click=${() => this._copyUrl(viewUrl)}
+                title="Copiar URL">${this._copiedField === 'view' ? 'Copiado' : 'Copiar'}</button>
+            </div>
           </div>
         ` : ''}
-        ${!this.isPublic ? html`
-          <div class="share-token-row">
-            ${this.publicToken ? html`
-              <span class="token-label">Token: <code>${this.publicToken.substring(0, 8)}...</code></span>
-              <button type="button" class="btn-token btn-token-remove" @click=${this._removeToken}>Eliminar token</button>
-            ` : html`
-              <span class="token-label">Acceso protegido por token</span>
-              <button type="button" class="btn-token" @click=${this._generateToken}>Generar token</button>
-            `}
+        ${this.isPublicApi ? html`
+          <div class="share-url-group">
+            <span class="share-url-label">API endpoint</span>
+            <div class="share-url-row">
+              <input type="text" class="share-url-input" .value=${apiUrl} readonly />
+              <button type="button" class="btn-copy" @click=${() => this._copyUrl(apiUrl, 'api')}
+                title="Copiar URL">${this._copiedField === 'api' ? 'Copiado' : 'Copiar'}</button>
+            </div>
           </div>
         ` : ''}
-        ${this.isPublic ? html`
-          <span class="share-hint">Cualquiera con este enlace puede ver el estado del proyecto</span>
-        ` : html`
+        <div class="share-token-row">
+          ${this.publicToken ? html`
+            <span class="token-label">Token: <code>${this.publicToken.substring(0, 8)}...</code></span>
+            <button type="button" class="btn-token btn-token-remove" @click=${this._removeToken}>Eliminar token</button>
+          ` : html`
+            <span class="token-label">Acceso protegido por token</span>
+            <button type="button" class="btn-token" @click=${this._generateToken}>Generar token</button>
+          `}
+        </div>
+        ${!this.isPublicView && !this.isPublicApi && this.publicToken ? html`
           <span class="share-hint">Solo accesible con el token en la URL</span>
-        `}
+        ` : ''}
       </div>
     `;
   }
@@ -1647,7 +1663,8 @@ export class ProjectForm extends LitElement {
       selectedInstructions: this.selectedInstructions || [],
       useIa: this.useIa && this.iaAvailable,
       businessContext: (this.businessContext || '').trim(),
-      isPublic: this.isPublic,
+      isPublicView: this.isPublicView,
+      isPublicApi: this.isPublicApi,
       publicToken: this.publicToken || '',
       teamSpecs: this.teamSpecs || []
     };

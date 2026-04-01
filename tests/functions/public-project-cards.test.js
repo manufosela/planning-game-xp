@@ -124,6 +124,39 @@ describe('publicProjectCards', () => {
       expect(res.statusCode).toBe(403);
     });
 
+    it('should allow access when publicApi is true', async () => {
+      const db = createMockDb({
+        projects: { MyProject: { name: 'My Project', publicApi: true } },
+        cards: { MyProject: { TASKS_MyProject: { '-t1': { cardId: 'MP-TSK-0001', title: 'Task', status: 'To Do', cardType: 'task-card' } } } }
+      });
+      const req = createMockReq({ path: '/MyProject/cards' });
+      const res = createMockRes();
+      await handlePublicProjectCards(req, res, { db, logger: mockLogger });
+      expect(res.statusCode).toBe(200);
+      expect(res.body.cards).toHaveLength(1);
+    });
+
+    it('should allow access when publicView is true and source=view', async () => {
+      const db = createMockDb({
+        projects: { MyProject: { name: 'My Project', publicView: true } },
+        cards: { MyProject: { TASKS_MyProject: { '-t1': { cardId: 'MP-TSK-0001', title: 'Task', status: 'To Do', cardType: 'task-card' } } } }
+      });
+      const req = createMockReq({ path: '/MyProject/cards', query: { source: 'view' } });
+      const res = createMockRes();
+      await handlePublicProjectCards(req, res, { db, logger: mockLogger });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('should return 403 when publicView is true but source is not view', async () => {
+      const db = createMockDb({
+        projects: { MyProject: { name: 'My Project', publicView: true } }
+      });
+      const req = createMockReq({ path: '/MyProject/cards' });
+      const res = createMockRes();
+      await handlePublicProjectCards(req, res, { db, logger: mockLogger });
+      expect(res.statusCode).toBe(403);
+    });
+
     it('should return 403 for protected project with wrong token', async () => {
       const db = createMockDb({
         projects: {

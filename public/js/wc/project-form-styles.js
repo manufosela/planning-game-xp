@@ -335,6 +335,20 @@ export const ProjectFormStyles = css`
     gap: 0.5rem;
   }
 
+  .share-url-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .share-url-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
   .share-url-row {
     display: flex;
     gap: 0.5rem;
