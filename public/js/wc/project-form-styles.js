@@ -323,6 +323,51 @@ export const ProjectFormStyles = css`
     cursor: pointer;
   }
 
+  .checkbox-group.sub-option {
+    margin-left: 1.5rem;
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--border-default);
+  }
+
+  .checkbox-group.sub-option input:disabled + label {
+    color: var(--text-dim);
+    cursor: default;
+  }
+
+  .api-endpoints {
+    margin-left: 1.5rem;
+    padding: 0.5rem 0.75rem;
+    border-left: 2px solid var(--border-default);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .endpoint-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .endpoint-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    min-width: 55px;
+  }
+
+  .endpoint-row code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    word-break: break-all;
+  }
+
   /* Global config selectors */
   .config-selector {
     display: flex;

@@ -458,15 +458,6 @@ export class ProjectForm extends LitElement {
 
         <div class="form-group">
           <label>Opciones Avanzadas</label>
-          <div class="checkbox-group">
-            <input
-              type="checkbox"
-              id="allowExecutables"
-              .checked=${this.allowExecutables}
-              @change=${this._handleAllowExecutablesChange}
-            />
-            <label for="allowExecutables">Permitir adjuntar ejecutables</label>
-          </div>
           ${this.canDelete ? html`
             <div class="checkbox-group">
               <input
@@ -478,15 +469,35 @@ export class ProjectForm extends LitElement {
               <label for="isPublic">Proyecto público (vista read-only para stakeholders)</label>
             </div>
           ` : ''}
-          ${this.allowExecutables ? html`
-            <div class="checkbox-group">
-              <input
-                type="checkbox"
-                id="isPublicAppApi"
-                .checked=${this.isPublicAppApi}
-                @change=${(e) => { this.isPublicAppApi = e.target.checked; }}
-              />
-              <label for="isPublicAppApi">API pública de apps (versiones accesibles sin login)</label>
+          <div class="checkbox-group">
+            <input
+              type="checkbox"
+              id="allowExecutables"
+              .checked=${this.allowExecutables}
+              @change=${this._handleAllowExecutablesChange}
+            />
+            <label for="allowExecutables">Permitir adjuntar ejecutables</label>
+          </div>
+          <div class="checkbox-group sub-option">
+            <input
+              type="checkbox"
+              id="isPublicAppApi"
+              .checked=${this.isPublicAppApi}
+              ?disabled=${!this.allowExecutables}
+              @change=${(e) => { this.isPublicAppApi = e.target.checked; }}
+            />
+            <label for="isPublicAppApi">API pública de apps (versiones accesibles sin login)</label>
+          </div>
+          ${this.isPublicAppApi && this.allowExecutables ? html`
+            <div class="api-endpoints">
+              <div class="endpoint-row">
+                <span class="endpoint-label">Versiones</span>
+                <code>${location.origin}/api/apps/${encodeURIComponent(this.currentProjectName || this.projectName)}/versions</code>
+              </div>
+              <div class="endpoint-row">
+                <span class="endpoint-label">Detalle</span>
+                <code>${location.origin}/api/apps/${encodeURIComponent(this.currentProjectName || this.projectName)}/versions/{fileKey}</code>
+              </div>
             </div>
           ` : ''}
         </div>
