@@ -11,6 +11,10 @@ const fbConfig = {
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script is:inline>
+    // FOUC prevention: apply saved theme before first paint
+    (function(){var t=localStorage.getItem('pg-public-theme');if(t)document.documentElement.setAttribute('data-theme',t)})();
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Project Board</title>
@@ -23,6 +27,18 @@ const fbConfig = {
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
+      --font: 'DM Sans', system-ui, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+      --green: #22c55e;
+      --amber: #eab308;
+      --blue: #3b82f6;
+      --rose: #ef4444;
+      --violet: #8b5cf6;
+      --accent: #6366f1;
+    }
+
+    /* Dark theme (default) */
+    :root, [data-theme="dark"] {
       --bg: #06080f;
       --bg-raised: #0c1019;
       --bg-row-hover: #101525;
@@ -31,15 +47,53 @@ const fbConfig = {
       --text: #c8ceda;
       --text-secondary: #6b7590;
       --text-dim: #3d4560;
-      --accent: #6366f1;
       --accent-muted: rgba(99, 102, 241, 0.12);
-      --green: #22c55e;
-      --amber: #eab308;
-      --blue: #3b82f6;
-      --rose: #ef4444;
-      --violet: #8b5cf6;
-      --font: 'DM Sans', system-ui, sans-serif;
-      --mono: 'JetBrains Mono', monospace;
+      --status-todo-bg: #1e2538; --status-todo-fg: #94a3b8; --status-todo-bd: #2a3450;
+      --status-ip-bg: #0c1a3a; --status-ip-fg: #60a5fa; --status-ip-bd: #1e3a6e;
+      --status-tv-bg: #1a1800; --status-tv-fg: #fbbf24; --status-tv-bd: #3d3500;
+      --status-done-bg: #042f1a; --status-done-fg: #4ade80; --status-done-bd: #0a5c30;
+      --status-blocked-bg: #2a0a0a; --status-blocked-fg: #f87171; --status-blocked-bd: #5c1a1a;
+      --status-reopen-bg: #1a0a3a; --status-reopen-fg: #a78bfa; --status-reopen-bd: #2e1a5c;
+    }
+
+    /* Light theme */
+    [data-theme="light"] {
+      --bg: #f8f9fb;
+      --bg-raised: #ffffff;
+      --bg-row-hover: #f0f2f5;
+      --border: #e2e5ea;
+      --border-active: #c8cdd5;
+      --text: #1a1d24;
+      --text-secondary: #5c6370;
+      --text-dim: #8b919e;
+      --accent-muted: rgba(99, 102, 241, 0.08);
+      --status-todo-bg: #eef1f5; --status-todo-fg: #475569; --status-todo-bd: #d8dde6;
+      --status-ip-bg: #e8f0fe; --status-ip-fg: #1d4ed8; --status-ip-bd: #bfdbfe;
+      --status-tv-bg: #fef9e7; --status-tv-fg: #a16207; --status-tv-bd: #fde68a;
+      --status-done-bg: #e8f8ef; --status-done-fg: #15803d; --status-done-bd: #bbf7d0;
+      --status-blocked-bg: #fef2f2; --status-blocked-fg: #dc2626; --status-blocked-bd: #fecaca;
+      --status-reopen-bg: #f3f0ff; --status-reopen-fg: #7c3aed; --status-reopen-bd: #ddd6fe;
+    }
+
+    /* Auto: respect system preference when no explicit choice */
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme]) {
+        --bg: #f8f9fb;
+        --bg-raised: #ffffff;
+        --bg-row-hover: #f0f2f5;
+        --border: #e2e5ea;
+        --border-active: #c8cdd5;
+        --text: #1a1d24;
+        --text-secondary: #5c6370;
+        --text-dim: #8b919e;
+        --accent-muted: rgba(99, 102, 241, 0.08);
+        --status-todo-bg: #eef1f5; --status-todo-fg: #475569; --status-todo-bd: #d8dde6;
+        --status-ip-bg: #e8f0fe; --status-ip-fg: #1d4ed8; --status-ip-bd: #bfdbfe;
+        --status-tv-bg: #fef9e7; --status-tv-fg: #a16207; --status-tv-bd: #fde68a;
+        --status-done-bg: #e8f8ef; --status-done-fg: #15803d; --status-done-bd: #bbf7d0;
+        --status-blocked-bg: #fef2f2; --status-blocked-fg: #dc2626; --status-blocked-bd: #fecaca;
+        --status-reopen-bg: #f3f0ff; --status-reopen-fg: #7c3aed; --status-reopen-bd: #ddd6fe;
+      }
     }
 
     body {
@@ -278,12 +332,12 @@ const fbConfig = {
       white-space: nowrap;
     }
 
-    .s-todo { background: #1e2538; color: #94a3b8; border: 1px solid #2a3450; }
-    .s-inprogress { background: #0c1a3a; color: #60a5fa; border: 1px solid #1e3a6e; }
-    .s-tovalidate { background: #1a1800; color: #fbbf24; border: 1px solid #3d3500; }
-    .s-done { background: #042f1a; color: #4ade80; border: 1px solid #0a5c30; }
-    .s-blocked { background: #2a0a0a; color: #f87171; border: 1px solid #5c1a1a; }
-    .s-reopened { background: #1a0a3a; color: #a78bfa; border: 1px solid #2e1a5c; }
+    .s-todo { background: var(--status-todo-bg); color: var(--status-todo-fg); border: 1px solid var(--status-todo-bd); }
+    .s-inprogress { background: var(--status-ip-bg); color: var(--status-ip-fg); border: 1px solid var(--status-ip-bd); }
+    .s-tovalidate { background: var(--status-tv-bg); color: var(--status-tv-fg); border: 1px solid var(--status-tv-bd); }
+    .s-done { background: var(--status-done-bg); color: var(--status-done-fg); border: 1px solid var(--status-done-bd); }
+    .s-blocked { background: var(--status-blocked-bg); color: var(--status-blocked-fg); border: 1px solid var(--status-blocked-bd); }
+    .s-reopened { background: var(--status-reopen-bg); color: var(--status-reopen-fg); border: 1px solid var(--status-reopen-bd); }
 
     .cell-num {
       font-family: var(--mono);
@@ -414,6 +468,7 @@ const fbConfig = {
       <div class="topbar-right">
         <span class="pill pill-live" id="livePill">&#9679; live</span>
         <span class="pill pill-count" id="countPill">0</span>
+        <button class="btn-icon" id="themeBtn" title="Toggle light/dark mode">&#9788;</button>
         <button class="btn-icon" id="refreshBtn" title="Refresh">&#8635;</button>
       </div>
     </header>
@@ -667,6 +722,32 @@ const fbConfig = {
 
     // Manual refresh just re-renders (data is already live)
     refreshBtn.addEventListener('click', () => { render(); });
+
+    // Theme toggle (auto by default, persists to localStorage)
+    const themeBtn = $('themeBtn');
+    const THEME_KEY = 'pg-public-theme';
+    function applyTheme(theme) {
+      if (theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        themeBtn.textContent = theme === 'light' ? '\u263E' : '\u2606';
+        themeBtn.title = theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode';
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        themeBtn.textContent = isDark ? '\u2606' : '\u263E';
+        themeBtn.title = 'Toggle light/dark mode';
+      }
+    }
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    applyTheme(savedTheme);
+
+    themeBtn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme');
+      const isDark = current === 'dark' || (!current && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      const next = isDark ? 'light' : 'dark';
+      localStorage.setItem(THEME_KEY, next);
+      applyTheme(next);
+    });
 
     init();
   </script>
