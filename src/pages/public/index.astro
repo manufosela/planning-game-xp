@@ -1,6 +1,12 @@
 ---
-// Public read-only view — no auth, no Firebase SDK, no service workers
+// Public read-only view — real-time via Firebase RTDB listeners
 // projectId and token are read from URL query params via client JS
+const fbConfig = {
+  apiKey: import.meta.env.PUBLIC_FIREBASE_API_KEY,
+  authDomain: import.meta.env.PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.PUBLIC_FIREBASE_PROJECT_ID,
+};
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -109,6 +115,16 @@
     .pill-live {
       color: var(--green);
       background: rgba(34, 197, 94, 0.1);
+    }
+
+    .pill-offline {
+      color: var(--amber);
+      background: rgba(234, 179, 8, 0.1);
+    }
+
+    .pill-error {
+      color: var(--rose);
+      background: rgba(239, 68, 68, 0.1);
     }
 
     .pill-count {
@@ -424,57 +440,62 @@
     </footer>
   </div>
 
-  <script>
+  <script define:vars={{ fbConfig }}>
+    window.__fbConfig = fbConfig;
+  </script>
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+    import { getDatabase, ref, onValue, off } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+    import { getAuth, signInWithCustomToken, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+
     const P = new URLSearchParams(location.search);
     const PID = P.get('project') || '';
     const TOK = P.get('token') || '';
 
-    if (!PID) {
-      document.getElementById('content').innerHTML =
-        '<div class="state"><span class="state-error">Missing ?project= parameter</span></div>';
-    }
-
-    function apiUrl() {
-      const t = TOK ? `?token=${encodeURIComponent(TOK)}` : '';
-      const base = (location.hostname.includes('planning-game') || location.hostname.includes('pgamexp'))
-        ? `/api/public/${encodeURIComponent(PID)}/cards${t}`
-        : `https://europe-west1-planning-gamexp.cloudfunctions.net/publicProjectCards/${encodeURIComponent(PID)}/cards${t}`;
-      return base;
-    }
-
-    let cards = [], type = 'task', sortBy = 'priority', sortAsc = true, timer = null;
-    let page = 0;
-    const PAGE_SIZE = 50;
     const $ = (id) => document.getElementById(id);
     const content = $('content'), refreshBtn = $('refreshBtn'), tabs = $('tabs');
+    const livePill = $('livePill');
 
-    async function load() {
-      try {
-        refreshBtn.disabled = true;
-        refreshBtn.textContent = '...';
-        const r = await fetch(apiUrl());
-        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || r.statusText); }
-        const d = await r.json();
-        cards = d.cards || [];
+    if (!PID) {
+      content.innerHTML = '<div class="state"><span class="state-error">Missing ?project= parameter</span></div>';
+    }
 
-        $('pTitle').textContent = d.projectName || PID;
-        $('countPill').textContent = cards.length;
-        ['task','bug','epic'].forEach(t => {
-          const el = $(`ct-${t}`);
-          if (el) el.textContent = cards.filter(c => c.type === t).length;
-        });
+    // Firebase setup
+    const app = initializeApp(window.__fbConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
 
-        const now = new Date();
-        $('lastUpdate').textContent = `Updated ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-        $('nextUpdate').textContent = `Auto-refresh in 60s`;
+    // State
+    const data = { tasks: {}, bugs: {}, epics: {} };
+    let type = 'task', sortBy = 'priority', sortAsc = true, page = 0;
+    const PAGE_SIZE = 50;
+    const listeners = [];
 
-        render();
-      } catch (e) {
-        content.innerHTML = `<div class="state"><span class="state-error">${e.message}</span></div>`;
-      } finally {
-        refreshBtn.disabled = false;
-        refreshBtn.textContent = '\u21BB';
+    function setStatus(mode, label) {
+      livePill.className = 'pill ' + (mode === 'live' ? 'pill-live' : mode === 'offline' ? 'pill-offline' : 'pill-error');
+      livePill.innerHTML = mode === 'live' ? '&#9679; live' : mode === 'offline' ? '&#9679; reconnecting' : '&#9679; error';
+      $('lastUpdate').textContent = label || '';
+    }
+
+    function updateCounts() {
+      const cards = allCards();
+      $('countPill').textContent = cards.length;
+      const typeMap = { tasks: 'task', bugs: 'bug', epics: 'epic' };
+      for (const [section, t] of Object.entries(typeMap)) {
+        const el = $(`ct-${t}`);
+        if (el) el.textContent = Object.keys(data[section]).length;
       }
+    }
+
+    function allCards() {
+      const cards = [];
+      for (const [section, items] of Object.entries(data)) {
+        const t = section === 'tasks' ? 'task' : section === 'bugs' ? 'bug' : 'epic';
+        for (const card of Object.values(items)) {
+          cards.push({ ...card, type: t });
+        }
+      }
+      return cards;
     }
 
     function sc(s) {
@@ -498,11 +519,9 @@
     function sort(arr) {
       return [...arr].sort((a, b) => {
         let x = a[sortBy], y = b[sortBy];
-        // Nulls always go to the end regardless of sort direction
         if (x == null && y == null) return 0;
         if (x == null) return 1;
         if (y == null) return -1;
-        // For date fields, compare as strings (ISO format sorts naturally)
         if (typeof x === 'string') x = x.toLowerCase();
         if (typeof y === 'string') y = y.toLowerCase();
         return x < y ? (sortAsc ? -1 : 1) : x > y ? (sortAsc ? 1 : -1) : 0;
@@ -510,6 +529,7 @@
     }
 
     function render() {
+      const cards = allCards();
       const all = sort(cards.filter(c => c.type === type));
       if (!all.length) {
         content.innerHTML = `<div class="state"><span class="state-text">No ${type}s in this project</span></div>`;
@@ -520,7 +540,7 @@
       if (page >= totalPages) page = totalPages - 1;
       if (page < 0) page = 0;
       const f = all.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-      const showing = `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, all.length)} of ${all.length}`;
+      const showing = `${page * PAGE_SIZE + 1}\u2013${Math.min((page + 1) * PAGE_SIZE, all.length)} of ${all.length}`;
 
       const a = (fld) => sortBy === fld ? `<span class="arr">${sortAsc ? '\u25B2' : '\u25BC'}</span>` : '';
       const s = (fld) => sortBy === fld ? 'sorted' : '';
@@ -556,7 +576,6 @@
           <button class="pager-btn" id="nextPage" ${page >= totalPages - 1 ? 'disabled' : ''}>Next &#8594;</button>
         </div>` : ''}`;
 
-      // Pagination buttons
       const prevBtn = content.querySelector('#prevPage');
       const nextBtn = content.querySelector('#nextPage');
       if (prevBtn) prevBtn.addEventListener('click', () => { page--; render(); });
@@ -582,9 +601,74 @@
       render();
     });
 
-    refreshBtn.addEventListener('click', load);
-    load();
-    timer = setInterval(load, 60000);
+    function subscribe(section) {
+      const r = ref(db, `/publicViews/${PID}/${section}`);
+      const unsub = onValue(r, (snap) => {
+        data[section] = snap.val() || {};
+        const now = new Date();
+        setStatus('live', `Updated ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`);
+        $('nextUpdate').textContent = 'Real-time';
+        updateCounts();
+        render();
+      }, (err) => {
+        setStatus('error', err.message);
+      });
+      listeners.push({ ref: r, section });
+    }
+
+    // Connection state monitoring
+    const connRef = ref(db, '.info/connected');
+    onValue(connRef, (snap) => {
+      if (snap.val() === true) {
+        setStatus('live', 'Connected');
+      } else {
+        setStatus('offline', 'Reconnecting...');
+      }
+    });
+
+    // Load project name via Cloud Function (one-time), then subscribe to RTDB
+    async function init() {
+      if (!PID) return;
+
+      try {
+        // For token-protected projects, authenticate first
+        if (TOK) {
+          const r = await fetch('/api/public/validate-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId: PID, token: TOK })
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'Token validation failed');
+
+          if (d.customToken) {
+            await signInWithCustomToken(auth, d.customToken);
+          }
+          // If d.public === true, no auth needed
+        }
+
+        // Get project name from the existing API (lightweight, one-time)
+        const nameUrl = `/api/public/${encodeURIComponent(PID)}/cards?type=epic` + (TOK ? `&token=${encodeURIComponent(TOK)}` : '');
+        fetch(nameUrl).then(r => r.json()).then(d => {
+          if (d.projectName) $('pTitle').textContent = d.projectName;
+        }).catch(() => {
+          $('pTitle').textContent = PID;
+        });
+
+        // Subscribe to real-time data
+        subscribe('tasks');
+        subscribe('bugs');
+        subscribe('epics');
+      } catch (e) {
+        content.innerHTML = `<div class="state"><span class="state-error">${e.message}</span></div>`;
+        setStatus('error', e.message);
+      }
+    }
+
+    // Manual refresh just re-renders (data is already live)
+    refreshBtn.addEventListener('click', () => { render(); });
+
+    init();
   </script>
 </body>
 </html>

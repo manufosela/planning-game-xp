@@ -8,7 +8,48 @@
  * - /views/task-list/{projectId}/{firebaseId} - Task table data
  * - /views/bug-list/{projectId}/{firebaseId} - Bug table data
  * - /views/proposal-list/{projectId}/{firebaseId} - Proposal table data
+ *
+ * Public views (for unauthenticated access via RTDB listeners):
+ * - /publicViews/{projectId}/tasks/{firebaseId} - Minimal safe fields
+ * - /publicViews/{projectId}/bugs/{firebaseId}
+ * - /publicViews/{projectId}/epics/{firebaseId}
  */
+
+// Whitelisted fields for public views — only safe, non-sensitive data
+const PUBLIC_VIEW_FIELDS = [
+  'cardId', 'title', 'status', 'devPoints', 'businessPoints',
+  'startDate', 'endDate', 'priority', 'sprint', 'epic', 'year'
+];
+
+/**
+ * Map section name to public view card type key
+ * @param {string} section - Section name like "TASKS_ProjectA"
+ * @returns {string|null} - Public view type (tasks, bugs, epics) or null
+ */
+function getPublicViewType(section) {
+  const s = section.toLowerCase();
+  if (s.startsWith('tasks_')) return 'tasks';
+  if (s.startsWith('bugs_')) return 'bugs';
+  if (s.startsWith('epics_')) return 'epics';
+  return null;
+}
+
+/**
+ * Extract whitelisted fields for a public view entry
+ * @param {Object} cardData - Full card data
+ * @param {string} firebaseId - Firebase key
+ * @param {string} cardType - Card type (task, bug, epic)
+ * @returns {Object} - Minimal safe fields
+ */
+function extractPublicViewFields(cardData, firebaseId, cardType) {
+  const view = { firebaseId, type: cardType };
+  for (const field of PUBLIC_VIEW_FIELDS) {
+    if (cardData[field] !== undefined) {
+      view[field] = cardData[field];
+    }
+  }
+  return view;
+}
 
 /**
  * Map section name to view path
@@ -167,6 +208,47 @@ async function handleSyncCardViews(params, beforeData, afterData, deps) {
 
   logger.info(`Syncing view: /views/${viewType}/${projectId}/${cardId}`);
   await viewRef.set(viewData);
+
+  // Also sync public view if this project is public or has a publicToken
+  await syncPublicView(projectId, section, cardId, afterData, db, logger);
+}
+
+/**
+ * Sync a card to /publicViews/{projectId}/{type}/{cardId} if the project is public.
+ * Checks /projects/{projectId}/public and /projects/{projectId}/publicToken.
+ */
+async function syncPublicView(projectId, section, cardId, cardData, db, logger) {
+  const publicType = getPublicViewType(section);
+  if (!publicType) return; // Skip sections without public views (proposals, qa, sprints)
+
+  const publicRef = db.ref(`/publicViews/${projectId}/${publicType}/${cardId}`);
+
+  // Handle deletion
+  if (!cardData) {
+    await publicRef.remove();
+    return;
+  }
+
+  // Check if project is public or has a token
+  const projectSnap = await db.ref(`/projects/${projectId}`).once('value');
+  const project = projectSnap.val();
+  if (!project || (!project.public && !project.publicToken)) {
+    // Not a public project — ensure no stale public view exists
+    await publicRef.remove();
+    return;
+  }
+
+  // Skip deleted cards
+  if (cardData.deletedAt) {
+    await publicRef.remove();
+    return;
+  }
+
+  const cardType = publicType === 'tasks' ? 'task' : publicType === 'bugs' ? 'bug' : 'epic';
+  const viewData = extractPublicViewFields(cardData, cardId, cardType);
+
+  logger.info(`Syncing public view: /publicViews/${projectId}/${publicType}/${cardId}`);
+  await publicRef.set(viewData);
 }
 
 module.exports = {
@@ -174,5 +256,9 @@ module.exports = {
   extractTaskViewFields,
   extractBugViewFields,
   extractProposalViewFields,
-  getViewPathForSection
+  extractPublicViewFields,
+  getViewPathForSection,
+  getPublicViewType,
+  syncPublicView,
+  PUBLIC_VIEW_FIELDS
 };

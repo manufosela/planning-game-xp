@@ -121,8 +121,59 @@ async function handlePublicProjectCards(req, res, { db, logger }) {
   }
 }
 
+/**
+ * Handle POST /api/public/validate-token
+ * Validates a publicToken for a protected project and returns a Firebase Custom Token
+ * with claim { publicProject: projectId } for RTDB access via Database Rules.
+ *
+ * Body: { projectId, token }
+ * Response: { customToken } or 403
+ */
+async function handleValidatePublicToken(req, res, { db, auth, logger }) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { projectId, token } = req.body || {};
+  if (!projectId || !token) {
+    return res.status(400).json({ error: 'Missing projectId or token' });
+  }
+
+  try {
+    const projectSnap = await db.ref(`/projects/${projectId}`).once('value');
+    if (!projectSnap.exists()) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const project = projectSnap.val();
+
+    // Public projects don't need token validation — client reads directly
+    if (project.public) {
+      return res.status(200).json({ public: true, message: 'Project is public, no token needed' });
+    }
+
+    // Validate token
+    if (!project.publicToken || token !== project.publicToken) {
+      return res.status(403).json({ error: 'Invalid token' });
+    }
+
+    // Create anonymous custom token with publicProject claim
+    const uid = `public_${projectId}_${Date.now()}`;
+    const customToken = await auth.createCustomToken(uid, {
+      publicProject: projectId
+    });
+
+    logger.info('validatePublicToken: issued custom token', { projectId, uid });
+    return res.status(200).json({ customToken });
+  } catch (error) {
+    logger.error('validatePublicToken: error', { projectId, error: error.message });
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 module.exports = {
   handlePublicProjectCards,
+  handleValidatePublicToken,
   projectPublicFields,
   PUBLIC_CARD_FIELDS,
   CARD_SECTIONS

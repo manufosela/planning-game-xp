@@ -28,6 +28,10 @@
     ],
     "rewrites": [
       {
+        "source": "/api/public/validate-token",
+        "function": "validatePublicToken"
+      },
+      {
         "source": "/api/public/**",
         "function": "publicProjectCards"
       },

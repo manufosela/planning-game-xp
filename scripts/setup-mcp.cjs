@@ -52,7 +52,7 @@ function listInstances() {
   if (!fs.existsSync(INSTANCES_DIR)) return [];
   return fs.readdirSync(INSTANCES_DIR).filter(name => {
     const dir = path.join(INSTANCES_DIR, name);
-    return fs.statSync(dir).isDirectory() && name !== 'example';
+    return fs.statSync(dir).isDirectory() && !name.startsWith('.');
   });
 }
 

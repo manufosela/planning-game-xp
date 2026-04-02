@@ -49,7 +49,7 @@ const { handleParseDocumentForCards } = require('./handlers/ia-document-parser')
 const { handleGenerateDevPlan } = require('./handlers/ia-dev-plan');
 const { handleConvertDescriptionToUserStory } = require('./handlers/ia-user-story');
 const { handleGetProjectEpics } = require('./handlers/ia-epics-api');
-const { handlePublicProjectCards } = require('./handlers/public-project-cards');
+const { handlePublicProjectCards, handleValidatePublicToken } = require('./handlers/public-project-cards');
 const { handlePublicAppVersions } = require('./handlers/public-app-versions');
 
 // Admin handlers (extracted from this file)
@@ -498,6 +498,18 @@ exports.publicProjectCards = onRequest({
 }, async (req, res) => {
   return handlePublicProjectCards(req, res, {
     db: getDatabase(),
+    logger
+  });
+});
+
+exports.validatePublicToken = onRequest({
+  region: "europe-west1",
+  cors: true
+}, async (req, res) => {
+  const {getAuth} = require("firebase-admin/auth");
+  return handleValidatePublicToken(req, res, {
+    db: getDatabase(),
+    auth: getAuth(),
     logger
   });
 });

@@ -7,7 +7,11 @@ import {
   extractTaskViewFields,
   extractBugViewFields,
   extractProposalViewFields,
-  getViewPathForSection
+  extractPublicViewFields,
+  getViewPathForSection,
+  getPublicViewType,
+  syncPublicView,
+  PUBLIC_VIEW_FIELDS
 } from '../../functions/handlers/sync-card-views.js';
 
 describe('Sync Card Views Handler', () => {
@@ -16,13 +20,31 @@ describe('Sync Card Views Handler', () => {
   let mockSet;
   let mockRemove;
 
+  // Default: project is NOT public (so syncPublicView removes/skips)
+  let mockProjectData;
+
   beforeEach(() => {
     mockSet = vi.fn().mockResolvedValue(undefined);
     mockRemove = vi.fn().mockResolvedValue(undefined);
+    mockProjectData = null; // No project by default
     mockDb = {
-      ref: vi.fn().mockReturnValue({
-        set: mockSet,
-        remove: mockRemove
+      ref: vi.fn((path) => {
+        // Project lookup for syncPublicView
+        if (path && path.startsWith('/projects/')) {
+          return {
+            once: vi.fn().mockResolvedValue({
+              val: () => mockProjectData,
+              exists: () => mockProjectData !== null
+            }),
+            set: mockSet,
+            remove: mockRemove
+          };
+        }
+        return {
+          set: mockSet,
+          remove: mockRemove,
+          once: vi.fn().mockResolvedValue({ val: () => null, exists: () => false })
+        };
       })
     };
     mockLogger = {
@@ -573,6 +595,158 @@ describe('Sync Card Views Handler', () => {
 
         expect(mockDb.ref).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('getPublicViewType', () => {
+    it('should map task sections to tasks', () => {
+      expect(getPublicViewType('TASKS_ProjectA')).toBe('tasks');
+      expect(getPublicViewType('tasks_ProjectA')).toBe('tasks');
+    });
+
+    it('should map bug sections to bugs', () => {
+      expect(getPublicViewType('BUGS_ProjectA')).toBe('bugs');
+      expect(getPublicViewType('bugs_Cinema4D')).toBe('bugs');
+    });
+
+    it('should map epic sections to epics', () => {
+      expect(getPublicViewType('EPICS_ProjectA')).toBe('epics');
+      expect(getPublicViewType('epics_PlanningGame')).toBe('epics');
+    });
+
+    it('should return null for proposals, sprints, qa', () => {
+      expect(getPublicViewType('PROPOSALS_ProjectA')).toBeNull();
+      expect(getPublicViewType('SPRINTS_ProjectA')).toBeNull();
+      expect(getPublicViewType('QA_ProjectA')).toBeNull();
+    });
+  });
+
+  describe('extractPublicViewFields', () => {
+    it('should extract only whitelisted public fields', () => {
+      const fullCard = {
+        cardId: 'PLN-TSK-0001',
+        title: 'Test task',
+        status: 'In Progress',
+        devPoints: 3,
+        businessPoints: 4,
+        startDate: '2026-01-01',
+        endDate: '2026-01-15',
+        priority: 9,
+        sprint: 'PLN-SPR-0001',
+        epic: 'PLN-PCS-0001',
+        year: 2026,
+        developer: 'dev_001',
+        description: 'Secret description',
+        notes: [{ text: 'private note' }],
+        commits: [{ hash: 'abc' }]
+      };
+
+      const view = extractPublicViewFields(fullCard, '-Okey1', 'task');
+
+      expect(view.firebaseId).toBe('-Okey1');
+      expect(view.type).toBe('task');
+      expect(view.cardId).toBe('PLN-TSK-0001');
+      expect(view.title).toBe('Test task');
+      expect(view.status).toBe('In Progress');
+      expect(view.devPoints).toBe(3);
+      expect(view.businessPoints).toBe(4);
+      expect(view.year).toBe(2026);
+      // Should NOT include sensitive fields
+      expect(view.developer).toBeUndefined();
+      expect(view.description).toBeUndefined();
+      expect(view.notes).toBeUndefined();
+      expect(view.commits).toBeUndefined();
+    });
+
+    it('should handle minimal card data', () => {
+      const view = extractPublicViewFields({ cardId: 'X-TSK-0001', title: 'Min' }, '-Ok', 'task');
+      expect(view.cardId).toBe('X-TSK-0001');
+      expect(view.title).toBe('Min');
+      expect(view.type).toBe('task');
+    });
+  });
+
+  describe('PUBLIC_VIEW_FIELDS', () => {
+    it('should not contain sensitive fields', () => {
+      const sensitive = ['developer', 'coDeveloper', 'validator', 'description', 'notes', 'commits', 'acceptanceCriteria', 'createdBy'];
+      for (const field of sensitive) {
+        expect(PUBLIC_VIEW_FIELDS).not.toContain(field);
+      }
+    });
+
+    it('should contain required display fields', () => {
+      const required = ['cardId', 'title', 'status', 'year'];
+      for (const field of required) {
+        expect(PUBLIC_VIEW_FIELDS).toContain(field);
+      }
+    });
+  });
+
+  describe('syncPublicView', () => {
+    it('should write public view when project is public', async () => {
+      mockProjectData = { name: 'PlanningGame', public: true };
+
+      await syncPublicView('PlanningGame', 'TASKS_PlanningGame', '-Okey1',
+        { cardId: 'PLN-TSK-0001', title: 'Task', status: 'To Do', year: 2026 },
+        mockDb, mockLogger);
+
+      expect(mockDb.ref).toHaveBeenCalledWith('/publicViews/PlanningGame/tasks/-Okey1');
+      expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
+        cardId: 'PLN-TSK-0001',
+        type: 'task'
+      }));
+    });
+
+    it('should write public view when project has publicToken', async () => {
+      mockProjectData = { name: 'PlanningGame', publicToken: 'abc123' };
+
+      await syncPublicView('PlanningGame', 'BUGS_PlanningGame', '-Okey2',
+        { cardId: 'PLN-BUG-0001', title: 'Bug', status: 'Created', year: 2026 },
+        mockDb, mockLogger);
+
+      expect(mockDb.ref).toHaveBeenCalledWith('/publicViews/PlanningGame/bugs/-Okey2');
+      expect(mockSet).toHaveBeenCalled();
+    });
+
+    it('should remove public view when project is not public', async () => {
+      mockProjectData = { name: 'PrivateProject' };
+
+      await syncPublicView('PrivateProject', 'TASKS_PrivateProject', '-Okey3',
+        { cardId: 'PRI-TSK-0001', title: 'Private task', status: 'To Do' },
+        mockDb, mockLogger);
+
+      expect(mockDb.ref).toHaveBeenCalledWith('/publicViews/PrivateProject/tasks/-Okey3');
+      expect(mockRemove).toHaveBeenCalled();
+    });
+
+    it('should remove public view when card is deleted', async () => {
+      mockProjectData = { name: 'PlanningGame', public: true };
+
+      await syncPublicView('PlanningGame', 'TASKS_PlanningGame', '-Okey4',
+        null, mockDb, mockLogger);
+
+      expect(mockDb.ref).toHaveBeenCalledWith('/publicViews/PlanningGame/tasks/-Okey4');
+      expect(mockRemove).toHaveBeenCalled();
+    });
+
+    it('should skip proposal sections', async () => {
+      mockProjectData = { name: 'PlanningGame', public: true };
+
+      await syncPublicView('PlanningGame', 'PROPOSALS_PlanningGame', '-Okey5',
+        { cardId: 'PLN-PRP-0001' }, mockDb, mockLogger);
+
+      // Should not write to publicViews for proposals
+      expect(mockDb.ref).not.toHaveBeenCalledWith(expect.stringContaining('/publicViews/'));
+    });
+
+    it('should remove public view for deleted cards with deletedAt', async () => {
+      mockProjectData = { name: 'PlanningGame', public: true };
+
+      await syncPublicView('PlanningGame', 'TASKS_PlanningGame', '-Okey6',
+        { cardId: 'PLN-TSK-0099', title: 'Deleted', deletedAt: '2026-01-01' },
+        mockDb, mockLogger);
+
+      expect(mockRemove).toHaveBeenCalled();
     });
   });
 });
