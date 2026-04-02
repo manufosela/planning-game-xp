@@ -180,11 +180,34 @@ export function createMcpServer(serverName) {
     return await getCard(params);
   }));
 
-  server.tool('create_card', 'Create a new card (task, bug, epic, or proposal) with auto-generated ID', createCardSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('create_card', [
+    'Create a new card (task, bug, epic, or proposal) with auto-generated ID.',
+    '',
+    'REQUIRED fields by type (will ERROR if missing):',
+    '• task: title, descriptionStructured, acceptanceCriteria OR acceptanceCriteriaStructured, epic (existing epic ID), validator (stk_XXX — use list_stakeholders to get valid IDs)',
+    '• bug: title, description',
+    '• epic: title',
+    '• proposal: title',
+    '',
+    'FORBIDDEN on create:',
+    '• task: sprint (set later via update_card on "In Progress"), priority (auto-calculated from devPoints/businessPoints)',
+    '',
+    'BEFORE creating tasks: call list_stakeholders to get valid validator IDs. If no stakeholders exist, add them to the project first.'
+  ].join('\n'), createCardSchema.shape, wrapWithProjectAndNotice(async (params) => {
     return await createCard(params);
   }));
 
-  server.tool('update_card', 'Update fields of an existing card', updateCardSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('update_card', [
+    'Update fields of an existing card.',
+    '',
+    'REQUIRED fields by transition (call get_transition_rules first):',
+    '• task To Do→In Progress: developer, validator, epic, sprint, devPoints, businessPoints, acceptanceCriteria, startDate',
+    '• task In Progress→To Validate: startDate, endDate, commits[], pipelineStatus.prCreated',
+    '• bug Created→Assigned: developer, startDate',
+    '• bug Assigned→Fixed: startDate, endDate, commits[], pipelineStatus.prCreated',
+    '',
+    'Always call get_transition_rules before changing status to verify current requirements.'
+  ].join('\n'), updateCardSchema.shape, wrapWithProjectAndNotice(async (params) => {
     return await updateCard(params);
   }));
 

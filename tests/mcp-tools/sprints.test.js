@@ -404,7 +404,7 @@ describe('MCP Sprint tools - AC1: Reject sprint on task creation', () => {
     mockUserId = 'geniova-mcp';
   });
 
-  it('should allow creating a task with sprint (no longer rejected)', async () => {
+  it('should reject creating a task with sprint assigned', async () => {
     setupMockRef();
     mockOnce.mockResolvedValue({
       val: () => ({
@@ -416,20 +416,15 @@ describe('MCP Sprint tools - AC1: Reject sprint on task creation', () => {
       })
     });
 
-    // Sprint at creation is now allowed — should NOT throw sprint-related error
-    try {
-      await createCard({
-        projectId: 'TestProject',
-        type: 'task',
-        title: 'Test task',
-        descriptionStructured: [{ role: 'developer', goal: 'test', benefit: 'testing' }],
-        acceptanceCriteriaStructured: [{ given: 'ctx', when: 'act', then: 'res' }],
-        epic: 'TST-EPC-0001',
-        sprint: 'TST-SPR-0001'
-      });
-    } catch (e) {
-      expect(e.message).not.toMatch(/Cannot assign sprint/i);
-    }
+    await expect(createCard({
+      projectId: 'TestProject',
+      type: 'task',
+      title: 'Test task',
+      descriptionStructured: [{ role: 'developer', goal: 'test', benefit: 'testing' }],
+      acceptanceCriteriaStructured: [{ given: 'ctx', when: 'act', then: 'res' }],
+      epic: 'TST-EPC-0001',
+      sprint: 'TST-SPR-0001'
+    })).rejects.toThrow(/sprint.*In Progress|sprint.*assigned.*In Progress/i);
   });
 
   it('should allow creating a task without sprint', async () => {

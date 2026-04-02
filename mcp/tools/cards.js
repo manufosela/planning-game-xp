@@ -243,8 +243,8 @@ export const createCardSchema = z.object({
   priority: z.string().optional().describe('Card priority. For bugs/epics: "High", "Medium", "Low". For tasks: DO NOT SET - calculated automatically from devPoints/businessPoints using Planning Game formula.'),
   developer: z.string().optional().describe('Developer ID (must start with "dev_")'),
   codeveloper: z.string().optional().describe('Co-developer ID (must start with "dev_"). Auto-assigned from mcp.user.json when AI (BecarIA) is the developer.'),
-  validator: z.string().optional().describe('Validator/Stakeholder ID (must start with "stk_"). If not provided for tasks, auto-assigned: 1) developer if also stakeholder, 2) Mánu Fosela, 3) error with available stakeholders.'),
-  sprint: z.string().optional().describe('Sprint ID (e.g., "PRJ-SPR-0001"). Must reference an existing sprint in the project.'),
+  validator: z.string().optional().describe('Validator/Stakeholder ID (must start with "stk_"). If not provided for tasks, auto-assigned: 1) developer if also stakeholder, 2) Mánu Fosela, 3) error with available stakeholders. Use list_stakeholders to get valid IDs.'),
+  sprint: z.string().optional().describe('Sprint ID (e.g., "PRJ-SPR-0001"). DO NOT SET when creating — sprint is assigned when moving to "In Progress" via update_card.'),
   devPoints: z.number().optional().describe('Development points (1-5 or fibonacci). Used to calculate task priority.'),
   businessPoints: z.number().optional().describe('Business points (1-5 or fibonacci). Used to calculate task priority.'),
   planId: z.string().optional().describe('Plan ID (Firebase key) to link this task to a development plan. Only for tasks.'),
@@ -450,8 +450,10 @@ async function resolveValidator(db, projectId, validator, developer) {
     );
   }
 
-  // No stakeholders in project — return null instead of throwing
-  return null;
+  throw new Error(
+    `No stakeholders found in project "${projectId}". ` +
+    'Add stakeholders to the project before creating tasks, or provide a validator ID explicitly.'
+  );
 }
 
 export async function createCard({ projectId, type, title, description, descriptionStructured, acceptanceCriteria, acceptanceCriteriaStructured, epic, implementationPlan, status, priority, developer, codeveloper, validator, sprint, devPoints, businessPoints, planId, year }) {
@@ -598,7 +600,14 @@ export async function createCard({ projectId, type, title, description, descript
       );
     }
 
-    // Sprint at creation is allowed — no need to force a separate update call
+    // AC1: Tasks cannot have sprint assigned at creation time
+    if (sprint) {
+      throw new Error(
+        'Cannot assign sprint when creating a task. ' +
+        'Sprint is assigned when moving the task to "In Progress". ' +
+        'Create the task first, then update it with a sprint when starting work.'
+      );
+    }
 
     // Auto-resolve validator for tasks
     validator = await resolveValidator(db, projectId, validator, developer);
