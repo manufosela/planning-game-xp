@@ -479,6 +479,12 @@ export async function createCard({ projectId, type, title, description, descript
     }
   }
 
+  // Epics do NOT have status or priority — strip if passed
+  if (type === 'epic') {
+    status = undefined;
+    priority = undefined;
+  }
+
   // Resolve values dynamically from Firebase RTDB (case-insensitive)
   if (type === 'bug') {
     if (status) status = await resolveValue('bugStatus', status);
@@ -877,6 +883,12 @@ export async function updateCard({ projectId, type, firebaseId, updates, validat
   }
 
   validateEntityIds(updates);
+
+  // Epics do NOT have status or priority — strip if passed
+  if (type === 'epic') {
+    delete updates.status;
+    delete updates.priority;
+  }
 
   // Resolve values dynamically from Firebase RTDB (case-insensitive)
   if (type === 'bug') {
