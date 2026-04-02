@@ -20,19 +20,44 @@ export const USAGE_RULES_CONTENT = `
 - ALWAYS provide \`devPoints\` and \`businessPoints\` during Planning Game
 - Scale: 1 (highest priority) to 25 (lowest) for 1-5 system, or 36 for fibonacci
 
-### 3. Required Fields for Tasks
-When creating a task:
-- \`title\`: Descriptive title
-- \`descriptionStructured\`: Format [{role, goal, benefit}]
-- \`acceptanceCriteria\` or \`acceptanceCriteriaStructured\`
-- \`epic\`: Existing epic ID (use list_cards type=epic)
+### 3. Required Fields for Creating Cards
 
-When moving from "To Do":
-- \`developer\`: ID with "dev_" prefix (e.g., "dev_001")
-- \`validator\`: ID with "stk_" prefix (e.g., "stk_001")
-- \`devPoints\`: Development points (1-5 or fibonacci)
-- \`businessPoints\`: Business points (1-5 or fibonacci)
-- \`sprint\`: Existing sprint ID
+**BEFORE creating any task**: call \`list_stakeholders\` to get valid validator IDs for the project. If none exist, add stakeholders first.
+
+**Task** (create_card type=task):
+- \`title\`: Descriptive title (REQUIRED)
+- \`descriptionStructured\`: Format [{role, goal, benefit}] (REQUIRED)
+- \`acceptanceCriteria\` or \`acceptanceCriteriaStructured\` (REQUIRED — one of them)
+- \`epic\`: Existing epic ID (REQUIRED — use list_cards type=epic to find one)
+- \`validator\`: Stakeholder ID with "stk_" prefix (REQUIRED — use list_stakeholders)
+- DO NOT send \`sprint\` — it is set later when moving to "In Progress"
+- DO NOT send \`priority\` — it is auto-calculated from devPoints/businessPoints
+
+**Bug** (create_card type=bug):
+- \`title\`: Descriptive title (REQUIRED)
+- \`description\`: Bug description (REQUIRED)
+
+**Epic** (create_card type=epic):
+- \`title\`: Epic title (REQUIRED)
+
+**Proposal** (create_card type=proposal):
+- \`title\`: Proposal title (REQUIRED)
+
+### 3b. Required Fields for Status Transitions (update_card)
+
+**ALWAYS call \`get_transition_rules\` before changing status** to verify current requirements.
+
+**Task To Do → In Progress**:
+- \`developer\`, \`validator\`, \`epic\`, \`sprint\`, \`devPoints\`, \`businessPoints\`, \`acceptanceCriteria\`, \`startDate\`
+
+**Task In Progress → To Validate**:
+- \`startDate\`, \`endDate\`, \`commits\` [{hash, message, date, author}], \`pipelineStatus.prCreated\`
+
+**Bug Created → Assigned**:
+- \`developer\`, \`startDate\`
+
+**Bug Assigned → Fixed**:
+- \`startDate\`, \`endDate\`, \`commits\`, \`pipelineStatus.prCreated\`
 
 ### 4. Entity IDs
 - Developers: prefix "dev_" (e.g., "dev_001")

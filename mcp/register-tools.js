@@ -163,7 +163,7 @@ export function createMcpServer(serverName) {
     return await updateProject(params);
   }));
 
-  server.tool('create_project', 'Create a new project with name, abbreviation, and optional settings', createProjectSchema.shape, wrapWithUpdateNotice(async (params) => {
+  server.tool('create_project', 'Create a new project. REQUIRED: name, abbreviation (3-4 uppercase letters). Optional: description, repoUrl, languages, frameworks. Auto-generates publicToken and default epic.', createProjectSchema.shape, wrapWithUpdateNotice(async (params) => {
     return await createProject(params);
   }));
 
@@ -211,7 +211,7 @@ export function createMcpServer(serverName) {
     return await updateCard(params);
   }));
 
-  server.tool('relate_cards', 'Create or remove relations between cards (related, blocks/blockedBy)', relateCardsSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('relate_cards', 'Create or remove relations between cards. REQUIRED: projectId, sourceCardId, targetCardId, relationType ("related" or "blocks"). Optional: action ("add" default, or "remove").', relateCardsSchema.shape, wrapWithProjectAndNotice(async (params) => {
     return await relateCards(params);
   }));
 
@@ -228,7 +228,7 @@ export function createMcpServer(serverName) {
     return await getSprint(params);
   }));
 
-  server.tool('create_sprint', 'Create a new sprint with start and end dates', createSprintSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('create_sprint', 'Create a new sprint. REQUIRED: projectId, title, startDate (YYYY-MM-DD), endDate (YYYY-MM-DD). Optional: devPoints, businessPoints, year.', createSprintSchema.shape, wrapWithProjectAndNotice(async (params) => {
     return await createSprint(params);
   }));
 
@@ -237,11 +237,11 @@ export function createMcpServer(serverName) {
   }));
 
   // ── Team tools ──
-  server.tool('list_developers', 'List all developers with name and email', listDevelopersSchema.shape, wrapWithUpdateNotice(async (params) => {
+  server.tool('list_developers', 'List all developers (dev_XXX IDs). Call this BEFORE assigning developers to cards. Optional: projectId to filter by project team.', listDevelopersSchema.shape, wrapWithUpdateNotice(async (params) => {
     return await listDevelopers(params);
   }));
 
-  server.tool('list_stakeholders', 'List all stakeholders with name and email', listStakeholdersSchema.shape, wrapWithUpdateNotice(async (params) => {
+  server.tool('list_stakeholders', 'List all stakeholders (stk_XXX IDs). Call this BEFORE creating tasks — validator is REQUIRED and must be a valid stk_XXX ID from this list. Optional: projectId to filter by project team.', listStakeholdersSchema.shape, wrapWithUpdateNotice(async (params) => {
     return await listStakeholders(params);
   }));
 

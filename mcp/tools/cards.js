@@ -457,6 +457,22 @@ async function resolveValidator(db, projectId, validator, developer) {
 }
 
 export async function createCard({ projectId, type, title, description, descriptionStructured, acceptanceCriteria, acceptanceCriteriaStructured, epic, implementationPlan, status, priority, developer, codeveloper, validator, sprint, devPoints, businessPoints, planId, year }) {
+  // ── EARLY PREFLIGHT: fail fast with ALL missing fields at once ──
+  if (type === 'task') {
+    const missing = [];
+    if (!descriptionStructured || !descriptionStructured.length) missing.push('descriptionStructured (format: [{role, goal, benefit}])');
+    if (!acceptanceCriteria && (!acceptanceCriteriaStructured || !acceptanceCriteriaStructured.length)) missing.push('acceptanceCriteria OR acceptanceCriteriaStructured');
+    if (!epic) missing.push('epic (use list_cards type=epic to find existing epics)');
+    if (sprint) missing.push('REMOVE sprint — it is FORBIDDEN on create, set it later via update_card when moving to "In Progress"');
+    if (priority !== undefined) missing.push('REMOVE priority — it is auto-calculated from devPoints/businessPoints');
+    if (missing.length > 0) {
+      throw new Error(
+        `Cannot create task — fix these issues:\n${missing.map(m => `  • ${m}`).join('\n')}\n\n` +
+        'TIP: call list_stakeholders to get validator IDs, list_cards(type=epic) for epic IDs.'
+      );
+    }
+  }
+
   const db = getDatabase();
   const firestore = getFirestore();
 
