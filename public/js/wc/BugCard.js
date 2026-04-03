@@ -1189,7 +1189,7 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
               `)}
             </select>
           </div>
-          
+
           <div class="field-group priority-group">
             <label>Priority:</label>
             <select id="priority" .value=${this.priority || 'Medium'} @change=${this._handlePriorityChange} ?disabled=${!this.isEditable}>
@@ -1198,8 +1198,10 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
               `)}
             </select>
           </div>
+        </div>
 
-          <div class="field-group developer-group">
+        <div class="field-group-row">
+          <div class="field-group">
             <label>Developer:</label>
             <select id="developer" class="${this._getFieldClass('developer')}" .value=${this.developer || ''} @change=${this._handleDeveloperChange} ?disabled=${!this.isEditable}>
               <option value="${APP_CONSTANTS.DEVELOPER_UNASSIGNED.STORAGE_VALUE}" ?selected=${!this.developer || APP_CONSTANTS.DEVELOPER_UNASSIGNED.ALIASES.includes(this.developer)}>${APP_CONSTANTS.DEVELOPER_UNASSIGNED.DISPLAY_ES}</option>
@@ -1211,10 +1213,10 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
             </select>
           </div>
 
-          <div class="field-group codeveloper-group">
-            <label>Co-Developer:</label>
+          <div class="field-group">
+            <label>CoDev:</label>
             <select id="coDeveloper" class="${this._getFieldClass('coDeveloper')}" .value=${this.coDeveloper || ''} @change=${this._handleCoDeveloperChange} ?disabled=${!this.isEditable}>
-              <option value="" ?selected=${!this.coDeveloper}>Sin asignar</option>
+              <option value="" ?selected=${!this.coDeveloper}>—</option>
               ${this.developerSelectOptions.map(option => html`
                 <option value=${option.value} ?selected=${this._isCoDeveloperSelected(option.value)}>
                   ${option.display}
@@ -1223,20 +1225,20 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
             </select>
           </div>
 
-          <div class="field-group validator-group">
+          <div class="field-group">
             <label>Validator:</label>
             <select id="validator" .value=${this.validator || ''} @change=${e => { this.validator = e.target.value; }} ?disabled=${!this.isEditable}>
-              <option value="" ?selected=${!this.validator}>Sin validator</option>
+              <option value="" ?selected=${!this.validator}>—</option>
               ${this._getStakeholderOptions().map(stk => html`
                 <option value=${stk.value} ?selected=${this.validator === stk.value}>${stk.display}</option>
               `)}
             </select>
           </div>
 
-          <div class="field-group covalidator-group">
-            <label>CoValidator:</label>
+          <div class="field-group">
+            <label>CoValid:</label>
             <select id="coValidator" .value=${this.coValidator || ''} @change=${e => { this.coValidator = e.target.value; }} ?disabled=${!this.isEditable}>
-              <option value="" ?selected=${!this.coValidator}>Sin CoValidator</option>
+              <option value="" ?selected=${!this.coValidator}>—</option>
               ${this._getStakeholderOptions().filter(stk => stk.value !== this.validator).map(stk => html`
                 <option value=${stk.value} ?selected=${this.coValidator === stk.value}>${stk.display}</option>
               `)}
