@@ -677,15 +677,22 @@ export const FirebaseService = {
       return this._legacyCleanCard(card);
     }
 
+    // Fields where empty string '' means "not set" — skip to avoid overwriting real values
+    const SKIP_IF_EMPTY = new Set([
+      'startDate', 'endDate', 'developer', 'coDeveloper', 'validator', 'coValidator',
+      'sprint', 'epic', 'firebaseId', 'cardId'
+    ]);
+
     const persistentFields = new Set(schema.PERSISTENT_FIELDS);
     const cleanCard = {};
     for (const [key, value] of Object.entries(card)) {
-      if (persistentFields.has(key) && value !== undefined) {
-        try {
-          cleanCard[key] = JSON.parse(JSON.stringify(value));
-        } catch {
-          // Skip non-serializable values
-        }
+      if (!persistentFields.has(key) || value === undefined) continue;
+      // Skip empty strings for fields that should not overwrite real values
+      if (SKIP_IF_EMPTY.has(key) && value === '') continue;
+      try {
+        cleanCard[key] = JSON.parse(JSON.stringify(value));
+      } catch {
+        // Skip non-serializable values
       }
     }
     return cleanCard;

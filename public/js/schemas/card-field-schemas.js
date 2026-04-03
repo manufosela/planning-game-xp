@@ -45,12 +45,13 @@ export const TASK_SCHEMA = {
 export const BUG_SCHEMA = {
   PERSISTENT_FIELDS: [
     ...BASE_PERSISTENT_FIELDS,
-    'status', 'priority', 'developer', 'coDeveloper',
+    'status', 'priority', 'developer', 'coDeveloper', 'validator',
     'registerDate', 'acceptanceCriteria', 'acceptanceCriteriaStructured',
     'bugType', 'attachment', 'repositoryLabel', 'year', 'group',
     'epic', 'sprint', 'commits',
     'cinemaFile', 'exportedFile', 'importedFile',
     'plugin', 'pluginVersion', 'treatmentType',
+    'rootCause', 'resolution',
     'aiUsage', 'pipelineStatus'
   ],
   VIEW_FIELDS: [
