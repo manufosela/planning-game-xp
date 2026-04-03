@@ -36,6 +36,8 @@ export class BugCard extends AiUsageDisplayMixin(CommitsDisplayMixin(NotesManage
       priority: { type: String },
       developer: { type: String },
       coDeveloper: { type: String },
+      validator: { type: String },
+      coValidator: { type: String },
       registerDate: { type: String },
       acceptanceCriteria: { type: String },
       bugType: { type: String },
@@ -45,6 +47,7 @@ export class BugCard extends AiUsageDisplayMixin(CommitsDisplayMixin(NotesManage
       statusList: { type: Array },
       priorityList: { type: Array },
       developerList: { type: Array },
+      stakeholders: { type: Array },
       bugTypeList: { type: Array },
       userAuthorizedEmails: { type: Array },
 
@@ -396,6 +399,29 @@ export class BugCard extends AiUsageDisplayMixin(CommitsDisplayMixin(NotesManage
   }
 
   /**
+   * Get stakeholder options for validator/coValidator selects
+   */
+  _getStakeholderOptions() {
+    const rawStakeholders = this.stakeholders || [];
+    if (!rawStakeholders.length) return [];
+
+    const options = [];
+    for (const entry of rawStakeholders) {
+      const candidate = typeof entry === 'object'
+        ? (entry.id || entry.email || entry.name || entry.value || '')
+        : entry;
+      const resolvedId = entityDirectoryService.resolveStakeholderId(candidate);
+      if (resolvedId) {
+        options.push({
+          value: resolvedId,
+          display: entityDirectoryService.getStakeholderDisplayName(resolvedId) || resolvedId
+        });
+      }
+    }
+    return options;
+  }
+
+  /**
    * Request data from GlobalDataManager
    */
   _requestBugCardData() {
@@ -453,6 +479,9 @@ document.dispatchEvent(new CustomEvent('request-bugcard-data', {
         } else if (e.detail.developerList && typeof e.detail.developerList === 'object' && Object.keys(e.detail.developerList).length > 0) {
           this.developerList = this._normalizeDevelopersList(e.detail.developerList);
         } // si viene vacío, conservamos la lista actual (constructor/fallbacks)
+        if (Array.isArray(e.detail.stakeholders) && e.detail.stakeholders.length > 0) {
+          this.stakeholders = e.detail.stakeholders;
+        }
         this.userAuthorizedEmails = e.detail.userAuthorizedEmails || [];
         this._normalizeDeveloperField();
 
@@ -601,7 +630,7 @@ return [];
     const criticalProps = [
       'title', 'status', 'priority', 'developer', 'expanded', 'description', 'bugType',
       'canEditPermission', 'isEditable', 'userEmail', 'acceptanceCriteria', 'registerDate',
-      'attachment', 'group', 'projectId', 'activeTab', 'createdBy', 'notes',
+      'attachment', 'group', 'projectId', 'activeTab', 'createdBy', 'notes', 'validator', 'coValidator', 'stakeholders',
       'repositoryLabel', 'projectRepositories', 'acceptanceCriteriaStructured', 'isAnalyzingDescription'
     ];
     return Array.from(changedProperties.keys()).some(prop => criticalProps.includes(prop));
@@ -1190,6 +1219,26 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
                 <option value=${option.value} ?selected=${this._isCoDeveloperSelected(option.value)}>
                   ${option.display}
                 </option>
+              `)}
+            </select>
+          </div>
+
+          <div class="field-group validator-group">
+            <label>Validator:</label>
+            <select id="validator" .value=${this.validator || ''} @change=${e => { this.validator = e.target.value; }} ?disabled=${!this.isEditable}>
+              <option value="" ?selected=${!this.validator}>Sin validator</option>
+              ${this._getStakeholderOptions().map(stk => html`
+                <option value=${stk.value} ?selected=${this.validator === stk.value}>${stk.display}</option>
+              `)}
+            </select>
+          </div>
+
+          <div class="field-group covalidator-group">
+            <label>CoValidator:</label>
+            <select id="coValidator" .value=${this.coValidator || ''} @change=${e => { this.coValidator = e.target.value; }} ?disabled=${!this.isEditable}>
+              <option value="" ?selected=${!this.coValidator}>Sin CoValidator</option>
+              ${this._getStakeholderOptions().filter(stk => stk.value !== this.validator).map(stk => html`
+                <option value=${stk.value} ?selected=${this.coValidator === stk.value}>${stk.display}</option>
               `)}
             </select>
           </div>

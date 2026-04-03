@@ -250,6 +250,7 @@ document.dispatchEvent(new CustomEvent('provide-bugcard-data', {
           statusList: finalStatusList,
           priorityList: finalPriorityList,
           developerList: this.complexData.developerList || [],
+          stakeholders: this.complexData.stakeholders || [],
           userAuthorizedEmails: this.simpleData.userAdminEmails
         }
       }));
