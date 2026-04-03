@@ -35,6 +35,94 @@ function safeJsonParse(text) {
 }
 
 /**
+ * Extend a Zod schema shape with _hasContext.
+ * LLMs send _hasContext:true after receiving context to skip re-injection.
+ */
+function withContext(shape) {
+  return {
+    ...shape,
+    _hasContext: z.boolean().optional().describe('Set to true after receiving _context block. Omit on first call or after context loss.')
+  };
+}
+
+/**
+ * Build compact project context: developers, stakeholders, epics, sprints, rules.
+ * Injected once on first call (or after context loss) to prevent trial-and-error.
+ */
+async function buildProjectContext(projectId) {
+  try {
+    const { getDatabase } = await import('firebase-admin/database');
+    const db = getDatabase();
+
+    const [devsSnap, stksSnap, cardsSnap, projectSnap] = await Promise.all([
+      db.ref('/data/developers').once('value'),
+      db.ref('/data/stakeholders').once('value'),
+      db.ref(`/cards/${projectId}`).once('value'),
+      db.ref(`/projects/${projectId}`).once('value')
+    ]);
+
+    const project = projectSnap.val() || {};
+    const projectDevIds = project.developers || [];
+    const projectStkIds = project.stakeholders || [];
+
+    const allDevs = devsSnap.val() || {};
+    const developers = [];
+    for (const [id, dev] of Object.entries(allDevs)) {
+      if (!id.startsWith('dev_') || typeof dev !== 'object' || dev.active === false) continue;
+      if (Array.isArray(projectDevIds) && projectDevIds.includes(id)) {
+        developers.push({ id, name: dev.name || '' });
+      }
+    }
+
+    const allStks = stksSnap.val() || {};
+    const stakeholders = [];
+    for (const [id, stk] of Object.entries(allStks)) {
+      if (!id.startsWith('stk_') || typeof stk !== 'object' || stk.active === false) continue;
+      if (Array.isArray(projectStkIds) && projectStkIds.includes(id)) {
+        stakeholders.push({ id, name: stk.name || '' });
+      }
+    }
+
+    const allCards = cardsSnap.val() || {};
+    const epics = [];
+    const sprints = [];
+    const currentYear = new Date().getFullYear();
+    for (const [key, cards] of Object.entries(allCards)) {
+      if (!cards || typeof cards !== 'object') continue;
+      if (key.startsWith('EPICS_')) {
+        for (const card of Object.values(cards)) {
+          if (card?.cardId) epics.push({ id: card.cardId, title: card.title || '' });
+        }
+      } else if (key.startsWith('SPRINTS_')) {
+        for (const card of Object.values(cards)) {
+          if (card?.cardId && (!card.year || card.year >= currentYear)) {
+            sprints.push({ id: card.cardId, title: card.title || '' });
+          }
+        }
+      }
+    }
+
+    return {
+      _context: {
+        projectId,
+        developers,
+        stakeholders,
+        epics: epics.slice(0, 30),
+        sprints: sprints.slice(0, 10),
+        rules: {
+          createTask: 'REQUIRED: title, descriptionStructured, acceptanceCriteria/acceptanceCriteriaStructured, epic, validator (stk_XXX). FORBIDDEN: sprint, priority.',
+          toInProgress: 'REQUIRED in updates: developer, validator, epic, sprint, devPoints, businessPoints, acceptanceCriteria, startDate.',
+          toValidate: 'REQUIRED in updates: endDate, commits [{hash,message,date,author}], pipelineStatus.prCreated.',
+          bugAssigned: 'REQUIRED: developer, startDate.',
+          bugFixed: 'REQUIRED: endDate, commits, pipelineStatus.prCreated.'
+        },
+        _note: 'Include _hasContext:true in ALL future calls to skip this block.'
+      }
+    };
+  } catch { return null; }
+}
+
+/**
  * Wrap tool handler to include update notice and user configuration warnings.
  */
 function wrapWithUpdateNotice(handler) {
@@ -77,12 +165,18 @@ function wrapWithUpdateNotice(handler) {
       }
     }
 
-    // Inject _instance metadata and compress response to reduce token consumption
+    // Inject _instance metadata, project context (if needed), and compress
     if (result.content && result.content.length > 0) {
       const parsed = safeJsonParse(result.content[0].text);
       if (parsed) {
         parsed._instance = getInstanceMetadata();
-        // Detect tool type from response structure for context-specific compression
+
+        // Inject project context on first call or after context loss
+        if (!params._hasContext && params.projectId) {
+          const ctx = await buildProjectContext(params.projectId);
+          if (ctx) Object.assign(parsed, ctx);
+        }
+
         const toolHint = parsed.card && parsed.availableTransitions ? 'get_card' : '';
         const compressed = compressResponse(parsed, toolHint);
         result.content[0] = { type: 'text', text: compactStringify(compressed) };
@@ -155,11 +249,11 @@ export function createMcpServer(serverName) {
     return await listProjects();
   }));
 
-  server.tool('get_project', 'Get full details of a project including description, repos, languages, frameworks, and team', getProjectSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('get_project', 'Get full details of a project including description, repos, languages, frameworks, and team', withContext(getProjectSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await getProject(params);
   }));
 
-  server.tool('update_project', 'Update fields of an existing project (description, repoUrl, languages, frameworks, agentsGuidelines, etc.)', updateProjectSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('update_project', 'Update fields of an existing project (description, repoUrl, languages, frameworks, agentsGuidelines, etc.)', withContext(updateProjectSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await updateProject(params);
   }));
 
@@ -172,11 +266,11 @@ export function createMcpServer(serverName) {
   }));
 
   // ── Card tools ──
-  server.tool('list_cards', 'List cards of a project filtered by type, status, sprint, developer, or year', listCardsSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('list_cards', 'List cards of a project filtered by type, status, sprint, developer, or year', withContext(listCardsSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await listCards(params);
   }));
 
-  server.tool('get_card', 'Get full details of a card by its cardId', getCardSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('get_card', 'Get full details of a card by its cardId', withContext(getCardSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await getCard(params);
   }));
 
@@ -193,7 +287,7 @@ export function createMcpServer(serverName) {
     '• task: sprint (set later via update_card on "In Progress"), priority (auto-calculated from devPoints/businessPoints)',
     '',
     'BEFORE creating tasks: call list_stakeholders to get valid validator IDs. If no stakeholders exist, add them to the project first.'
-  ].join('\n'), createCardSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  ].join('\n'), withContext(createCardSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await createCard(params);
   }));
 
@@ -207,32 +301,32 @@ export function createMcpServer(serverName) {
     '• bug Assigned→Fixed: startDate, endDate, commits[], pipelineStatus.prCreated',
     '',
     'Always call get_transition_rules before changing status to verify current requirements.'
-  ].join('\n'), updateCardSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  ].join('\n'), withContext(updateCardSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await updateCard(params);
   }));
 
-  server.tool('relate_cards', 'Create or remove relations between cards. REQUIRED: projectId, sourceCardId, targetCardId, relationType ("related" or "blocks"). Optional: action ("add" default, or "remove").', relateCardsSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('relate_cards', 'Create or remove relations between cards. REQUIRED: projectId, sourceCardId, targetCardId, relationType ("related" or "blocks"). Optional: action ("add" default, or "remove").', withContext(relateCardsSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await relateCards(params);
   }));
 
-  server.tool('get_transition_rules', 'Get status transition rules for cards. Call this BEFORE attempting status updates to understand requirements.', getTransitionRulesSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('get_transition_rules', 'Get status transition rules for cards. Call this BEFORE attempting status updates to understand requirements.', withContext(getTransitionRulesSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await getTransitionRules(params);
   }));
 
   // ── Sprint tools ──
-  server.tool('list_sprints', 'List sprints of a project with dates and points', listSprintsSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('list_sprints', 'List sprints of a project with dates and points', withContext(listSprintsSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await listSprints(params);
   }));
 
-  server.tool('get_sprint', 'Get full details of a sprint by its cardId', getSprintSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('get_sprint', 'Get full details of a sprint by its cardId', withContext(getSprintSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await getSprint(params);
   }));
 
-  server.tool('create_sprint', 'Create a new sprint. REQUIRED: projectId, title, startDate (YYYY-MM-DD), endDate (YYYY-MM-DD). Optional: devPoints, businessPoints, year.', createSprintSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('create_sprint', 'Create a new sprint. REQUIRED: projectId, title, startDate (YYYY-MM-DD), endDate (YYYY-MM-DD). Optional: devPoints, businessPoints, year.', withContext(createSprintSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await createSprint(params);
   }));
 
-  server.tool('update_sprint', 'Update fields of an existing sprint', updateSprintSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('update_sprint', 'Update fields of an existing sprint', withContext(updateSprintSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await updateSprint(params);
   }));
 
@@ -246,65 +340,65 @@ export function createMcpServer(serverName) {
   }));
 
   // ── ADR tools ──
-  server.tool('list_adrs', 'List all ADRs for a project', listAdrsSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('list_adrs', 'List all ADRs for a project', withContext(listAdrsSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await listAdrs(params);
   }));
 
-  server.tool('get_adr', 'Get full details of an ADR', getAdrSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('get_adr', 'Get full details of an ADR', withContext(getAdrSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await getAdr(params);
   }));
 
-  server.tool('create_adr', 'Create a new ADR (Architecture Decision Record)', createAdrSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('create_adr', 'Create a new ADR (Architecture Decision Record)', withContext(createAdrSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await createAdr(params);
   }));
 
-  server.tool('update_adr', 'Update an existing ADR', updateAdrSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('update_adr', 'Update an existing ADR', withContext(updateAdrSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await updateAdr(params);
   }));
 
-  server.tool('delete_adr', 'Delete an ADR (moves to trash)', deleteAdrSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('delete_adr', 'Delete an ADR (moves to trash)', withContext(deleteAdrSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await deleteAdr(params);
   }));
 
   // ── Development Plans tools ──
-  server.tool('list_plans', 'List development plans for a project, optionally filtered by status (draft, accepted, rejected)', listPlansSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('list_plans', 'List development plans for a project, optionally filtered by status (draft, accepted, rejected)', withContext(listPlansSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await listPlans(params);
   }));
 
-  server.tool('get_plan', 'Get full details of a development plan including phases and proposed tasks', getPlanSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('get_plan', 'Get full details of a development plan including phases and proposed tasks', withContext(getPlanSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await getPlan(params);
   }));
 
-  server.tool('create_plan', 'Create a new development plan with phases and proposed tasks', createPlanSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('create_plan', 'Create a new development plan with phases and proposed tasks', withContext(createPlanSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await createPlan(params);
   }));
 
-  server.tool('update_plan', 'Update a development plan (title, objective, status, phases)', updatePlanSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('update_plan', 'Update a development plan (title, objective, status, phases)', withContext(updatePlanSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await updatePlan(params);
   }));
 
-  server.tool('delete_plan', 'Delete a development plan (moves to trash)', deletePlanSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('delete_plan', 'Delete a development plan (moves to trash)', withContext(deletePlanSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await deletePlan(params);
   }));
 
   // ── Plan Proposal tools ──
-  server.tool('list_plan_proposals', 'List plan proposals for a project, optionally filtered by status (pending, planned, rejected)', listPlanProposalsSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('list_plan_proposals', 'List plan proposals for a project, optionally filtered by status (pending, planned, rejected)', withContext(listPlanProposalsSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await listPlanProposals(params);
   }));
 
-  server.tool('get_plan_proposal', 'Get full details of a plan proposal including linked plan IDs', getPlanProposalSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('get_plan_proposal', 'Get full details of a plan proposal including linked plan IDs', withContext(getPlanProposalSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await getPlanProposal(params);
   }));
 
-  server.tool('create_plan_proposal', 'Create a new plan proposal (feature request that can later generate technical plans)', createPlanProposalSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('create_plan_proposal', 'Create a new plan proposal (feature request that can later generate technical plans)', withContext(createPlanProposalSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await createPlanProposal(params);
   }));
 
-  server.tool('update_plan_proposal', 'Update a plan proposal (title, description, status, tags, planIds)', updatePlanProposalSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('update_plan_proposal', 'Update a plan proposal (title, description, status, tags, planIds)', withContext(updatePlanProposalSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await updatePlanProposal(params);
   }));
 
-  server.tool('delete_plan_proposal', 'Delete a plan proposal (moves to trash)', deletePlanProposalSchema.shape, wrapWithProjectAndNotice(async (params) => {
+  server.tool('delete_plan_proposal', 'Delete a plan proposal (moves to trash)', withContext(deletePlanProposalSchema.shape), wrapWithProjectAndNotice(async (params) => {
     return await deletePlanProposal(params);
   }));
 
