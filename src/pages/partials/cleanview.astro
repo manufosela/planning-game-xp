@@ -128,6 +128,14 @@
   projectSelector.addEventListener('change', () => {
     currentProject = projectSelector.value;
     localStorage.setItem('cleanview-project', currentProject);
+    // Sync to URL so it propagates when navigating to other pages
+    const url = new URL(window.location);
+    if (currentProject) {
+      url.searchParams.set('projectId', currentProject);
+    } else {
+      url.searchParams.delete('projectId');
+    }
+    window.history.replaceState({}, '', url.toString());
     loadProjectData();
   });
 
@@ -466,9 +474,10 @@
         const card = allCards.find(c => c.cardId === deepLinkCardId);
         if (card) {
           openCardInModal(card._section, card.projectId, card.firebaseId, card.cardId);
-          // Clean URL without reloading
-          const cleanUrl = window.location.pathname;
-          window.history.replaceState({}, '', cleanUrl);
+          // Remove cardId from URL but keep projectId so it propagates to other pages
+          const cleanUrl = new URL(window.location);
+          cleanUrl.searchParams.delete('cardId');
+          window.history.replaceState({}, '', cleanUrl.toString());
         } else if (allCards.length === 0) {
           // Data not loaded yet, retry
           setTimeout(waitForCard, 300);
