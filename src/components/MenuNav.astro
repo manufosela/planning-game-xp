@@ -367,6 +367,24 @@ function isActiveLink(href: string, currentPath: string): boolean {
       menunav.markActiveLinkByURL = () => window.menuNavSSR.markActiveLinkByURLPublic();
     }
   });
+
+  // Propagate current projectId to nav links on click so project context
+  // persists when navigating between pages (/cleanview → /adminproject, etc.)
+  const PROJECT_SCOPED_PATHS = ['/adminproject', '/cleanview', '/dashboard', '/sprintview', '/development', '/wip', '/proposals'];
+  document.addEventListener('click', (e) => {
+    const link = e.target && e.target.closest ? e.target.closest('a.nav-link') : null;
+    if (!link) return;
+    const href = link.getAttribute('href');
+    if (!href) return;
+    // Only rewrite protected/project-scoped routes
+    const isProjectScoped = PROJECT_SCOPED_PATHS.some(p => href === p || href === p + '/' || href.startsWith(p + '?'));
+    if (!isProjectScoped) return;
+    const currentProjectId = new URLSearchParams(window.location.search).get('projectId');
+    if (!currentProjectId) return;
+    // Inject projectId query param
+    const [basePath] = href.split('?');
+    link.setAttribute('href', `${basePath}?projectId=${encodeURIComponent(currentProjectId)}`);
+  }, true);
 </script>
 
 <style>
