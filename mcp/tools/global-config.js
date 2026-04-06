@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getDatabase } from '../firebase-adapter.js';
+import { getMcpUserId } from '../user.js';
 
 export const VALID_CONFIG_TYPES = ['agents', 'prompts', 'instructions', 'guidelines'];
 export const VALID_CATEGORIES = ['development', 'planning', 'qa', 'documentation', 'architecture'];
@@ -151,9 +152,9 @@ export async function createGlobalConfig({ type, name, description, content, cat
     content: content || '',
     category: configCategory,
     createdAt: now,
-    createdBy: 'geniova-mcp',
+    createdBy: getMcpUserId(),
     updatedAt: now,
-    updatedBy: 'geniova-mcp'
+    updatedBy: getMcpUserId()
   };
 
   if (type === 'guidelines') {
@@ -215,7 +216,7 @@ export async function updateGlobalConfig({ type, configId, updates }) {
 
   const now = new Date().toISOString();
   updates.updatedAt = now;
-  updates.updatedBy = 'geniova-mcp';
+  updates.updatedBy = getMcpUserId();
 
   // Auto-version guidelines when content changes
   if (type === 'guidelines' && updates.content !== undefined) {
@@ -266,7 +267,7 @@ export async function deleteGlobalConfig({ type, configId }) {
   await trashRef.set({
     ...configData,
     deletedAt: new Date().toISOString(),
-    deletedBy: 'geniova-mcp'
+    deletedBy: getMcpUserId()
   });
 
   await saveConfigHistory(db, type, configId, configData, 'delete');
@@ -360,7 +361,7 @@ export async function restoreGuidelineVersion({ configId, version }) {
     content: restoredContent,
     version: newVersion,
     updatedAt: now,
-    updatedBy: 'geniova-mcp'
+    updatedBy: getMcpUserId()
   });
 
   return {
@@ -388,7 +389,7 @@ async function saveConfigHistory(db, type, configId, configData, action) {
       content: configData.content,
       category: configData.category,
       timestamp: new Date().toISOString(),
-      changedBy: 'geniova-mcp',
+      changedBy: getMcpUserId(),
       action: action
     });
   } catch (error) {

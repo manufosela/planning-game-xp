@@ -689,7 +689,7 @@ export async function createCard({ projectId, type, title, description, descript
     priority: dataWithDefaults.priority,
     year: year || new Date().getFullYear(),
     createdAt: new Date().toISOString(),
-    createdBy: 'geniova-mcp',
+    createdBy: mcpUser?.email || 'geniova-mcp',
     firebaseId: newCardRef.key
   };
 
@@ -1127,7 +1127,7 @@ export async function updateCard({ projectId, type, firebaseId, updates, validat
   }
 
   updates.updatedAt = new Date().toISOString();
-  updates.updatedBy = 'geniova-mcp';
+  updates.updatedBy = getMcpUser()?.email || 'geniova-mcp';
 
   await cardRef.update(updates);
 
@@ -1288,12 +1288,12 @@ export async function relateCards({ projectId, sourceCardId, targetCardId, relat
   const sourceUpdates = {
     relatedTasks: sourceUpdatedRelations,
     updatedAt: now,
-    updatedBy: 'geniova-mcp'
+    updatedBy: getMcpUser()?.email || 'geniova-mcp'
   };
   const targetUpdates = {
     relatedTasks: targetUpdatedRelations,
     updatedAt: now,
-    updatedBy: 'geniova-mcp'
+    updatedBy: getMcpUser()?.email || 'geniova-mcp'
   };
 
   await db.ref(`${sourceSectionPath}/${sourceFirebaseId}`).update(sourceUpdates);

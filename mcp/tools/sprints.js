@@ -145,7 +145,7 @@ export async function createSprint({ projectId, title, startDate, endDate, year,
     year: sprintYear,
     status: status || 'Planning',
     createdAt: new Date().toISOString(),
-    createdBy: 'geniova-mcp',
+    createdBy: getMcpUserId(),
     firebaseId: newSprintRef.key
   };
 
@@ -235,7 +235,7 @@ export async function updateSprint({ projectId, firebaseId, updates }) {
   }
 
   updates.updatedAt = new Date().toISOString();
-  updates.updatedBy = 'geniova-mcp';
+  updates.updatedBy = getMcpUserId();
 
   await sprintRef.update(updates);
 

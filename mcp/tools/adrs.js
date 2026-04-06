@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getDatabase } from '../firebase-adapter.js';
+import { getMcpUserId } from '../user.js';
 
 export const VALID_ADR_STATUSES = ['proposed', 'accepted', 'deprecated', 'superseded'];
 
@@ -115,9 +116,9 @@ export async function createAdr({ projectId, title, context, decision, consequen
     status: adrStatus,
     supersededBy: null,
     createdAt: now,
-    createdBy: 'geniova-mcp',
+    createdBy: getMcpUserId(),
     updatedAt: now,
-    updatedBy: 'geniova-mcp'
+    updatedBy: getMcpUserId()
   };
 
   await newAdrRef.set(adrData);
@@ -158,7 +159,7 @@ export async function updateAdr({ projectId, adrId, updates }) {
   }
 
   updates.updatedAt = new Date().toISOString();
-  updates.updatedBy = 'geniova-mcp';
+  updates.updatedBy = getMcpUserId();
 
   await adrRef.update(updates);
 
@@ -193,7 +194,7 @@ export async function deleteAdr({ projectId, adrId }) {
   await trashRef.set({
     ...adrData,
     deletedAt: new Date().toISOString(),
-    deletedBy: 'geniova-mcp'
+    deletedBy: getMcpUserId()
   });
 
   await saveAdrHistory(db, projectId, adrId, adrData, 'delete');
@@ -224,7 +225,7 @@ async function saveAdrHistory(db, projectId, adrId, adrData, action) {
       consequences: adrData.consequences,
       status: adrData.status,
       timestamp: new Date().toISOString(),
-      changedBy: 'geniova-mcp',
+      changedBy: getMcpUserId(),
       action: action
     });
   } catch (error) {
