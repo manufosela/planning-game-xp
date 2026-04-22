@@ -192,13 +192,20 @@ For maintainers — to build and publish a new version:
 
 ```bash
 # 1. Bump version in mcp/package.json
-# 2. Build standalone package
-node scripts/build-mcp-standalone.js
-# 3. Install dependencies and publish
-cd dist-mcp && npm install && npm publish
+# 2. From the repo root, build and publish in one step:
+npm run mcp:publish
 ```
 
-The build script generates `dist-mcp/` — a self-contained directory with all dependencies internalized, ready for npm publishing.
+That command runs `scripts/build-mcp-standalone.js`, which:
+
+1. Copies `mcp/` into `dist-mcp/`
+2. Copies `shared/` into `dist-mcp/lib/shared/` (otherwise external installs break)
+3. Rewrites `../shared/...` and `../../shared/...` imports to `./lib/shared/...`
+4. Generates a standalone `package.json` with a `bin` entry
+5. Validates no residual raw `shared/` imports remain
+6. Runs a smoke test (`node dist-mcp/index.js --version`) before publishing
+
+**Do not run `npm publish` from `mcp/`.** That directory is marked `"private": true` and has a `prepublishOnly` guard that blocks direct publishes — the working tree is the development source, not the distributable package.
 
 ## License
 
