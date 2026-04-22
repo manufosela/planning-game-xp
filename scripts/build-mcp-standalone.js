@@ -14,10 +14,11 @@
  * 5. Copies Dockerfile adapted for standalone use
  */
 
-import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'fs';
+import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync, statSync, existsSync, mkdtempSync } from 'fs';
 import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
+import { tmpdir } from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -144,9 +145,9 @@ function validateNoResidualSharedImports() {
 }
 
 function runSmokeTest() {
-  // Install deps in isolation, then run `node index.js --version` to catch any
-  // module resolution error before we ship the tarball.
-  console.log('    running npm install in dist-mcp/...');
+  // Stage 1: in-place smoke — install deps in dist-mcp/ and run the entry point
+  // directly. Catches broken imports fastest.
+  console.log('    [a] npm install in dist-mcp/...');
   const install = spawnSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], {
     cwd: DIST,
     stdio: 'inherit'
@@ -156,7 +157,7 @@ function runSmokeTest() {
     process.exit(1);
   }
 
-  console.log('    running `node index.js --version`...');
+  console.log('    [b] node index.js --version (in-place)...');
   const smoke = spawnSync('node', ['index.js', '--version'], {
     cwd: DIST,
     encoding: 'utf-8'
@@ -169,7 +170,78 @@ function runSmokeTest() {
     console.error('a path to shared/ was not rewritten, or a file is missing from dist-mcp/.');
     process.exit(1);
   }
-  console.log(`    smoke OK (${smoke.stdout.trim()})`);
+  const version = smoke.stdout.trim();
+  console.log(`        OK (${version})`);
+
+  // Stage 2: tarball smoke — pack the package and install it into a fresh tmpdir
+  // the way an external user would (`npm install planning-game-mcp`). This is
+  // the only way to catch issues with `files` entries, `bin` paths, missing
+  // declared deps, etc. without actually publishing.
+  console.log('    [c] npm pack...');
+  const pack = spawnSync('npm', ['pack', '--silent'], {
+    cwd: DIST,
+    encoding: 'utf-8'
+  });
+  if (pack.status !== 0) {
+    console.error('\nBUILD FAILED: npm pack in dist-mcp/ failed.');
+    console.error('  stderr:', pack.stderr);
+    process.exit(1);
+  }
+  const tarball = pack.stdout.trim().split('\n').pop();
+  const tarballPath = join(DIST, tarball);
+  if (!existsSync(tarballPath)) {
+    console.error(`\nBUILD FAILED: expected tarball not found at ${tarballPath}`);
+    process.exit(1);
+  }
+
+  const sandbox = mkdtempSync(join(tmpdir(), 'pgmcp-smoke-'));
+  try {
+    console.log(`    [d] npm install --prefix ${sandbox} (fresh user install)...`);
+    writeFileSync(join(sandbox, 'package.json'), '{"name":"pgmcp-smoke","private":true}\n');
+    const userInstall = spawnSync(
+      'npm',
+      ['install', '--no-audit', '--no-fund', '--loglevel=error', tarballPath],
+      { cwd: sandbox, stdio: 'inherit' }
+    );
+    if (userInstall.status !== 0) {
+      console.error('\nBUILD FAILED: installing the tarball into a fresh tmpdir failed.');
+      console.error('This means an external user running `npm install planning-game-mcp` would fail.');
+      process.exit(1);
+    }
+
+    const bin = join(sandbox, 'node_modules', '.bin', 'planning-game-mcp');
+    if (!existsSync(bin)) {
+      console.error(`\nBUILD FAILED: bin entry missing at ${bin}`);
+      console.error('The package.json `bin` field is not producing an executable on install.');
+      process.exit(1);
+    }
+
+    console.log('    [e] planning-game-mcp --version (from tarball install)...');
+    const binSmoke = spawnSync(bin, ['--version'], { encoding: 'utf-8' });
+    if (binSmoke.status !== 0 || binSmoke.stdout.trim() !== version) {
+      console.error('\nBUILD FAILED: running the installed bin did not return the expected version.');
+      console.error(`  expected: ${version}`);
+      console.error(`  got:      ${binSmoke.stdout.trim()}`);
+      console.error(`  stderr:   ${binSmoke.stderr}`);
+      process.exit(1);
+    }
+    console.log(`        OK (${binSmoke.stdout.trim()})`);
+
+    console.log('    [f] planning-game-mcp --help (from tarball install)...');
+    const helpSmoke = spawnSync(bin, ['--help'], { encoding: 'utf-8' });
+    if (helpSmoke.status !== 0 || !helpSmoke.stdout.includes('planning-game-mcp')) {
+      console.error('\nBUILD FAILED: --help did not produce expected output.');
+      console.error(`  stdout: ${helpSmoke.stdout}`);
+      console.error(`  stderr: ${helpSmoke.stderr}`);
+      process.exit(1);
+    }
+    console.log('        OK');
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+    rmSync(tarballPath, { force: true });
+  }
+
+  console.log('    smoke suite passed — package is installable standalone.');
 }
 
 function fixVersionCheck() {
