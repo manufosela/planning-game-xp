@@ -251,6 +251,131 @@ async function syncPublicView(projectId, section, cardId, cardData, db, logger) 
   await publicRef.set(viewData);
 }
 
+const PUBLIC_VIEWS_BATCH_SIZE = 20;
+
+/**
+ * Map a public view type ('tasks'|'bugs'|'epics') to its singular card type.
+ */
+function getCardTypeForPublicType(publicType) {
+  if (publicType === 'tasks') return 'task';
+  if (publicType === 'bugs') return 'bug';
+  if (publicType === 'epics') return 'epic';
+  return null;
+}
+
+/**
+ * Backfill /publicViews/{projectId}/{tasks|bugs|epics}/ from /cards/{projectId}.
+ * Walks every TASKS_*, BUGS_*, EPICS_* section, skips cards with `deletedAt`,
+ * and writes the whitelisted PUBLIC_VIEW_FIELDS in batches.
+ *
+ * Idempotent: existing entries are overwritten with current data.
+ *
+ * @param {string} projectId - Firebase key of the project
+ * @param {Object} db - Realtime Database admin instance
+ * @param {Object} logger - Cloud Functions logger
+ * @returns {Promise<{written: number, sections: number}>}
+ */
+async function backfillPublicViewsForProject(projectId, db, logger) {
+  const cardsSnap = await db.ref(`/cards/${projectId}`).once('value');
+  const sections = cardsSnap.val() || {};
+
+  const updates = {};
+  let written = 0;
+  let scannedSections = 0;
+
+  for (const [sectionKey, cards] of Object.entries(sections)) {
+    if (!cards || typeof cards !== 'object') continue;
+
+    const publicType = getPublicViewType(sectionKey);
+    if (!publicType) continue;
+
+    const cardType = getCardTypeForPublicType(publicType);
+    scannedSections++;
+
+    for (const [firebaseId, card] of Object.entries(cards)) {
+      if (!card || typeof card !== 'object' || card.deletedAt) continue;
+      const viewData = extractPublicViewFields(card, firebaseId, cardType);
+      updates[`/publicViews/${projectId}/${publicType}/${firebaseId}`] = viewData;
+      written++;
+    }
+  }
+
+  const keys = Object.keys(updates);
+  if (keys.length === 0) {
+    logger.info(`Backfill ${projectId}: no eligible cards (${scannedSections} sections scanned)`);
+    return { written: 0, sections: scannedSections };
+  }
+
+  for (let i = 0; i < keys.length; i += PUBLIC_VIEWS_BATCH_SIZE) {
+    const batch = {};
+    keys.slice(i, i + PUBLIC_VIEWS_BATCH_SIZE).forEach(k => { batch[k] = updates[k]; });
+    await db.ref().update(batch);
+  }
+
+  logger.info(`Backfill ${projectId}: wrote ${written} cards in ${Math.ceil(keys.length / PUBLIC_VIEWS_BATCH_SIZE)} batches`);
+  return { written, sections: scannedSections };
+}
+
+/**
+ * Remove all entries under /publicViews/{projectId} in a single call.
+ *
+ * @param {string} projectId - Firebase key of the project
+ * @param {Object} db - Realtime Database admin instance
+ * @param {Object} logger - Cloud Functions logger
+ */
+async function clearPublicViewsForProject(projectId, db, logger) {
+  await db.ref(`/publicViews/${projectId}`).remove();
+  logger.info(`Cleared /publicViews/${projectId}`);
+}
+
+/**
+ * Decide whether a project transition needs backfill, clear, or no-op.
+ * Treats a project as public when `public === true` OR `publicToken` is a
+ * non-empty string.
+ *
+ * @param {Object|null} before - Project data before the write (null on create)
+ * @param {Object|null} after - Project data after the write (null on delete)
+ * @returns {'backfill'|'clear'|'noop'}
+ */
+function decideProjectPublicAction(before, after) {
+  const wasPublic = Boolean(before && (before.public === true || (typeof before.publicToken === 'string' && before.publicToken.length > 0)));
+  const isPublic = Boolean(after && (after.public === true || (typeof after.publicToken === 'string' && after.publicToken.length > 0)));
+
+  if (!wasPublic && isPublic) return 'backfill';
+  if (wasPublic && !isPublic) return 'clear';
+  return 'noop';
+}
+
+/**
+ * Cloud Function handler for /projects/{projectId} writes.
+ * Mirrors the public-flag transition into /publicViews/.
+ *
+ * @param {Object} params - { projectId }
+ * @param {Object|null} beforeData - Project state before the write
+ * @param {Object|null} afterData - Project state after the write
+ * @param {Object} deps - { db, logger }
+ * @returns {Promise<{action: string, written?: number}>}
+ */
+async function handleSyncProjectPublicViews(params, beforeData, afterData, deps) {
+  const { projectId } = params;
+  const { db, logger } = deps;
+
+  const action = decideProjectPublicAction(beforeData, afterData);
+
+  if (action === 'noop') {
+    return { action };
+  }
+
+  if (action === 'clear') {
+    await clearPublicViewsForProject(projectId, db, logger);
+    return { action };
+  }
+
+  // backfill
+  const result = await backfillPublicViewsForProject(projectId, db, logger);
+  return { action, written: result.written };
+}
+
 module.exports = {
   handleSyncCardViews,
   extractTaskViewFields,
@@ -259,6 +384,12 @@ module.exports = {
   extractPublicViewFields,
   getViewPathForSection,
   getPublicViewType,
+  getCardTypeForPublicType,
   syncPublicView,
-  PUBLIC_VIEW_FIELDS
+  backfillPublicViewsForProject,
+  clearPublicViewsForProject,
+  decideProjectPublicAction,
+  handleSyncProjectPublicViews,
+  PUBLIC_VIEW_FIELDS,
+  PUBLIC_VIEWS_BATCH_SIZE
 };
