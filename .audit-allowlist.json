@@ -2,12 +2,21 @@
   "allowedPackages": [
     "@tootallnate/once",
     "@google-cloud/storage",
+    "@google-cloud/firestore",
+    "astro",
     "fast-xml-parser",
     "firebase-admin",
-    "http-proxy-agent"
+    "gaxios",
+    "google-gax",
+    "http-proxy-agent",
+    "protobufjs",
+    "protobufjs-cli",
+    "retry-request",
+    "teeny-request",
+    "uuid"
   ],
   "allowedAdvisories": [],
-  "reason": "Transitive deps of firebase-admin >=12. No fix without breaking downgrade to v11.",
-  "lastReviewed": "2026-03-18",
+  "reason": "Pre-existing vulns in main. Transitive deps of firebase-admin v12 (gaxios, retry-request, uuid, google-gax, protobufjs, teeny-request, @google-cloud/*) tracked in PLN-TSK-0331 (v12→v13 bump). astro XSS (define:vars + server island replay) tracked in PLN-TSK-0332 (v5→v6 bump).",
+  "lastReviewed": "2026-05-28",
   "reviewedBy": "Team"
 }
