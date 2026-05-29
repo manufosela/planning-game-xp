@@ -11,11 +11,23 @@ const mockRemove = vi.fn().mockResolvedValue();
 const mockPush = vi.fn();
 const mockRef = vi.fn();
 
+// Minimal Firestore mock that backs the cardId counter used by createPlan.
+let firestoreCounter = 0;
+const mockFirestore = {
+  collection: () => ({
+    doc: () => ({})
+  }),
+  runTransaction: async (cb) => cb({
+    get: async () => ({ exists: false, data: () => ({ lastId: firestoreCounter }) }),
+    set: (_ref, data) => { firestoreCounter = data.lastId; }
+  })
+};
+
 vi.mock('../../mcp/firebase-adapter.js', () => ({
   getDatabase: () => ({
     ref: mockRef
   }),
-  getFirestore: () => ({})
+  getFirestore: () => mockFirestore
 }));
 
 // Mock user
@@ -43,6 +55,7 @@ function setupMockRef(data) {
 describe('MCP Plans tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    firestoreCounter = 0;
   });
 
   describe('listPlans', () => {
@@ -144,13 +157,13 @@ describe('MCP Plans tools', () => {
         set: mockSet
       });
 
-      // First call: ref for project check, second: ref for plans push
-      let callCount = 0;
       mockRef.mockImplementation((path) => {
-        callCount++;
+        if (path === 'projects/TestProject/abbreviation') {
+          return { once: vi.fn().mockResolvedValue({ exists: () => true, val: () => 'TST' }) };
+        }
         if (path.startsWith('projects/')) {
           return {
-            once: vi.fn().mockResolvedValue({ exists: () => true, val: () => ({ name: 'Test' }) })
+            once: vi.fn().mockResolvedValue({ exists: () => true, val: () => ({ name: 'Test', abbreviation: 'TST' }) })
           };
         }
         return {
@@ -209,8 +222,11 @@ describe('MCP Plans tools', () => {
 
     it('should truncate long titles', async () => {
       mockRef.mockImplementation((path) => {
+        if (path === 'projects/TestProject/abbreviation') {
+          return { once: vi.fn().mockResolvedValue({ exists: () => true, val: () => 'TST' }) };
+        }
         if (path.startsWith('projects/')) {
-          return { once: vi.fn().mockResolvedValue({ exists: () => true, val: () => ({}) }) };
+          return { once: vi.fn().mockResolvedValue({ exists: () => true, val: () => ({ abbreviation: 'TST' }) }) };
         }
         return { push: () => ({ key: '-key', set: mockSet }) };
       });

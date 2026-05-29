@@ -37,6 +37,9 @@ export function getAbbrId(wordToAbbr) {
   if (upperWord === 'CINEMA4D') return 'C4D';
   if (upperWord === 'EXTRANET V1') return 'EX1';
   if (upperWord === 'EXTRANET V2') return 'EX2';
+  // 'PLANS' → 'PLA' (development plans). Default heuristic would give 'PLN',
+  // which clashes visually with the PlanningGame project abbreviation.
+  if (upperWord === 'PLANS') return 'PLA';
 
   if (upperWord.length <= 3) return upperWord.padStart(3, '_');
 

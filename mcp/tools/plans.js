@@ -1,8 +1,36 @@
 import { z } from 'zod';
-import { getDatabase } from '../firebase-adapter.js';
+import { getDatabase, getFirestore } from '../firebase-adapter.js';
 import { getMcpUserId } from '../user.js';
+import { getAbbrId } from '../../shared/utils.js';
 
 const VALID_PLAN_STATUSES = ['draft', 'accepted', 'rejected'];
+
+const PLAN_SECTION_ABBR = getAbbrId('PLANS'); // 'PLA'
+
+/**
+ * Resolve a planId (Firebase push key or human cardId like "PLN-PLA-0001")
+ * to the actual path key under /plans/{projectId}.
+ *
+ * Returns the key string, or null when nothing matches. Plans that don't yet
+ * have a cardId (pre-migration) only resolve when called with the push key.
+ */
+async function resolvePlanKey(db, projectId, planIdOrCardId) {
+  if (!planIdOrCardId) return null;
+  // Firebase push keys start with '-' — try as direct key first.
+  if (planIdOrCardId.startsWith('-')) {
+    const snap = await db.ref(`plans/${projectId}/${planIdOrCardId}`).once('value');
+    if (snap.exists()) return planIdOrCardId;
+    return null;
+  }
+  // Otherwise look up by stored cardId.
+  const snapshot = await db.ref(`plans/${projectId}`).once('value');
+  const data = snapshot.val();
+  if (!data) return null;
+  for (const [key, plan] of Object.entries(data)) {
+    if (plan?.cardId === planIdOrCardId) return key;
+  }
+  return null;
+}
 
 // ── Schemas ──
 
@@ -13,7 +41,7 @@ export const listPlansSchema = z.object({
 
 export const getPlanSchema = z.object({
   projectId: z.string().describe('Project ID'),
-  planId: z.string().describe('Plan ID (the Firebase key)')
+  planId: z.string().describe('Plan ID — either the human cardId (e.g. "PLN-PLA-0001") or the Firebase push key')
 });
 
 export const createPlanSchema = z.object({
@@ -35,13 +63,13 @@ export const createPlanSchema = z.object({
 
 export const updatePlanSchema = z.object({
   projectId: z.string().describe('Project ID'),
-  planId: z.string().describe('Plan ID (the Firebase key)'),
+  planId: z.string().describe('Plan ID — either the human cardId (e.g. "PLN-PLA-0001") or the Firebase push key'),
   updates: z.record(z.unknown()).describe('Fields to update (title, objective, status, phases)')
 });
 
 export const deletePlanSchema = z.object({
   projectId: z.string().describe('Project ID'),
-  planId: z.string().describe('Plan ID (the Firebase key)')
+  planId: z.string().describe('Plan ID — either the human cardId (e.g. "PLN-PLA-0001") or the Firebase push key')
 });
 
 // ── Handlers ──
@@ -81,6 +109,7 @@ export async function listPlans({ projectId, status }) {
     const taskCount = (p.phases || []).reduce((sum, ph) => sum + (ph.tasks || []).length, 0);
     const generatedCount = (p.generatedTasks || []).length;
     return {
+      cardId: p.cardId || null,
       planId: p.planId,
       title: p.title,
       status: p.status,
@@ -98,13 +127,14 @@ export async function listPlans({ projectId, status }) {
 
 export async function getPlan({ projectId, planId }) {
   const db = getDatabase();
-  const snapshot = await db.ref(`plans/${projectId}/${planId}`).once('value');
+  const resolvedKey = await resolvePlanKey(db, projectId, planId);
 
-  if (!snapshot.exists()) {
+  if (!resolvedKey) {
     return { content: [{ type: 'text', text: `Plan "${planId}" not found in project "${projectId}".` }] };
   }
 
-  const plan = { planId, ...snapshot.val() };
+  const snapshot = await db.ref(`plans/${projectId}/${resolvedKey}`).once('value');
+  const plan = { planId: resolvedKey, ...snapshot.val() };
 
   return { content: [{ type: 'text', text: JSON.stringify(plan, null, 2) }] };
 }
@@ -116,10 +146,14 @@ export async function createPlan({ projectId, title, objective, proposalId, phas
 
   const db = getDatabase();
 
-  // Verify project exists
+  // Verify project exists and grab abbreviation for cardId generation.
   const projectSnap = await db.ref(`projects/${projectId}`).once('value');
   if (!projectSnap.exists()) {
     throw new Error(`Project "${projectId}" not found`);
+  }
+  const projectAbbr = await db.ref(`projects/${projectId}/abbreviation`).once('value').then(s => s.val());
+  if (!projectAbbr) {
+    throw new Error(`Project "${projectId}" has no abbreviation configured.`);
   }
 
   const now = new Date().toISOString();
@@ -133,7 +167,21 @@ export async function createPlan({ projectId, title, objective, proposalId, phas
     }
   }
 
+  // Generate human-readable cardId (e.g. "PLN-PLA-0001") via Firestore counter,
+  // same pattern as cards.js — atomic across concurrent writers.
+  const firestore = getFirestore();
+  const counterKey = `${projectAbbr}-${PLAN_SECTION_ABBR}`;
+  const counterRef = firestore.collection('projectCounters').doc(counterKey);
+  const cardId = await firestore.runTransaction(async (transaction) => {
+    const docSnap = await transaction.get(counterRef);
+    const lastId = docSnap.exists ? (docSnap.data().lastId || 0) : 0;
+    const newId = lastId + 1;
+    transaction.set(counterRef, { lastId: newId }, { merge: true });
+    return `${counterKey}-${String(newId).padStart(4, '0')}`;
+  });
+
   const planData = {
+    cardId,
     title: title.trim().slice(0, 150),
     objective: (objective || '').trim().slice(0, 500),
     status: 'draft',
@@ -184,6 +232,7 @@ export async function createPlan({ projectId, title, objective, proposalId, phas
       type: 'text',
       text: JSON.stringify({
         message: `Plan created successfully`,
+        cardId,
         planId: newRef.key,
         title: planData.title,
         status: 'draft',
@@ -197,12 +246,12 @@ export async function createPlan({ projectId, title, objective, proposalId, phas
 
 export async function updatePlan({ projectId, planId, updates }) {
   const db = getDatabase();
-  const planRef = db.ref(`plans/${projectId}/${planId}`);
-  const snapshot = await planRef.once('value');
-
-  if (!snapshot.exists()) {
+  const resolvedKey = await resolvePlanKey(db, projectId, planId);
+  if (!resolvedKey) {
     throw new Error(`Plan "${planId}" not found in project "${projectId}"`);
   }
+  const planRef = db.ref(`plans/${projectId}/${resolvedKey}`);
+  const snapshot = await planRef.once('value');
 
   const existing = snapshot.val();
 
@@ -215,8 +264,8 @@ export async function updatePlan({ projectId, planId, updates }) {
     updates.status = normalizedStatus;
   }
 
-  // Protect certain fields
-  const protectedFields = ['createdAt', 'createdBy', 'generatedTasks'];
+  // Protect certain fields — including cardId, which is immutable once assigned.
+  const protectedFields = ['createdAt', 'createdBy', 'generatedTasks', 'cardId'];
   for (const field of protectedFields) {
     if (field in updates) {
       delete updates[field];
@@ -253,8 +302,9 @@ export async function updatePlan({ projectId, planId, updates }) {
     content: [{
       type: 'text',
       text: JSON.stringify({
-        message: `Plan "${planId}" updated successfully`,
-        planId,
+        message: `Plan "${existing.cardId || resolvedKey}" updated successfully`,
+        cardId: existing.cardId || null,
+        planId: resolvedKey,
         updatedFields: Object.keys(updates)
       }, null, 2)
     }]
@@ -263,17 +313,16 @@ export async function updatePlan({ projectId, planId, updates }) {
 
 export async function deletePlan({ projectId, planId }) {
   const db = getDatabase();
-  const planRef = db.ref(`plans/${projectId}/${planId}`);
-  const snapshot = await planRef.once('value');
-
-  if (!snapshot.exists()) {
+  const resolvedKey = await resolvePlanKey(db, projectId, planId);
+  if (!resolvedKey) {
     throw new Error(`Plan "${planId}" not found in project "${projectId}"`);
   }
-
+  const planRef = db.ref(`plans/${projectId}/${resolvedKey}`);
+  const snapshot = await planRef.once('value');
   const plan = snapshot.val();
 
   // Move to trash
-  const trashRef = db.ref(`plans-trash/${projectId}/${planId}`);
+  const trashRef = db.ref(`plans-trash/${projectId}/${resolvedKey}`);
   await trashRef.set({
     ...plan,
     deletedAt: new Date().toISOString(),
@@ -286,8 +335,9 @@ export async function deletePlan({ projectId, planId }) {
     content: [{
       type: 'text',
       text: JSON.stringify({
-        message: `Plan "${planId}" deleted (moved to trash)`,
-        planId,
+        message: `Plan "${plan.cardId || resolvedKey}" deleted (moved to trash)`,
+        cardId: plan.cardId || null,
+        planId: resolvedKey,
         title: plan.title
       }, null, 2)
     }]
