@@ -1,5 +1,5 @@
 ---
-import { ViewTransitions } from 'astro:transitions';
+import { ClientRouter } from 'astro:transitions';
 import MenuNav from '../components/MenuNav.astro';
 import AppFooter from '../components/AppFooter.astro';
 
@@ -25,7 +25,7 @@ let user = null;
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <title>{title}</title>
-    <ViewTransitions />
+    <ClientRouter />
     <link rel="manifest" href="/manifest.json">
     <!-- Blocking: apply cached theme tokens before first paint to prevent FOUC -->
     <script is:inline>

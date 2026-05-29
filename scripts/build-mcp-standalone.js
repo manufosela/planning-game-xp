@@ -14,9 +14,11 @@
  * 5. Copies Dockerfile adapted for standalone use
  */
 
-import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'fs';
+import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync, statSync, existsSync, mkdtempSync } from 'fs';
 import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
+import { spawnSync } from 'child_process';
+import { tmpdir } from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -89,9 +91,11 @@ function rewriteImports(dir) {
     const prefix = depth > 0 ? '../'.repeat(depth) : './';
     const sharedPath = `${prefix}lib/shared`;
 
-    // Replace ../../shared/ imports with the correct relative path
+    // Replace any ../... path that lands on shared/ (regardless of depth)
+    // with the correct relative path to lib/shared/.
+    // Matches: `from '../shared/...'`, `from '../../shared/...'`, etc.
     const modified = content.replace(
-      /from\s+['"]\.\.\/\.\.\/shared\//g,
+      /from\s+['"](?:\.\.\/)+shared\//g,
       `from '${sharedPath}/`
     );
 
@@ -99,6 +103,145 @@ function rewriteImports(dir) {
       writeFileSync(fullPath, modified);
     }
   }
+}
+
+function validateNoResidualSharedImports() {
+  const offenders = [];
+
+  function scan(dir) {
+    for (const entry of readdirSync(dir)) {
+      const fullPath = join(dir, entry);
+      const stat = statSync(fullPath);
+
+      // Skip the lib/shared tree itself — those imports are intentional (bare relatives inside shared/)
+      if (stat.isDirectory()) {
+        if (fullPath === join(DIST, 'lib')) continue;
+        scan(fullPath);
+        continue;
+      }
+
+      if (!entry.endsWith('.js')) continue;
+
+      const content = readFileSync(fullPath, 'utf-8');
+      const residual = content.match(/from\s+['"](?:\.\.\/)+shared\/[^'"]+['"]/g);
+      if (residual) {
+        offenders.push({ file: relative(DIST, fullPath), imports: residual });
+      }
+    }
+  }
+
+  scan(DIST);
+
+  if (offenders.length > 0) {
+    console.error('\nBUILD FAILED: residual imports to raw shared/ found:');
+    for (const o of offenders) {
+      console.error(`  ${o.file}:`);
+      for (const imp of o.imports) console.error(`    ${imp}`);
+    }
+    console.error('\nExpected all shared/ imports to be rewritten to lib/shared/.');
+    console.error('Check the rewriteImports() regex in build-mcp-standalone.js.');
+    process.exit(1);
+  }
+}
+
+function runSmokeTest() {
+  // Stage 1: in-place smoke — install deps in dist-mcp/ and run the entry point
+  // directly. Catches broken imports fastest.
+  console.log('    [a] npm install in dist-mcp/...');
+  const install = spawnSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], {
+    cwd: DIST,
+    stdio: 'inherit'
+  });
+  if (install.status !== 0) {
+    console.error('\nBUILD FAILED: npm install in dist-mcp/ failed.');
+    process.exit(1);
+  }
+
+  console.log('    [b] node index.js --version (in-place)...');
+  const smoke = spawnSync('node', ['index.js', '--version'], {
+    cwd: DIST,
+    encoding: 'utf-8'
+  });
+  if (smoke.status !== 0) {
+    console.error('\nBUILD FAILED: smoke test could not start the MCP server.');
+    console.error('  stdout:', smoke.stdout);
+    console.error('  stderr:', smoke.stderr);
+    console.error('\nThis usually means a module import is broken — most likely');
+    console.error('a path to shared/ was not rewritten, or a file is missing from dist-mcp/.');
+    process.exit(1);
+  }
+  const version = smoke.stdout.trim();
+  console.log(`        OK (${version})`);
+
+  // Stage 2: tarball smoke — pack the package and install it into a fresh tmpdir
+  // the way an external user would (`npm install planning-game-mcp`). This is
+  // the only way to catch issues with `files` entries, `bin` paths, missing
+  // declared deps, etc. without actually publishing.
+  console.log('    [c] npm pack...');
+  const pack = spawnSync('npm', ['pack', '--silent'], {
+    cwd: DIST,
+    encoding: 'utf-8'
+  });
+  if (pack.status !== 0) {
+    console.error('\nBUILD FAILED: npm pack in dist-mcp/ failed.');
+    console.error('  stderr:', pack.stderr);
+    process.exit(1);
+  }
+  const tarball = pack.stdout.trim().split('\n').pop();
+  const tarballPath = join(DIST, tarball);
+  if (!existsSync(tarballPath)) {
+    console.error(`\nBUILD FAILED: expected tarball not found at ${tarballPath}`);
+    process.exit(1);
+  }
+
+  const sandbox = mkdtempSync(join(tmpdir(), 'pgmcp-smoke-'));
+  try {
+    console.log(`    [d] npm install --prefix ${sandbox} (fresh user install)...`);
+    writeFileSync(join(sandbox, 'package.json'), '{"name":"pgmcp-smoke","private":true}\n');
+    const userInstall = spawnSync(
+      'npm',
+      ['install', '--no-audit', '--no-fund', '--loglevel=error', tarballPath],
+      { cwd: sandbox, stdio: 'inherit' }
+    );
+    if (userInstall.status !== 0) {
+      console.error('\nBUILD FAILED: installing the tarball into a fresh tmpdir failed.');
+      console.error('This means an external user running `npm install planning-game-mcp` would fail.');
+      process.exit(1);
+    }
+
+    const bin = join(sandbox, 'node_modules', '.bin', 'planning-game-mcp');
+    if (!existsSync(bin)) {
+      console.error(`\nBUILD FAILED: bin entry missing at ${bin}`);
+      console.error('The package.json `bin` field is not producing an executable on install.');
+      process.exit(1);
+    }
+
+    console.log('    [e] planning-game-mcp --version (from tarball install)...');
+    const binSmoke = spawnSync(bin, ['--version'], { encoding: 'utf-8' });
+    if (binSmoke.status !== 0 || binSmoke.stdout.trim() !== version) {
+      console.error('\nBUILD FAILED: running the installed bin did not return the expected version.');
+      console.error(`  expected: ${version}`);
+      console.error(`  got:      ${binSmoke.stdout.trim()}`);
+      console.error(`  stderr:   ${binSmoke.stderr}`);
+      process.exit(1);
+    }
+    console.log(`        OK (${binSmoke.stdout.trim()})`);
+
+    console.log('    [f] planning-game-mcp --help (from tarball install)...');
+    const helpSmoke = spawnSync(bin, ['--help'], { encoding: 'utf-8' });
+    if (helpSmoke.status !== 0 || !helpSmoke.stdout.includes('planning-game-mcp')) {
+      console.error('\nBUILD FAILED: --help did not produce expected output.');
+      console.error(`  stdout: ${helpSmoke.stdout}`);
+      console.error(`  stderr: ${helpSmoke.stderr}`);
+      process.exit(1);
+    }
+    console.log('        OK');
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+    rmSync(tarballPath, { force: true });
+  }
+
+  console.log('    smoke suite passed — package is installable standalone.');
 }
 
 function fixVersionCheck() {
@@ -212,32 +355,38 @@ console.log(`  Output: ${DIST}`);
 console.log();
 
 clean();
-console.log('  [1/9] Copying MCP source...');
+console.log('  [1/11] Copying MCP source...');
 copyMcpSource();
 
-console.log('  [2/9] Copying shared/ to lib/shared/...');
+console.log('  [2/11] Copying shared/ to lib/shared/...');
 copyShared();
 
-console.log('  [3/9] Rewriting imports...');
+console.log('  [3/11] Rewriting imports...');
 rewriteImports(DIST);
 
-console.log('  [4/9] Fixing version-check paths...');
+console.log('  [4/11] Fixing version-check paths...');
 fixVersionCheck();
 
-console.log('  [5/9] Adding shebang to index.js...');
+console.log('  [5/11] Adding shebang to index.js...');
 addShebang();
 
-console.log('  [6/9] Generating standalone package.json...');
+console.log('  [6/11] Generating standalone package.json...');
 generatePackageJson();
 
-console.log('  [7/9] Generating .npmignore...');
+console.log('  [7/11] Generating .npmignore...');
 generateNpmIgnore();
 
-console.log('  [8/9] Generating Dockerfile...');
+console.log('  [8/11] Generating Dockerfile...');
 generateDockerfile();
 
-console.log('  [9/9] Copying README...');
+console.log('  [9/11] Copying README...');
 copyReadme();
+
+console.log('  [10/11] Validating no residual shared/ imports...');
+validateNoResidualSharedImports();
+
+console.log('  [11/11] Running smoke test...');
+runSmokeTest();
 
 // Summary
 const fileCount = readdirSync(DIST, { recursive: true }).length;
@@ -246,8 +395,8 @@ console.log();
 console.log(`Done! ${fileCount} files written to dist-mcp/`);
 console.log(`  Package: ${pkg.name}@${pkg.version}`);
 console.log();
-console.log('To publish:');
-console.log('  cd dist-mcp && npm install && npm publish');
+console.log('To publish (from repo root):');
+console.log('  npm run mcp:publish');
 console.log();
 console.log('To install globally:');
 console.log('  npm install -g planning-game-mcp');
