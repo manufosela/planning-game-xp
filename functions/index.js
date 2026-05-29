@@ -23,7 +23,7 @@ const { handleCardToValidate } = require("./handlers/on-card-to-validate");
 const { handleBugFixed } = require("./handlers/on-bug-fixed");
 const { handleHourlyDigest } = require("./handlers/hourly-validation-digest");
 const { handleTaskStatusValidation } = require("./handlers/on-task-status-validation");
-const { handleSyncCardViews } = require("./handlers/sync-card-views");
+const { handleSyncCardViews, handleSyncProjectPublicViews } = require("./handlers/sync-card-views");
 const { handleSyncCardToFirestore, handleSyncProjectToFirestore } = require("./handlers/sync-rtdb-to-firestore");
 const { handlePortalBugResolved } = require("./handlers/on-portal-bug-resolved");
 const { handleTaskReopen } = require("./handlers/on-task-reopen");
@@ -657,6 +657,33 @@ exports.syncCardViews = onValueWritten({
   const { projectId, section, cardId } = event.params;
   return handleSyncCardViews(
     { projectId, section, cardId },
+    event.data.before?.val() || null,
+    event.data.after?.val() || null,
+    { db: getDatabase(), logger }
+  );
+});
+
+/**
+ * Cloud Function: syncProjectPublicViews
+ * Backfills or clears /publicViews/{projectId} when a project's `public` flag
+ * or `publicToken` transitions. No-op for unrelated project edits.
+ *
+ * Trigger: writes on /projects/{projectId}
+ *  - false → true (or token added)  → backfill all eligible cards
+ *  - true  → false (and token removed) → wipe /publicViews/{projectId}
+ *  - otherwise → no-op
+ *
+ * Per-card edits while the project stays public are already covered by
+ * syncCardViews via syncPublicView().
+ */
+exports.syncProjectPublicViews = onValueWritten({
+  ref: "/projects/{projectId}",
+  region: "europe-west1",
+  timeoutSeconds: 120
+}, async (event) => {
+  const { projectId } = event.params;
+  return handleSyncProjectPublicViews(
+    { projectId },
     event.data.before?.val() || null,
     event.data.after?.val() || null,
     { db: getDatabase(), logger }
