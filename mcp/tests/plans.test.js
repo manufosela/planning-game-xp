@@ -129,7 +129,7 @@ describe('plans.js', () => {
 
   describe('createPlan', () => {
     beforeEach(() => {
-      setMockRtdbData('/projects/TestProject', { name: 'Test Project' });
+      setMockRtdbData('/projects/TestProject', { name: 'Test Project', abbreviation: 'TST' });
     });
 
     it('should create a plan with title and objective', async () => {
@@ -411,6 +411,111 @@ describe('plans.js', () => {
       await expect(
         deletePlan({ projectId: 'TestProject', planId: '-nonexistent' })
       ).rejects.toThrow('not found');
+    });
+  });
+
+  // ── Human-readable cardId (PMC-BUG-0003) ──
+
+  describe('cardId generation and resolution', () => {
+    beforeEach(() => {
+      setMockRtdbData('/projects/TestProject', { name: 'Test Project', abbreviation: 'TST' });
+    });
+
+    it('createPlan returns a cardId in the form ABBR-PLA-NNNN', async () => {
+      const result = await createPlan({ projectId: 'TestProject', title: 'First plan' });
+      const response = JSON.parse(result.content[0].text);
+      expect(response.cardId).toMatch(/^TST-PLA-\d{4}$/);
+    });
+
+    it('createPlan increments the counter on consecutive calls', async () => {
+      const first = JSON.parse(
+        (await createPlan({ projectId: 'TestProject', title: 'A' })).content[0].text
+      );
+      const second = JSON.parse(
+        (await createPlan({ projectId: 'TestProject', title: 'B' })).content[0].text
+      );
+      expect(first.cardId).toBe('TST-PLA-0001');
+      expect(second.cardId).toBe('TST-PLA-0002');
+    });
+
+    it('createPlan throws when project has no abbreviation', async () => {
+      setMockRtdbData('/projects/NoAbbrProject', { name: 'No Abbr' });
+      await expect(
+        createPlan({ projectId: 'NoAbbrProject', title: 'X' })
+      ).rejects.toThrow('abbreviation');
+    });
+
+    it('listPlans includes cardId in the summary (null when missing)', async () => {
+      setMockRtdbData('/plans/TestProject', {
+        '-plan1': { cardId: 'TST-PLA-0001', title: 'New plan', status: 'draft', phases: [] },
+        '-plan2': { title: 'Legacy plan', status: 'draft', phases: [] }
+      });
+      const result = await listPlans({ projectId: 'TestProject' });
+      const plans = JSON.parse(result.content[0].text);
+      const byTitle = Object.fromEntries(plans.map(p => [p.title, p.cardId]));
+      expect(byTitle['New plan']).toBe('TST-PLA-0001');
+      expect(byTitle['Legacy plan']).toBeNull();
+    });
+
+    it('getPlan resolves by cardId', async () => {
+      setMockRtdbData('/plans/TestProject/-internal-key-123', {
+        cardId: 'TST-PLA-0007',
+        title: 'Lookup by cardId',
+        status: 'draft',
+        phases: []
+      });
+      const result = await getPlan({ projectId: 'TestProject', planId: 'TST-PLA-0007' });
+      const plan = JSON.parse(result.content[0].text);
+      expect(plan.title).toBe('Lookup by cardId');
+      expect(plan.planId).toBe('-internal-key-123');
+      expect(plan.cardId).toBe('TST-PLA-0007');
+    });
+
+    it('getPlan still resolves by Firebase push key (backwards compatible)', async () => {
+      setMockRtdbData('/plans/TestProject/-key', {
+        title: 'Legacy',
+        status: 'draft',
+        phases: []
+      });
+      const result = await getPlan({ projectId: 'TestProject', planId: '-key' });
+      const plan = JSON.parse(result.content[0].text);
+      expect(plan.title).toBe('Legacy');
+      expect(plan.planId).toBe('-key');
+    });
+
+    it('updatePlan accepts a cardId and refuses to overwrite it', async () => {
+      setMockRtdbData('/plans/TestProject/-key', {
+        cardId: 'TST-PLA-0042',
+        title: 'Original',
+        status: 'draft',
+        phases: [],
+        createdAt: '2026-01-01T00:00:00Z',
+        createdBy: 'test'
+      });
+      const result = await updatePlan({
+        projectId: 'TestProject',
+        planId: 'TST-PLA-0042',
+        updates: { title: 'Updated', cardId: 'TST-PLA-9999' }
+      });
+      const response = JSON.parse(result.content[0].text);
+      expect(response.updatedFields).toContain('title');
+      expect(response.updatedFields).not.toContain('cardId');
+      const stored = getMockRtdbData('/plans/TestProject/-key');
+      expect(stored.cardId).toBe('TST-PLA-0042');
+      expect(stored.title).toBe('Updated');
+    });
+
+    it('deletePlan accepts a cardId', async () => {
+      setMockRtdbData('/plans/TestProject/-key', {
+        cardId: 'TST-PLA-0008',
+        title: 'Doomed',
+        status: 'rejected',
+        phases: []
+      });
+      const result = await deletePlan({ projectId: 'TestProject', planId: 'TST-PLA-0008' });
+      const response = JSON.parse(result.content[0].text);
+      expect(response.message).toContain('TST-PLA-0008');
+      expect(response.planId).toBe('-key');
     });
   });
 });
