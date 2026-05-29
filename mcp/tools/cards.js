@@ -302,16 +302,25 @@ export async function listCards({ projectId, type, status, sprint, developer, pl
     cards = cards.filter(c => c.year === year);
   }
 
-  const summary = cards.map(c => ({
-    firebaseId: c.firebaseId,
-    cardId: c.cardId,
-    title: c.title,
-    status: c.status,
-    priority: c.priority,
-    developer: c.developer || null,
-    sprint: c.sprint || null,
-    year: c.year || null
-  }));
+  // Epics are containers (start/end dates, not workflow). They don't have
+  // status or priority — never project those fields, even if older docs
+  // still carry stale values pending the cleanup migration.
+  const isEpic = type === 'epic';
+  const summary = cards.map(c => {
+    const base = {
+      firebaseId: c.firebaseId,
+      cardId: c.cardId,
+      title: c.title,
+      developer: c.developer || null,
+      sprint: c.sprint || null,
+      year: c.year || null
+    };
+    if (!isEpic) {
+      base.status = c.status;
+      base.priority = c.priority;
+    }
+    return base;
+  });
 
   return {
     content: [{
@@ -574,35 +583,34 @@ export async function createCard({ projectId, type, title, description, descript
       for (const [, epicCard] of Object.entries(epicsData)) {
         availableEpics.push({
           cardId: epicCard.cardId,
-          title: epicCard.title,
-          status: epicCard.status || 'N/A'
+          title: epicCard.title
         });
       }
     }
 
-    if (!epic || (typeof epic === 'string' && epic.trim() === '')) {
-      const epicList = availableEpics.length > 0
-        ? availableEpics.map(e => `  - ${e.cardId}: "${e.title}" (${e.status})`).join('\n')
+    // Epics are containers grouping tasks — they have no `status`. Never
+    // surface a status column in error messages, it misleads agents into
+    // thinking epics can be transitioned like tasks.
+    const formatEpicList = (epics) =>
+      epics.length > 0
+        ? epics.map(e => `  - ${e.cardId}: "${e.title}"`).join('\n')
         : '  (no epics found in this project)';
 
+    if (!epic || (typeof epic === 'string' && epic.trim() === '')) {
       throw new Error(
         'Tasks require an epic. ' +
         'Choose one of the available epics or create a new one with create_card(type="epic") first.\n\n' +
-        `Available epics in "${projectId}":\n${epicList}`
+        `Available epics in "${projectId}":\n${formatEpicList(availableEpics)}`
       );
     }
 
     let epicExists = availableEpics.some(e => e.cardId === epic);
 
     if (!epicExists) {
-      const epicList = availableEpics.length > 0
-        ? availableEpics.map(e => `  - ${e.cardId}: "${e.title}" (${e.status})`).join('\n')
-        : '  (no epics found in this project)';
-
       throw new Error(
         `Epic "${epic}" not found in project "${projectId}". ` +
         'Choose one of the available epics or create a new one with create_card(type="epic") first.\n\n' +
-        `Available epics:\n${epicList}`
+        `Available epics:\n${formatEpicList(availableEpics)}`
       );
     }
 

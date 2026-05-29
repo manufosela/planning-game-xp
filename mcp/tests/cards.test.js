@@ -2300,4 +2300,70 @@ describe('cards.js', () => {
       expect(response.card.commits).toHaveLength(2);
     });
   });
+
+  // ── Epics are containers, not workflow items (PMC-BUG-0005) ──
+
+  describe('Epics expose no status', () => {
+    beforeEach(() => {
+      setMockRtdbData('/projects/TestProject/abbreviation', 'TP');
+      // Two epics: one clean, one with leftover stale `status` / `priority`
+      // from before the cleanup migration.
+      setMockRtdbData('/cards/TestProject/EPICS_TestProject', {
+        epicClean: {
+          cardId: 'TP-EPC-0001',
+          title: 'Clean Epic',
+          year: 2026
+        },
+        epicStale: {
+          cardId: 'TP-EPC-0002',
+          title: 'Stale Epic',
+          status: 'To Do',
+          priority: 7,
+          year: 2026
+        }
+      });
+    });
+
+    it('listCards type=epic omits status and priority for every epic', async () => {
+      const result = await listCards({ projectId: 'TestProject', type: 'epic' });
+      const epics = JSON.parse(result.content[0].text);
+      for (const e of epics) {
+        expect(e).not.toHaveProperty('status');
+        expect(e).not.toHaveProperty('priority');
+      }
+    });
+
+    it('listCards type=task still includes status and priority (no regression)', async () => {
+      setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
+        task1: { cardId: 'TP-TSK-0001', title: 'A task', status: 'To Do', priority: 11 }
+      });
+      const result = await listCards({ projectId: 'TestProject', type: 'task' });
+      const tasks = JSON.parse(result.content[0].text);
+      expect(tasks[0]).toMatchObject({ status: 'To Do', priority: 11 });
+    });
+
+    it('createCard error for unknown epic does not mention "(status)"', async () => {
+      setMockFirestoreData('projectCounters', 'TP-TSK', { lastId: 0 });
+      setMockRtdbData('/data/stakeholders', {
+        stk_001: { name: 'Dev User', email: 'dev@test.com', active: true }
+      });
+      setMockRtdbData('/projects/TestProject/stakeholders', ['stk_001']);
+
+      try {
+        await createCard({
+          projectId: 'TestProject',
+          type: 'task',
+          title: 'X',
+          descriptionStructured: [{ role: 'u', goal: 'g', benefit: 'b' }],
+          acceptanceCriteria: 'AC',
+          epic: 'TP-EPC-9999'
+        });
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error.message).toMatch(/Epic "TP-EPC-9999" not found/);
+        expect(error.message).not.toMatch(/\(To Do\)/);
+        expect(error.message).not.toMatch(/\(N\/A\)/);
+      }
+    });
+  });
 });
