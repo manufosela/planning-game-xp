@@ -701,6 +701,35 @@ async function syncGuidelinesStep(credentialsPath, databaseUrl, nonInteractive) 
   }
 }
 
+/**
+ * Decide how the MCP should be invoked from ~/.claude.json.
+ *
+ * If the module lives inside a node_modules/ tree (global, local or npx
+ * cache install) we register it by binary name so the path stays portable.
+ * Otherwise we are running from source and need an absolute path.
+ *
+ * The check uses the module dir (resolved by Node from symlinks) rather
+ * than process.argv[1], which on globally-installed binaries can point to
+ * /usr/local/bin/<bin> without "node_modules" in its path and would force
+ * the wrong branch.
+ *
+ * @param {string} moduleDir Directory of this file, typically import.meta.dirname.
+ * @returns {{ command: string, args: string[] }}
+ */
+export function resolveMcpRegistration(moduleDir) {
+  // Split on both POSIX and Windows separators so the check works whether
+  // moduleDir came from import.meta.dirname (native sep) or from a test
+  // fixture using forward slashes.
+  const installed = moduleDir.split(/[/\\]/).includes('node_modules');
+  if (installed) {
+    return { command: 'planning-game-mcp', args: [] };
+  }
+  return {
+    command: 'node',
+    args: [resolve(moduleDir, '..', 'index.js')]
+  };
+}
+
 async function offerClaudeRegistration(config, instanceDir) {
   const register = await confirm('Register this MCP in Claude Code (~/.claude.json)?', true);
   if (!register) return;
@@ -721,18 +750,12 @@ async function offerClaudeRegistration(config, instanceDir) {
     const serverName = config.mcp.serverName;
     const credentialsInInstance = resolve(instanceDir, 'serviceAccountKey.json');
 
-    // Use the installed binary name so it works regardless of where the
-    // package was installed (global, npx cache, etc.). Falls back to
-    // `node <this-file's-dir>/index.js` only when running from source.
-    const runningFromSource = !process.argv[1]?.includes('node_modules');
-    const mcpEntryPoint = runningFromSource
-      ? resolve(import.meta.dirname, '..', 'index.js')
-      : null;
+    const { command, args } = resolveMcpRegistration(import.meta.dirname);
 
     claudeConfig.mcpServers[serverName] = {
       type: 'stdio',
-      command: mcpEntryPoint ? 'node' : 'planning-game-mcp',
-      args: mcpEntryPoint ? [mcpEntryPoint] : [],
+      command,
+      args,
       env: {
         MCP_INSTANCE_DIR: instanceDir,
         GOOGLE_APPLICATION_CREDENTIALS: credentialsInInstance
