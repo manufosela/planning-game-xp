@@ -49,7 +49,7 @@
 
 <script type="module">
   import { database, ref, onValue, get } from '/firebase-config.js';
-  import { normalizeEmail as normalizeEmailSafe } from '/js/utils/super-admin-check.js';
+  import { normalizeEmail as normalizeEmailSafe, isCurrentUserSuperAdmin } from '/js/utils/super-admin-check.js';
   import { entityDirectoryService } from '/js/services/entity-directory-service.js';
   import { FirebaseService } from '/js/services/firebase-service.js';
   import '/js/core/app-initializer.js';
@@ -124,18 +124,23 @@
     });
   });
 
-  // Project selector
-  projectSelector.addEventListener('change', () => {
-    currentProject = projectSelector.value;
-    localStorage.setItem('cleanview-project', currentProject);
-    // Sync to URL so it propagates when navigating to other pages
+  // Keep the URL ?projectId in sync so MenuNav can propagate it when
+  // navigating to other project-scoped pages (/adminproject, /dashboard…).
+  function syncProjectToUrl(projectId) {
     const url = new URL(window.location);
-    if (currentProject) {
-      url.searchParams.set('projectId', currentProject);
+    if (projectId) {
+      url.searchParams.set('projectId', projectId);
     } else {
       url.searchParams.delete('projectId');
     }
     window.history.replaceState({}, '', url.toString());
+  }
+
+  // Project selector
+  projectSelector.addEventListener('change', () => {
+    currentProject = projectSelector.value;
+    localStorage.setItem('cleanview-project', currentProject);
+    syncProjectToUrl(currentProject);
     loadProjectData();
   });
 
@@ -419,13 +424,19 @@
     // Load user projects (exclude archived)
     await FirebaseService.loadProjects(currentUserEmail);
     const allProjects = window.projects || {};
-    const userProjects = await FirebaseService.getUserProjects(currentUserEmail);
+
+    // SuperAdmin / AppAdmin see all projects (same criterion as the
+    // <project-selector> in /adminproject). Regular users are limited to
+    // /data/projectsByUser/{email} (or defaults when no entry exists).
+    const isSuperAdmin = await isCurrentUserSuperAdmin(currentUserEmail);
+    const seesAllProjects = isSuperAdmin || window.isAppAdmin === true;
 
     let projectNames = [];
-    if (userProjects === null) {
+    if (seesAllProjects) {
       projectNames = Object.keys(allProjects);
     } else {
-      projectNames = userProjects;
+      const userProjects = await FirebaseService.getUserProjects(currentUserEmail);
+      projectNames = userProjects === null ? Object.keys(allProjects) : userProjects;
     }
 
     // Filter out archived projects
@@ -453,6 +464,10 @@
       projectSelector.value = currentProject;
       localStorage.setItem('cleanview-project', currentProject);
     }
+
+    // Make sure the URL reflects the initial selection so MenuNav can
+    // propagate ?projectId= when the user navigates to another page.
+    syncProjectToUrl(currentProject);
 
     loadProjectData();
 
