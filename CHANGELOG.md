@@ -5,6 +5,24 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Added
+
+- Auto-backfill /publicViews on project visibility toggle (#198)
+
+### Fixed
+
+- Show all projects for admins and persist projectId in URL (#203)
+- Stop surfacing status on epics (PMC-BUG-0005) (#201)
+- Give development plans a human-readable cardId (PMC-BUG-0003) (#200)
+- Detect installed package by module dir, not argv[1] (PMC-BUG-0002) (#199)
+- Prevent npm publishes without bundled shared/ (PMC-BUG-0004) (#197)
+
+### Other
+
+- Bump version to 1.21.7 (#202)
+
+## [1.183.4] - 2026-04-06
+
 ### Fixed
 
 - Use MCP user email for createdBy/updatedBy instead of geniova-mcp (#196)
