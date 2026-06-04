@@ -7,6 +7,13 @@ Auto-generated from git commits on each build.
 
 ### Added
 
+- Cross-project directory at /public/ (PLN-TSK-0337) (#205)
+- Errores accionables y contrato autodescriptivo de pipelineStatus
+
+## [1.184.0] - 2026-06-02
+
+### Added
+
 - Auto-backfill /publicViews on project visibility toggle (#198)
 
 ### Fixed
