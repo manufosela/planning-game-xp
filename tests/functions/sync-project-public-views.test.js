@@ -7,7 +7,12 @@ import {
   clearPublicViewsForProject,
   decideProjectPublicAction,
   handleSyncProjectPublicViews,
-  getCardTypeForPublicType
+  getCardTypeForPublicType,
+  extractPublicProjectFields,
+  hasPublicProjectFieldsChanged,
+  writePublicProjectEntry,
+  clearPublicProjectEntry,
+  PUBLIC_PROJECT_FIELDS
 } from '../../functions/handlers/sync-card-views.js';
 
 /**
@@ -19,6 +24,7 @@ import {
 function makeDb(state = {}) {
   const updates = [];
   const removes = [];
+  const sets = [];
 
   function once(path) {
     return {
@@ -43,13 +49,17 @@ function makeDb(state = {}) {
         removes.push(path);
         delete state[path];
       }),
+      set: vi.fn(async (value) => {
+        sets.push({ path, value });
+        state[path] = value;
+      }),
       update: vi.fn(async (batch) => {
         updates.push({ __at: path, ...batch });
       })
     };
   }
 
-  return { ref: vi.fn(ref), __state: state, __updates: updates, __removes: removes };
+  return { ref: vi.fn(ref), __state: state, __updates: updates, __removes: removes, __sets: sets };
 }
 
 function makeLogger() {
@@ -250,7 +260,7 @@ describe('clearPublicViewsForProject', () => {
 });
 
 describe('handleSyncProjectPublicViews', () => {
-  it('triggers backfill on false → true transition', async () => {
+  it('triggers backfill on false → true transition and writes /publicProjects', async () => {
     const db = makeDb({
       [`/cards/${PRJ}`]: {
         TASKS_TestProject: { 'fb-1': { cardId: 'TST-TSK-0001', title: 'T1' } }
@@ -260,15 +270,19 @@ describe('handleSyncProjectPublicViews', () => {
     const result = await handleSyncProjectPublicViews(
       { projectId: PRJ },
       { public: false, name: 'P' },
-      { public: true, name: 'P' },
+      { public: true, name: 'P', description: 'desc', abbreviation: 'TST' },
       { db, logger: makeLogger() }
     );
 
     expect(result).toEqual({ action: 'backfill', written: 1 });
     expect(db.__updates).toHaveLength(1);
+    expect(db.__sets).toHaveLength(1);
+    const { path, value } = db.__sets[0];
+    expect(path).toBe(`/publicProjects/${PRJ}`);
+    expect(value).toMatchObject({ name: 'P', description: 'desc', abbreviation: 'TST' });
   });
 
-  it('triggers clear on true → false transition', async () => {
+  it('triggers clear on true → false transition and removes /publicProjects', async () => {
     const db = makeDb({});
 
     const result = await handleSyncProjectPublicViews(
@@ -280,22 +294,44 @@ describe('handleSyncProjectPublicViews', () => {
 
     expect(result).toEqual({ action: 'clear' });
     expect(db.__removes).toContain(`/publicViews/${PRJ}`);
+    expect(db.__removes).toContain(`/publicProjects/${PRJ}`);
   });
 
-  it('is a no-op for unrelated project edits while staying public', async () => {
+  it('is a no-op when public stays true and no whitelisted field changed', async () => {
     const db = makeDb({});
 
     const result = await handleSyncProjectPublicViews(
       { projectId: PRJ },
-      { public: true, description: 'old' },
-      { public: true, description: 'new' },
+      { public: true, name: 'P', developers: { x: true } },
+      { public: true, name: 'P', developers: { x: true, y: true } },
       { db, logger: makeLogger() }
     );
 
     expect(result).toEqual({ action: 'noop' });
     expect(db.__updates).toHaveLength(0);
     expect(db.__removes).toHaveLength(0);
+    expect(db.__sets).toHaveLength(0);
     // Critical: must NOT read /cards/ when noop
+    expect(db.ref).not.toHaveBeenCalledWith(`/cards/${PRJ}`);
+  });
+
+  it('refreshes /publicProjects when a whitelisted field changes while staying public', async () => {
+    const db = makeDb({});
+
+    const result = await handleSyncProjectPublicViews(
+      { projectId: PRJ },
+      { public: true, name: 'P', description: 'old' },
+      { public: true, name: 'P', description: 'new' },
+      { db, logger: makeLogger() }
+    );
+
+    expect(result).toEqual({ action: 'refresh' });
+    expect(db.__sets).toHaveLength(1);
+    const { path, value } = db.__sets[0];
+    expect(path).toBe(`/publicProjects/${PRJ}`);
+    expect(value).toMatchObject({ name: 'P', description: 'new' });
+    expect(typeof value.updatedAt).toBe('string');
+    // Refresh path does NOT re-read /cards/
     expect(db.ref).not.toHaveBeenCalledWith(`/cards/${PRJ}`);
   });
 
@@ -341,5 +377,120 @@ describe('handleSyncProjectPublicViews', () => {
     );
 
     expect(result.action).toBe('clear');
+    expect(db.__removes).toContain(`/publicProjects/${PRJ}`);
+  });
+});
+
+describe('extractPublicProjectFields', () => {
+  const NOW = '2026-06-04T10:00:00.000Z';
+
+  it('keeps only whitelisted fields plus updatedAt', () => {
+    const entry = extractPublicProjectFields({
+      name: 'My Project',
+      description: 'A project',
+      abbreviation: 'MPR',
+      languages: ['js'],
+      frameworks: ['astro'],
+      repoUrl: 'https://github.com/x/y',
+      // Sensitive — must NOT leak
+      developers: { dev_001: true },
+      stakeholders: { stk_001: true },
+      serviceAccountKey: 'secret',
+      public: true,
+      publicToken: 'tk-1',
+      iaEnabled: true,
+      businessContext: 'internal notes'
+    }, NOW);
+
+    expect(entry).toEqual({
+      updatedAt: NOW,
+      name: 'My Project',
+      description: 'A project',
+      abbreviation: 'MPR',
+      languages: ['js'],
+      frameworks: ['astro'],
+      repoUrl: 'https://github.com/x/y'
+    });
+    expect(entry).not.toHaveProperty('developers');
+    expect(entry).not.toHaveProperty('stakeholders');
+    expect(entry).not.toHaveProperty('serviceAccountKey');
+    expect(entry).not.toHaveProperty('publicToken');
+    expect(entry).not.toHaveProperty('businessContext');
+  });
+
+  it('skips undefined, null, empty strings and empty arrays', () => {
+    const entry = extractPublicProjectFields({
+      name: 'P',
+      description: '',
+      abbreviation: undefined,
+      languages: [],
+      frameworks: null
+    }, NOW);
+    expect(entry).toEqual({ updatedAt: NOW, name: 'P' });
+  });
+
+  it('exports a whitelist that never includes sensitive keys', () => {
+    expect(PUBLIC_PROJECT_FIELDS).not.toContain('developers');
+    expect(PUBLIC_PROJECT_FIELDS).not.toContain('stakeholders');
+    expect(PUBLIC_PROJECT_FIELDS).not.toContain('serviceAccountKey');
+    expect(PUBLIC_PROJECT_FIELDS).not.toContain('publicToken');
+  });
+});
+
+describe('hasPublicProjectFieldsChanged', () => {
+  it('returns false when both snapshots are identical on whitelisted fields', () => {
+    expect(hasPublicProjectFieldsChanged(
+      { name: 'P', description: 'd', developers: { a: 1 } },
+      { name: 'P', description: 'd', developers: { a: 2 } }
+    )).toBe(false);
+  });
+
+  it('detects a change on any whitelisted field', () => {
+    expect(hasPublicProjectFieldsChanged(
+      { name: 'P', description: 'old' },
+      { name: 'P', description: 'new' }
+    )).toBe(true);
+    expect(hasPublicProjectFieldsChanged(
+      { repoUrl: 'a' },
+      { repoUrl: 'b' }
+    )).toBe(true);
+    expect(hasPublicProjectFieldsChanged(
+      { languages: ['js'] },
+      { languages: ['js', 'ts'] }
+    )).toBe(true);
+  });
+
+  it('treats null before as all-fields-changed when after has whitelisted data', () => {
+    expect(hasPublicProjectFieldsChanged(null, { name: 'P' })).toBe(true);
+  });
+
+  it('returns false when both are null/empty', () => {
+    expect(hasPublicProjectFieldsChanged(null, null)).toBe(false);
+    expect(hasPublicProjectFieldsChanged({}, {})).toBe(false);
+  });
+});
+
+describe('writePublicProjectEntry / clearPublicProjectEntry', () => {
+  it('writePublicProjectEntry sets /publicProjects/{id} with whitelisted snapshot', async () => {
+    const db = makeDb({});
+    const logger = makeLogger();
+
+    await writePublicProjectEntry(PRJ, {
+      name: 'P', description: 'd', developers: { x: true }
+    }, db, logger, '2026-06-04T10:00:00.000Z');
+
+    expect(db.__sets).toHaveLength(1);
+    expect(db.__sets[0].path).toBe(`/publicProjects/${PRJ}`);
+    expect(db.__sets[0].value).toEqual({
+      updatedAt: '2026-06-04T10:00:00.000Z',
+      name: 'P',
+      description: 'd'
+    });
+  });
+
+  it('clearPublicProjectEntry removes /publicProjects/{id}', async () => {
+    const db = makeDb({});
+    await clearPublicProjectEntry(PRJ, db, makeLogger());
+    expect(db.__removes).toContain(`/publicProjects/${PRJ}`);
   });
 });

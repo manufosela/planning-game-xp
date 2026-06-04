@@ -665,12 +665,18 @@ exports.syncCardViews = onValueWritten({
 
 /**
  * Cloud Function: syncProjectPublicViews
- * Backfills or clears /publicViews/{projectId} when a project's `public` flag
- * or `publicToken` transitions. No-op for unrelated project edits.
+ * Mirrors a project's public-flag transitions into the read-only public
+ * surface used by /public/: /publicViews/{projectId} (card data) and
+ * /publicProjects/{projectId} (directory metadata).
  *
  * Trigger: writes on /projects/{projectId}
- *  - false → true (or token added)  → backfill all eligible cards
- *  - true  → false (and token removed) → wipe /publicViews/{projectId}
+ *  - false → true (or token added) → backfill all eligible cards and write
+ *    the directory entry under /publicProjects/{projectId}
+ *  - true → false (and token removed) → wipe both /publicViews/{projectId}
+ *    and /publicProjects/{projectId}
+ *  - public stays true and a whitelisted directory field changed (name,
+ *    description, abbreviation, languages, frameworks, repoUrl) → refresh
+ *    /publicProjects/{projectId} so the public directory stays in sync
  *  - otherwise → no-op
  *
  * Per-card edits while the project stays public are already covered by

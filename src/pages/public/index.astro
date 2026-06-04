@@ -454,6 +454,76 @@ const fbConfig = {
     @keyframes fadeUp {
       to { opacity: 1; transform: translateY(0); }
     }
+
+    /* ── DIRECTORY (/public/ with no ?project=) ── */
+    .dir-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1rem;
+      margin-top: 0.5rem;
+    }
+    .dir-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 1rem 1.1rem;
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: inherit;
+      text-decoration: none;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+    .dir-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .dir-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .dir-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin: 0;
+      color: var(--text);
+    }
+    .dir-abbr {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.04em;
+      color: var(--text-dim);
+      padding: 0.1rem 0.4rem;
+      border: 1px solid var(--border-active);
+      border-radius: 4px;
+    }
+    .dir-desc {
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: var(--text-secondary);
+      margin: 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .dir-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin-top: 0.25rem;
+    }
+    .dir-tag {
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      color: var(--text-dim);
+      background: var(--accent-muted);
+      padding: 0.1rem 0.45rem;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
@@ -510,10 +580,6 @@ const fbConfig = {
     const $ = (id) => document.getElementById(id);
     const content = $('content'), refreshBtn = $('refreshBtn'), tabs = $('tabs');
     const livePill = $('livePill');
-
-    if (!PID) {
-      content.innerHTML = '<div class="state"><span class="state-error">Missing ?project= parameter</span></div>';
-    }
 
     // Firebase setup
     const app = initializeApp(window.__fbConfig);
@@ -681,9 +747,79 @@ const fbConfig = {
       }
     });
 
+    // Subscribe to /publicProjects and render the cross-project directory
+    // shown when /public/ is loaded without a ?project= query. Read-only,
+    // login-less; allowed by RTDB rules .read: true on /publicProjects.
+    function initDirectory() {
+      // Swap the topbar copy and hide the per-project chrome.
+      $('pTitle').textContent = 'Public projects';
+      $('pSub').textContent = 'Directory';
+      document.title = 'Public projects · Planning Game XP';
+      $('countPill').textContent = '0';
+      $('lastUpdate').textContent = '';
+      const toolbar = document.querySelector('.toolbar');
+      if (toolbar) toolbar.style.display = 'none';
+      // The refresh button has no use here (data is already live).
+      refreshBtn.style.display = 'none';
+
+      content.innerHTML = '<div class="state"><div class="spinner"></div><span class="state-text">Loading public projects...</span></div>';
+
+      const r = ref(db, '/publicProjects');
+      onValue(r, (snap) => {
+        const items = snap.val() || {};
+        const entries = Object.entries(items)
+          .map(([id, entry]) => ({ id, ...entry }))
+          .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+        renderDirectory(entries);
+        const now = new Date();
+        setStatus('live', `Updated ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`);
+        $('nextUpdate').textContent = 'Real-time';
+      }, (err) => {
+        content.innerHTML = `<div class="state"><span class="state-error">${err.message}</span></div>`;
+        setStatus('error', err.message);
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function renderDirectory(entries) {
+      $('countPill').textContent = entries.length;
+      if (entries.length === 0) {
+        content.innerHTML = '<div class="state"><span class="state-text">No public projects yet.</span></div>';
+        return;
+      }
+      const cards = entries.map((p) => {
+        const tags = []
+          .concat(Array.isArray(p.languages) ? p.languages : [])
+          .concat(Array.isArray(p.frameworks) ? p.frameworks : [])
+          .slice(0, 6)
+          .map((t) => `<span class="dir-tag">${escapeHtml(t)}</span>`)
+          .join('');
+        const desc = p.description ? `<p class="dir-desc">${escapeHtml(p.description)}</p>` : '';
+        const abbr = p.abbreviation ? `<span class="dir-abbr">${escapeHtml(p.abbreviation)}</span>` : '';
+        return `
+          <a class="dir-card" href="/public/?project=${encodeURIComponent(p.id)}">
+            <header class="dir-head">
+              <h3 class="dir-name">${escapeHtml(p.name || p.id)}</h3>
+              ${abbr}
+            </header>
+            ${desc}
+            ${tags ? `<div class="dir-tags">${tags}</div>` : ''}
+          </a>`;
+      }).join('');
+      content.innerHTML = `<div class="dir-grid fade-up">${cards}</div>`;
+    }
+
     // Load project name via Cloud Function (one-time), then subscribe to RTDB
     async function init() {
-      if (!PID) return;
+      if (!PID) {
+        initDirectory();
+        return;
+      }
 
       try {
         // For token-protected projects, authenticate first
