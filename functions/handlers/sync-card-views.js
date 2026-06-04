@@ -21,6 +21,12 @@ const PUBLIC_VIEW_FIELDS = [
   'startDate', 'endDate', 'priority', 'sprint', 'epic', 'year'
 ];
 
+// Whitelisted fields published to /publicProjects/{id} for the public directory.
+// Sensitive data (developers, stakeholders, serviceAccountKey, ...) stays out.
+const PUBLIC_PROJECT_FIELDS = [
+  'name', 'description', 'abbreviation', 'languages', 'frameworks', 'repoUrl'
+];
+
 /**
  * Map section name to public view card type key
  * @param {string} section - Section name like "TASKS_ProjectA"
@@ -329,6 +335,26 @@ async function clearPublicViewsForProject(projectId, db, logger) {
 }
 
 /**
+ * Extract whitelisted, JSON-safe fields for the /publicProjects/{id} directory.
+ * Skips undefined/empty values so the directory never publishes stub entries.
+ *
+ * @param {Object} projectData - Full project data from /projects/{id}
+ * @param {string} updatedAt - ISO timestamp to stamp the snapshot
+ * @returns {Object} - Minimal safe metadata, includes updatedAt
+ */
+function extractPublicProjectFields(projectData, updatedAt) {
+  const entry = { updatedAt };
+  for (const field of PUBLIC_PROJECT_FIELDS) {
+    const value = projectData[field];
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string' && value.length === 0) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    entry[field] = value;
+  }
+  return entry;
+}
+
+/**
  * Decide whether a project transition needs backfill, clear, or no-op.
  * Treats a project as public when `public === true` OR `publicToken` is a
  * non-empty string.
@@ -347,8 +373,52 @@ function decideProjectPublicAction(before, after) {
 }
 
 /**
+ * Write a /publicProjects/{projectId} entry from the current project snapshot.
+ *
+ * @param {string} projectId - Firebase key of the project
+ * @param {Object} projectData - Project data after the write
+ * @param {Object} db - Realtime Database admin instance
+ * @param {Object} logger - Cloud Functions logger
+ * @param {string} [nowIso] - Optional ISO timestamp (defaults to Date.now())
+ */
+async function writePublicProjectEntry(projectId, projectData, db, logger, nowIso) {
+  const updatedAt = nowIso || new Date().toISOString();
+  const entry = extractPublicProjectFields(projectData, updatedAt);
+  await db.ref(`/publicProjects/${projectId}`).set(entry);
+  logger.info(`Wrote /publicProjects/${projectId}`);
+}
+
+/**
+ * Remove the /publicProjects/{projectId} directory entry.
+ *
+ * @param {string} projectId - Firebase key of the project
+ * @param {Object} db - Realtime Database admin instance
+ * @param {Object} logger - Cloud Functions logger
+ */
+async function clearPublicProjectEntry(projectId, db, logger) {
+  await db.ref(`/publicProjects/${projectId}`).remove();
+  logger.info(`Cleared /publicProjects/${projectId}`);
+}
+
+/**
+ * True when at least one PUBLIC_PROJECT_FIELDS value differs between snapshots.
+ *
+ * @param {Object|null} before
+ * @param {Object|null} after
+ * @returns {boolean}
+ */
+function hasPublicProjectFieldsChanged(before, after) {
+  const a = before || {};
+  const b = after || {};
+  return PUBLIC_PROJECT_FIELDS.some(
+    (field) => JSON.stringify(a[field]) !== JSON.stringify(b[field])
+  );
+}
+
+/**
  * Cloud Function handler for /projects/{projectId} writes.
- * Mirrors the public-flag transition into /publicViews/.
+ * Mirrors the public-flag transition into /publicViews/ and the public
+ * directory entry in /publicProjects/{projectId}.
  *
  * @param {Object} params - { projectId }
  * @param {Object|null} beforeData - Project state before the write
@@ -361,19 +431,31 @@ async function handleSyncProjectPublicViews(params, beforeData, afterData, deps)
   const { db, logger } = deps;
 
   const action = decideProjectPublicAction(beforeData, afterData);
-
-  if (action === 'noop') {
-    return { action };
-  }
+  const isPublicAfter = Boolean(
+    afterData && (afterData.public === true || (typeof afterData.publicToken === 'string' && afterData.publicToken.length > 0))
+  );
 
   if (action === 'clear') {
     await clearPublicViewsForProject(projectId, db, logger);
+    await clearPublicProjectEntry(projectId, db, logger);
     return { action };
   }
 
-  // backfill
-  const result = await backfillPublicViewsForProject(projectId, db, logger);
-  return { action, written: result.written };
+  if (action === 'backfill') {
+    const result = await backfillPublicViewsForProject(projectId, db, logger);
+    await writePublicProjectEntry(projectId, afterData, db, logger);
+    return { action, written: result.written };
+  }
+
+  // noop public-flag transition. Still refresh the directory entry when
+  // the project stays public AND any whitelisted directory field changed,
+  // so name/description/repoUrl edits propagate without a manual toggle.
+  if (isPublicAfter && hasPublicProjectFieldsChanged(beforeData, afterData)) {
+    await writePublicProjectEntry(projectId, afterData, db, logger);
+    return { action: 'refresh' };
+  }
+
+  return { action };
 }
 
 module.exports = {
@@ -382,14 +464,19 @@ module.exports = {
   extractBugViewFields,
   extractProposalViewFields,
   extractPublicViewFields,
+  extractPublicProjectFields,
   getViewPathForSection,
   getPublicViewType,
   getCardTypeForPublicType,
   syncPublicView,
   backfillPublicViewsForProject,
   clearPublicViewsForProject,
+  writePublicProjectEntry,
+  clearPublicProjectEntry,
+  hasPublicProjectFieldsChanged,
   decideProjectPublicAction,
   handleSyncProjectPublicViews,
   PUBLIC_VIEW_FIELDS,
+  PUBLIC_PROJECT_FIELDS,
   PUBLIC_VIEWS_BATCH_SIZE
 };
