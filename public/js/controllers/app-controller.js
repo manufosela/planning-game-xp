@@ -499,7 +499,8 @@ export class AppController {
     // Proposal view buttons
     const proposalViewButtons = [
       { id: 'proposalsTableViewBtn', view: 'table' },
-      { id: 'proposalsListViewBtn', view: 'list' }
+      { id: 'proposalsListViewBtn', view: 'list' },
+      { id: 'proposalsDeptViewBtn', view: 'department' }
     ];
 
     proposalViewButtons.forEach(({ id, view }) => {

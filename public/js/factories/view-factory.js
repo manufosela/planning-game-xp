@@ -149,8 +149,127 @@ export class ViewFactory {
       case 'table':
         await this.showProposalsTableView(config);
         break;
+      case 'department':
+        await this.showProposalsDeptView(config);
+        break;
       default:
 }
+  }
+
+  /**
+   * Department kanban view for proposals: columns grouped by the team the
+   * creator stakeholder belongs to. Proposals without a resolvable team
+   * land in a "Sin departamento" column. Click a card to open its modal.
+   * Renders from the proposal-card elements already in the DOM (same
+   * source the table/list views use), so no extra Firebase reads.
+   *
+   * @param {Object} config
+   */
+  async showProposalsDeptView(config) {
+    const container = document.getElementById('proposalsDeptView');
+    if (!container) return;
+    container.style.removeProperty('display');
+    container.style.removeProperty('visibility');
+    container.style.removeProperty('opacity');
+    container.style.removeProperty('position');
+    container.style.removeProperty('left');
+    container.style.display = 'block';
+    container.className = 'dept-view';
+
+    const columns = document.getElementById('proposalsDeptColumns');
+    if (!columns) return;
+    await this._renderProposalsDeptKanban(columns);
+  }
+
+  _escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  async _renderProposalsDeptKanban(container) {
+    const { entityDirectoryService } = await import('../services/entity-directory-service.js');
+    if (typeof entityDirectoryService.init === 'function') {
+      await entityDirectoryService.init();
+    }
+
+    const NO_TEAM = '__no_team__';
+    const NO_TEAM_LABEL = 'Sin departamento';
+
+    const proposalEls = Array.from(document.querySelectorAll('#proposalsCardsList proposal-card'));
+    const proposals = proposalEls.map((card) => ({
+      firebaseId: card.id || card.getAttribute('id') || '',
+      cardId: card.cardId || card.getAttribute('card-id') || '',
+      title: card.title || card.getAttribute('title') || 'Sin título',
+      createdBy: card.createdBy || card.getAttribute('created-by') || '',
+      status: card.status || card.getAttribute('status') || 'Propuesta'
+    }));
+
+    const grouped = new Map();
+    for (const proposal of proposals) {
+      const teamId = proposal.createdBy
+        ? entityDirectoryService.getStakeholderTeamId(proposal.createdBy)
+        : null;
+      const key = teamId || NO_TEAM;
+      if (!grouped.has(key)) {
+        const teamInfo = teamId ? entityDirectoryService.getTeam(teamId) : null;
+        grouped.set(key, {
+          teamId: key,
+          teamName: teamInfo?.name || (key === NO_TEAM ? NO_TEAM_LABEL : key),
+          proposals: []
+        });
+      }
+      grouped.get(key).proposals.push(proposal);
+    }
+
+    const teams = Array.from(grouped.values()).sort((a, b) => {
+      if (a.teamId === NO_TEAM) return 1;
+      if (b.teamId === NO_TEAM) return -1;
+      return a.teamName.localeCompare(b.teamName);
+    });
+
+    if (teams.length === 0) {
+      container.innerHTML = '<div class="dept-empty">No hay propuestas para agrupar por departamento.</div>';
+      return;
+    }
+
+    const esc = (v) => this._escapeHtml(v);
+    container.innerHTML = teams.map((team) => `
+      <div class="dept-kanban-column">
+        <div class="dept-kanban-column-header">
+          <span class="dept-kanban-column-title">${esc(team.teamName)}</span>
+          <span class="dept-kanban-column-count">${team.proposals.length}</span>
+        </div>
+        <div class="dept-kanban-column-body">
+          ${team.proposals.map((p) => `
+            <div class="dept-kanban-card" data-card-firebase-id="${esc(p.firebaseId)}" title="${esc(p.title)}">
+              <span class="dept-kanban-card-id">${esc(p.cardId)}</span>
+              <span class="dept-kanban-card-title">${esc(p.title)}</span>
+              <div class="dept-kanban-card-meta">
+                <span class="dept-kanban-card-creator">${esc(p.createdBy)}</span>
+                <span class="dept-kanban-card-status">${esc(p.status)}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    container.querySelectorAll('.dept-kanban-card').forEach((cardEl) => {
+      cardEl.addEventListener('click', async () => {
+        const firebaseId = cardEl.dataset.cardFirebaseId;
+        if (!firebaseId) return;
+        const proposalEl = document.querySelector(
+          `#proposalsCardsList proposal-card[id="${CSS.escape(firebaseId)}"]`
+        );
+        if (!proposalEl) return;
+        const { showExpandedCardInModal } = await import('../utils/common-functions.js');
+        showExpandedCardInModal(proposalEl);
+      });
+    });
   }
 
   /**
@@ -443,7 +562,7 @@ export class ViewFactory {
       tasks: ['tasksCardsList', 'tasksKanbanView', 'tasksSprintView', 'tasksTableView'],
       bugs: ['bugsCardsList', 'bugsStatusKanbanView', 'bugsPriorityKanbanView', 'bugsTableView'],
       epics: ['epicsCardsList', 'epicsGanttView'],
-      proposals: ['proposalsCardsList', 'proposalsTableView']
+      proposals: ['proposalsCardsList', 'proposalsTableView', 'proposalsDeptView']
     };
 
     const containers = viewContainers[section] || [];
@@ -494,7 +613,8 @@ export class ViewFactory {
       },
       proposals: {
         list: 'proposalsListViewBtn',
-        table: 'proposalsTableViewBtn'
+        table: 'proposalsTableViewBtn',
+        department: 'proposalsDeptViewBtn'
       }
     };
 
