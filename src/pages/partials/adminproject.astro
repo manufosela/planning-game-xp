@@ -161,6 +161,7 @@
       <div class="view-buttons">
         <button id="proposalsTableViewBtn" class="view-button active">Table View</button>
         <button id="proposalsListViewBtn" class="view-button">Cards View</button>
+        <button id="proposalsDeptViewBtn" class="view-button">Department View</button>
         <button id="importProposalsBtn" class="import-backlog-btn" style="display: none;">
           Importar de <span id="importProposalsYear"></span> (<span id="importProposalsCount">0</span>)
         </button>
@@ -168,6 +169,9 @@
       </div>
     </section>
     <section class="cards-container" id="proposalsCardsList" style="display:none"></section>
+    <section class="dept-view" id="proposalsDeptView" style="display:none">
+      <div class="dept-kanban-columns" id="proposalsDeptColumns"></div>
+    </section>
     <section class="table-view" id="proposalsTableView">
       <div class="table-skeleton" data-placeholder>
         <div class="skeleton-header"><div class="skeleton-cell" style="width:60px"></div><div class="skeleton-cell" style="width:40px"></div><div class="skeleton-cell" style="width:200px"></div><div class="skeleton-cell" style="width:100px"></div><div class="skeleton-cell" style="width:80px"></div><div class="skeleton-cell" style="width:120px"></div><div class="skeleton-cell" style="width:120px"></div></div>
@@ -2651,6 +2655,124 @@ document.addEventListener('astro:page-load', () => {
   #tasksFilters .clear-button:disabled {
     background: var(--text-muted, #64748b);
     cursor: not-allowed;
+  }
+
+  /* Department view for proposals (PLN-TSK-0059) */
+  .dept-kanban-columns {
+    display: flex;
+    gap: 1rem;
+    padding: 0.5rem;
+    overflow-x: auto;
+    min-width: min-content;
+  }
+
+  .dept-kanban-column {
+    min-width: 260px;
+    max-width: 320px;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary, #fff);
+    border: 1px solid var(--border-default, #e2e8f0);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .dept-kanban-column-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.55rem 0.75rem;
+    background: var(--bg-secondary, #f1f5f9);
+    border-bottom: 1px solid var(--border-default, #e2e8f0);
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary, #0f172a);
+  }
+
+  .dept-kanban-column-count {
+    background: var(--brand-primary, #4a9eff);
+    color: var(--text-on-primary, #fff);
+    padding: 0.05rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+  }
+
+  .dept-kanban-column-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.55rem;
+    overflow-y: auto;
+    max-height: 70vh;
+  }
+
+  .dept-kanban-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.55rem 0.65rem;
+    background: var(--bg-elevated, #fff);
+    border: 1px solid var(--border-subtle, #e2e8f0);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.12s, transform 0.12s;
+  }
+
+  .dept-kanban-card:hover {
+    border-color: var(--brand-primary, #4a9eff);
+    transform: translateY(-1px);
+  }
+
+  .dept-kanban-card-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, #64748b);
+  }
+
+  .dept-kanban-card-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary, #0f172a);
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .dept-kanban-card-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.15rem;
+    font-size: 0.7rem;
+    color: var(--text-muted, #64748b);
+  }
+
+  .dept-kanban-card-creator {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .dept-kanban-card-status {
+    font-size: 0.65rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 4px;
+    background: var(--bg-secondary, #f1f5f9);
+    flex-shrink: 0;
+  }
+
+  .dept-empty {
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-muted, #64748b);
+    font-size: 0.85rem;
   }
 
 </style>
