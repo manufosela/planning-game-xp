@@ -60,6 +60,19 @@ export const REQUIRED_FIELDS_FOR_TO_VALIDATE = [
 ];
 
 // ──────────────────────────────────────────────
+// pipelineStatus.prCreated contract (single source of truth)
+// Required to move a task to "To Validate" or a bug to "Fixed".
+// ──────────────────────────────────────────────
+export const PR_CREATED_EXPECTED_SHAPE =
+  'pipelineStatus.prCreated must be an object { prUrl: string, prNumber: number, date?: string (ISO) }';
+
+export const PR_CREATED_EXAMPLE = {
+  prUrl: 'https://github.com/org/repo/pull/42',
+  prNumber: 42,
+  date: '2024-01-20T10:30:00Z'
+};
+
+// ──────────────────────────────────────────────
 // Required fields when closing a bug
 // ──────────────────────────────────────────────
 export const REQUIRED_FIELDS_TO_CLOSE_BUG = ['commits', 'rootCause', 'resolution'];

@@ -20,7 +20,9 @@ import {
   VALID_STEP_STATUSES,
   VALID_PLAN_STATUSES,
   TASK_TRANSITION_RULES,
-  BLOCKED_REQUIRED_FIELDS
+  BLOCKED_REQUIRED_FIELDS,
+  PR_CREATED_EXPECTED_SHAPE,
+  PR_CREATED_EXAMPLE
 } from '../../shared/constants.js';
 import {
   validateEntityId,
@@ -255,7 +257,7 @@ export const updateCardSchema = z.object({
   projectId: z.string().describe('Project ID'),
   type: z.enum(['task', 'bug', 'epic', 'proposal', 'sprint', 'qa']).describe('Card type'),
   firebaseId: z.string().describe('Firebase key of the card (the RTDB push ID)'),
-  updates: z.record(z.unknown()).describe('Fields to update (e.g., { status: "In Progress", developer: "Name" })'),
+  updates: z.record(z.unknown()).describe('Fields to update (e.g., { status: "In Progress", developer: "Name" }). Nested objects have a required shape: commits is an array of {hash, message, date, author}; pipelineStatus.prCreated is an object {prUrl, prNumber, date}. Call get_transition_rules to get the exact required fields and an exampleValidUpdate for a target status before updating.'),
   validateOnly: z.boolean().optional().describe('If true, only validate the update without applying it. Returns missing fields and validation errors.')
 });
 
@@ -1396,13 +1398,13 @@ export async function getTransitionRules({ type = 'task' }) {
             acceptanceCriteria: 'Acceptance criteria (text or acceptanceCriteriaStructured array)',
             startDate: 'Date work started (YYYY-MM-DD format)',
             commits: 'Array of commits [{hash, message, date, author}]',
-            pipelineStatus: 'Pipeline tracking object with prCreated: {prUrl, prNumber, date}'
+            pipelineStatus: `Pipeline tracking object. ${PR_CREATED_EXPECTED_SHAPE}`
           },
           exampleValidUpdate: {
             status: 'To Validate',
             startDate: '2024-01-15',
             commits: [{ hash: 'abc1234', message: 'feat: implement feature', date: '2024-01-20T10:00:00Z', author: 'dev@example.com' }],
-            pipelineStatus: { prCreated: { prUrl: 'https://github.com/org/repo/pull/42', prNumber: 42, date: '2024-01-20T10:30:00Z' } }
+            pipelineStatus: { prCreated: { ...PR_CREATED_EXAMPLE } }
           }
         }, null, 2)
       }]
@@ -1420,14 +1422,14 @@ export async function getTransitionRules({ type = 'task' }) {
           requiredFieldsForClosed: ['commits', 'rootCause', 'resolution'],
           fieldDescriptions: {
             commits: 'Array of commits [{hash, message, date, author}]',
-            pipelineStatus: 'Pipeline tracking object with prCreated: {prUrl, prNumber, date}',
+            pipelineStatus: `Pipeline tracking object. ${PR_CREATED_EXPECTED_SHAPE}`,
             rootCause: 'Why the bug occurred',
             resolution: 'How the bug was fixed'
           },
           exampleFixedUpdate: {
             status: 'Fixed',
             commits: [{ hash: 'abc1234', message: 'fix: resolve issue', date: '2024-01-20T10:00:00Z', author: 'dev@example.com' }],
-            pipelineStatus: { prCreated: { prUrl: 'https://github.com/org/repo/pull/42', prNumber: 42, date: '2024-01-20T10:30:00Z' } }
+            pipelineStatus: { prCreated: { ...PR_CREATED_EXAMPLE } }
           }
         }, null, 2)
       }]
