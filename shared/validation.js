@@ -15,8 +15,73 @@ import {
   MCP_RESTRICTED_STATUSES,
   FRIENDLY_FIELD_NAMES,
   VALID_PLAN_STATUSES,
-  VALID_STEP_STATUSES
+  VALID_STEP_STATUSES,
+  PR_CREATED_EXPECTED_SHAPE,
+  PR_CREATED_EXAMPLE
 } from './constants.js';
+
+// ──────────────────────────────────────────────
+// pipelineStatus.prCreated diagnosis (actionable errors)
+// ──────────────────────────────────────────────
+
+/**
+ * Describes a received value with its type for actionable error messages.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function describeValue(value) {
+  if (value === undefined) return 'undefined';
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return `array ${JSON.stringify(value)}`;
+  return `${typeof value} ${JSON.stringify(value)}`;
+}
+
+/**
+ * Diagnoses pipelineStatus.prCreated against its required contract.
+ * Returns a structured result so callers can build precise, self-correcting errors.
+ * @param {unknown} pipelineStatus - The card's pipelineStatus object (or undefined).
+ * @returns {{ok: true} | {ok: false, reason: string, received: string, expected: string, example: object}}
+ */
+export function diagnosePrCreated(pipelineStatus) {
+  const expected = PR_CREATED_EXPECTED_SHAPE;
+  const example = { pipelineStatus: { prCreated: PR_CREATED_EXAMPLE } };
+
+  if (pipelineStatus === undefined || pipelineStatus === null) {
+    return { ok: false, reason: 'pipelineStatus is missing', received: describeValue(pipelineStatus), expected, example };
+  }
+  const pr = pipelineStatus.prCreated;
+  if (pr === undefined || pr === null) {
+    return { ok: false, reason: 'pipelineStatus.prCreated is missing', received: describeValue(pr), expected, example };
+  }
+  if (typeof pr !== 'object' || Array.isArray(pr)) {
+    return {
+      ok: false,
+      reason: `pipelineStatus.prCreated must be an object, received ${Array.isArray(pr) ? 'array' : typeof pr}`,
+      received: describeValue(pr), expected, example
+    };
+  }
+  const missingSubFields = [];
+  if (!pr.prUrl) missingSubFields.push('prUrl');
+  if (!pr.prNumber) missingSubFields.push('prNumber');
+  if (missingSubFields.length > 0) {
+    return {
+      ok: false,
+      reason: `pipelineStatus.prCreated is missing sub-field(s): ${missingSubFields.join(', ')}`,
+      received: describeValue(pr), expected, example
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Builds a single-line, actionable error string from a prCreated diagnosis.
+ * @param {{reason: string, received: string, expected: string, example: object}} diagnosis
+ * @returns {string}
+ */
+export function formatPrCreatedError(diagnosis) {
+  return `${diagnosis.reason}. Expected ${diagnosis.expected}. Received: ${diagnosis.received}. ` +
+    `Example: ${JSON.stringify(diagnosis.example)}. Create the PR first if it does not exist.`;
+}
 
 // ──────────────────────────────────────────────
 // Entity ID validation
@@ -136,9 +201,9 @@ export function validateBugStatusTransition(currentBug, updates) {
     if (!(Array.isArray(finalBug.commits) && finalBug.commits.length > 0)) {
       missingFields.push('commits (list of commits that fixed the bug)');
     }
-    const ps = finalBug.pipelineStatus;
-    if (!ps?.prCreated || !ps.prCreated.prUrl || !ps.prCreated.prNumber) {
-      missingFields.push('pipelineStatus.prCreated (with prUrl and prNumber — create a PR first)');
+    const prDiag = diagnosePrCreated(finalBug.pipelineStatus);
+    if (!prDiag.ok) {
+      missingFields.push(formatPrCreatedError(prDiag));
     }
     if (missingFields.length > 0) {
       throw new Error(
@@ -272,9 +337,9 @@ export function validateStatusTransition(currentCard, updates, type) {
       if (!hasValidValue(finalCard, field)) missingForValidate.push(FRIENDLY_FIELD_NAMES[field] || field);
     }
     // pipelineStatus.prCreated is required for "To Validate"
-    const ps = finalCard.pipelineStatus;
-    if (!ps?.prCreated || !ps.prCreated.prUrl || !ps.prCreated.prNumber) {
-      missingForValidate.push('pipelineStatus.prCreated (with prUrl and prNumber — create a PR first)');
+    const prDiag = diagnosePrCreated(finalCard.pipelineStatus);
+    if (!prDiag.ok) {
+      missingForValidate.push(formatPrCreatedError(prDiag));
     }
 
     if (missingForValidate.length > 0) {
@@ -344,14 +409,23 @@ export function collectValidationIssues(currentCard, updates, type) {
       }
     }
     // pipelineStatus.prCreated is required
-    const ps = finalCard.pipelineStatus;
-    if (!ps?.prCreated || !ps.prCreated.prUrl || !ps.prCreated.prNumber) {
+    const prDiag = diagnosePrCreated(finalCard.pipelineStatus);
+    if (!prDiag.ok) {
       result.valid = false; result.missingFields.push('pipelineStatus');
       result.requiredFields.pipelineStatus = {
         required: true, currentValue: currentCard.pipelineStatus || null,
-        providedInUpdate: updates.pipelineStatus !== undefined, finalValue: finalCard.pipelineStatus || null, missing: true
+        providedInUpdate: updates.pipelineStatus !== undefined, finalValue: finalCard.pipelineStatus || null, missing: true,
+        expected: prDiag.expected, received: prDiag.received, example: prDiag.example
       };
-      result.errors.push({ code: 'MISSING_PIPELINE_STATUS', message: 'Cannot change to "To Validate": pipelineStatus.prCreated (with prUrl and prNumber) is required. Create a PR first.' });
+      result.errors.push({
+        code: 'MISSING_PIPELINE_STATUS',
+        field: 'pipelineStatus.prCreated',
+        message: `Cannot change to "To Validate": ${formatPrCreatedError(prDiag)}`,
+        expected: prDiag.expected,
+        received: prDiag.received,
+        example: prDiag.example,
+        suggestion: 'Set pipelineStatus.prCreated to an object with prUrl and prNumber (create the PR first).'
+      });
     }
   }
 

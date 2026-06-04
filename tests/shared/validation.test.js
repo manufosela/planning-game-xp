@@ -15,6 +15,8 @@ const {
   collectTaskValidationIssues,
   validateStatusTransition,
   collectValidationIssues,
+  diagnosePrCreated,
+  formatPrCreatedError,
   validateCommitsField,
   appendCommitsToCard,
   migrateImplementationPlan,
@@ -356,6 +358,70 @@ describe('collectValidationIssues - pipelineStatus', () => {
     const result = collectValidationIssues(card, { status: 'To Validate' }, 'task');
     expect(result.valid).toBe(true);
     expect(result.missingFields).toHaveLength(0);
+  });
+});
+
+describe('diagnosePrCreated', () => {
+  const validPr = { prUrl: 'https://github.com/org/repo/pull/1', prNumber: 1, date: '2026-01-01' };
+
+  it('should accept a well-formed pipelineStatus.prCreated', () => {
+    expect(diagnosePrCreated({ prCreated: validPr })).toEqual({ ok: true });
+  });
+
+  it('should reject a missing pipelineStatus reporting received undefined', () => {
+    const diag = diagnosePrCreated(undefined);
+    expect(diag.ok).toBe(false);
+    expect(diag.reason).toMatch(/pipelineStatus is missing/);
+    expect(diag.received).toBe('undefined');
+    expect(diag.expected).toMatch(/prUrl/);
+    expect(diag.example.pipelineStatus.prCreated.prNumber).toBe(42);
+  });
+
+  it('should reject prCreated sent as a boolean and report the wrong type', () => {
+    const diag = diagnosePrCreated({ prCreated: true });
+    expect(diag.ok).toBe(false);
+    expect(diag.reason).toMatch(/must be an object, received boolean/);
+    expect(diag.received).toBe('boolean true');
+  });
+
+  it('should reject prCreated missing prNumber and name the sub-field', () => {
+    const diag = diagnosePrCreated({ prCreated: { prUrl: 'https://github.com/org/repo/pull/1' } });
+    expect(diag.ok).toBe(false);
+    expect(diag.reason).toMatch(/missing sub-field\(s\): prNumber/);
+  });
+});
+
+describe('formatPrCreatedError', () => {
+  it('should build a single-line actionable message with expected, received and example', () => {
+    const msg = formatPrCreatedError(diagnosePrCreated({ prCreated: true }));
+    expect(msg).toMatch(/Expected /);
+    expect(msg).toMatch(/Received: boolean true/);
+    expect(msg).toMatch(/Example: /);
+  });
+});
+
+describe('collectValidationIssues - actionable pipelineStatus errors', () => {
+  const baseCard = {
+    status: 'In Progress',
+    title: 'Test', developer: 'dev_001', validator: 'stk_001',
+    epic: 'PLN-PCS-0001', sprint: 'PLN-SPR-0001',
+    devPoints: 2, businessPoints: 3,
+    acceptanceCriteriaStructured: [{ given: 'x', when: 'y', then: 'z' }],
+    startDate: '2026-01-01',
+    commits: [{ hash: 'abc', message: 'feat: test', date: '2026-01-01', author: 'dev' }]
+  };
+
+  it('should expose expected/received/example when prCreated is a boolean', () => {
+    const card = { ...baseCard, pipelineStatus: { prCreated: true } };
+    const result = collectValidationIssues(card, { status: 'To Validate' }, 'task');
+    expect(result.valid).toBe(false);
+    const err = result.errors.find(e => e.code === 'MISSING_PIPELINE_STATUS');
+    expect(err).toBeTruthy();
+    expect(err.field).toBe('pipelineStatus.prCreated');
+    expect(err.received).toBe('boolean true');
+    expect(err.expected).toMatch(/prUrl/);
+    expect(err.example.pipelineStatus.prCreated.prNumber).toBe(42);
+    expect(result.requiredFields.pipelineStatus.received).toBe('boolean true');
   });
 });
 
