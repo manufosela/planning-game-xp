@@ -6,6 +6,7 @@ import { permissionService } from '../services/permission-service.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
 import { modalStackService } from '../services/modal-stack-service.js';
 import { setupAutoCloseOnSave } from '../services/modal-service.js';
+import { isValidSprintName, SPRINT_NAME_EXAMPLE } from '../utils/sprint-naming.js';
 
 export class SprintCard extends BaseCard {
   static get properties() {
@@ -489,6 +490,23 @@ this.canEditPermission = permissions.canEdit || false;
       }
     });
     return props;
+  }
+
+  /**
+   * Enforce the strict "Sprint = 1 day" naming policy (PMC-TSK-0072 /
+   * PLN-TSK-0338) before delegating to BaseCard._handleSave. A free-form
+   * title would let the UI bypass the MCP-side validator.
+   */
+  _handleSave() {
+    if (!isValidSprintName((this.title || '').trim())) {
+      this._showNotification(
+        `Título de sprint inválido. Formato requerido: ${SPRINT_NAME_EXAMPLE}.`,
+        'error'
+      );
+      this._hideSavingOverlay?.();
+      return;
+    }
+    super._handleSave();
   }
 
   

@@ -2,6 +2,12 @@ import { FirebaseService } from '../services/firebase-service.js';
 import { generateSecureTestId } from '../utils/common-functions.js';
 import { modalStackService } from '../services/modal-stack-service.js';
 import { setupAutoCloseOnSave } from '../services/modal-service.js';
+import {
+  buildSprintName,
+  findSprintForDay,
+  getNextSprintNumberForYear,
+  getSprintBoundsForDay
+} from '../utils/sprint-naming.js';
 
 export class CardFactory {
   static async createCard(section, config) {
@@ -80,9 +86,57 @@ export class CardFactory {
 
   static async createSprintCard(modal, config) {
     modal.title = '';
+
+    // Strict "Sprint = 1 day" policy (PLN-TSK-0338 / PMC-TSK-0072): a project
+    // can hold at most one sprint for today, with a forced title and bounds.
+    const now = new Date();
+    const bounds = getSprintBoundsForDay(now);
+    const existingSprints = await CardFactory._fetchSprintsRaw(config.projectId);
+    const existingToday = findSprintForDay(existingSprints, now);
+
+    if (existingToday) {
+      const title = existingToday.sprint?.title || existingToday.sprint?.cardId || 'today';
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: {
+          options: {
+            message: `Ya existe el sprint de hoy: "${title}". Edítalo desde la lista en vez de crear uno nuevo.`,
+            type: 'info'
+          }
+        }
+      }));
+      // Abort: no modal, no new sprint.
+      modal.remove?.();
+      return;
+    }
+
     const newCard = this.createBaseCard('sprint-card', config);
+    const sprintYear = Number(bounds.isoDate.slice(0, 4));
+    const nextNumber = getNextSprintNumberForYear(existingSprints, sprintYear);
+
+    newCard.title = buildSprintName(nextNumber, bounds.dateTag);
+    newCard.startDate = bounds.startDate;
+    newCard.endDate = bounds.endDate;
+    newCard.year = sprintYear;
 
     await this.setupModal(modal, newCard);
+  }
+
+  /**
+   * Read the raw /cards/{projectId}/SPRINTS_{projectId} node as a map
+   * { firebaseId -> sprintData }, so callers can find by firebaseId. The
+   * existing FirebaseService.getSprintList() keys by cardId and drops the
+   * firebaseId, which is no good for our idempotency check.
+   * @returns {Promise<Object>}
+   */
+  static async _fetchSprintsRaw(projectId) {
+    if (!projectId) return {};
+    try {
+      const path = `/cards/${projectId}/SPRINTS_${projectId}`;
+      const data = await FirebaseService.getCards(path);
+      return data || {};
+    } catch {
+      return {};
+    }
   }
 
   static async createEpicCard(modal, config) {
