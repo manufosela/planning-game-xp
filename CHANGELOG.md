@@ -7,6 +7,13 @@ Auto-generated from git commits on each build.
 
 ### Added
 
+- Strict "Sprint = 1 day" policy (PMC-TSK-0072, PLN-TSK-0338) (#207)
+- Department view kanban (PLN-TSK-0059) (#206)
+
+## [1.185.0] - 2026-06-04
+
+### Added
+
 - Cross-project directory at /public/ (PLN-TSK-0337) (#205)
 - Errores accionables y contrato autodescriptivo de pipelineStatus
 
