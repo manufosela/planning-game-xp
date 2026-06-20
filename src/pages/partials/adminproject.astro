@@ -15,6 +15,7 @@
       <button id="devPlansTab" data-section="devPlans" class="tablinks">Dev Plans</button>
       <button id="guidelinesTab" data-section="guidelines" class="tablinks guidelines-tab" style="display:none;">Guidelines</button>
       <button id="appTab" data-section="app" class="tablinks app-tab" style="display:none;">App</button>
+      <button id="usersTab" data-section="users" class="tablinks users-tab" style="display:none;">Users</button>
       <button id="trashTab" data-section="trash" class="tablinks trash-tab" style="display:none;">🗑️</button>
     </div>
   </div>
@@ -203,6 +204,13 @@
       <h3>Aplicaciones del Proyecto</h3>
     </section>
     <app-manager id="appManager"></app-manager>
+  </div>
+  <div id="usersTabContent" class="tabcontent">
+    <section class="subheader">
+      <h3>Permisos de usuarios</h3>
+      <p class="subheader-hint">Controla qué secciones del proyecto y qué acciones de apps puede usar cada usuario. Solo visible para SuperAdmin.</p>
+    </section>
+    <user-permissions-panel id="userPermissionsPanel"></user-permissions-panel>
   </div>
   <div id="trashTabContent" class="tabcontent">
     <section class="subheader">
