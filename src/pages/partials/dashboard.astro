@@ -22,6 +22,10 @@
         <span class="tab-icon">🧑‍💻</span>
         Developer Metrics
       </button>
+      <button class="tab-button" data-tab="temporal">
+        <span class="tab-icon">⏱️</span>
+        Evolución temporal
+      </button>
     </div>
 
     <div class="year-selector-controls">
@@ -62,6 +66,16 @@
         <div id="developer-metrics-container">
           <div class="no-projects-message">
             Select up to 3 projects to view developer metrics
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="temporal-tab">
+      <div class="chart-container">
+        <div id="temporal-metrics-container">
+          <div class="no-projects-message">
+            Selecciona hasta 3 proyectos para ver su evolución temporal y tiempo dedicado
           </div>
         </div>
       </div>
@@ -533,7 +547,178 @@ this.innerHTML = '<p class="error">Error loading projects</p>';
         this.updateSprintCharts();
       } else if (this.activeTab === 'developer') {
         this.updateDeveloperMetrics();
+      } else if (this.activeTab === 'temporal') {
+        this.updateTemporalMetrics();
       }
+    }
+
+    async updateTemporalMetrics() {
+      const container = document.getElementById('temporal-metrics-container');
+      if (!container) return;
+      if (this.selectedProjects.length === 0) {
+        container.innerHTML = '<div class="no-projects-message">Selecciona hasta 3 proyectos para ver su evolución temporal y tiempo dedicado</div>';
+        return;
+      }
+
+      container.innerHTML = '<div class="no-projects-message">Cargando métricas...</div>';
+
+      const [{ database: db, ref: r, get: g }, metricsModule] = await Promise.all([
+        import('/firebase-config.js'),
+        import('/js/services/project-time-metrics.js')
+      ]);
+      const { aggregateProjectTimeMetrics, formatDurationShort } = metricsModule;
+      const year = this.selectedYear;
+
+      const sections = await Promise.all(this.selectedProjects.map(async (project) => {
+        const tasksByYear = await this._loadCardsForYear(db, r, g, project.id, 'TASKS', year);
+        const bugsByYear = await this._loadCardsForYear(db, r, g, project.id, 'BUGS', year);
+        const metrics = aggregateProjectTimeMetrics(tasksByYear);
+        const bugsByMonth = this._aggregateBugsByMonth(bugsByYear);
+        return { project, metrics, bugsByMonth };
+      }));
+
+      container.innerHTML = sections.map((section) =>
+        this._renderTemporalProjectSection(section, formatDurationShort)
+      ).join('');
+    }
+
+    async _loadCardsForYear(db, r, g, projectId, section, year) {
+      try {
+        const snap = await g(r(db, `/cards/${projectId}/${section}_${projectId}`));
+        if (!snap.exists()) return {};
+        const all = snap.val() || {};
+        const out = {};
+        for (const [key, card] of Object.entries(all)) {
+          if (!card || card.deletedAt) continue;
+          if (!card.endDate) continue;
+          if (year) {
+            const cardYear = new Date(card.endDate).getFullYear();
+            if (cardYear !== year) continue;
+          }
+          out[key] = card;
+        }
+        return out;
+      } catch (err) {
+        console.warn('Error loading cards', projectId, section, err);
+        return {};
+      }
+    }
+
+    _aggregateBugsByMonth(bugs) {
+      const byMonth = new Map();
+      for (const bug of Object.values(bugs || {})) {
+        if (!bug || !bug.endDate || bug.deletedAt) continue;
+        const d = new Date(bug.endDate);
+        if (!Number.isFinite(d.getTime())) continue;
+        const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+        byMonth.set(key, (byMonth.get(key) || 0) + 1);
+      }
+      return Array.from(byMonth.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([month, count]) => ({ month, count }));
+    }
+
+    _renderTemporalProjectSection({ project, metrics, bugsByMonth }, formatDurationShort) {
+      const { totals, byKind, byMonth } = metrics;
+      const projectName = project.name || project.id;
+      const coveragePct = Math.round((totals.netCoverage || 0) * 100);
+      const aiPct = totals.netMs === 0 ? 0 : Math.round((byKind.ai.netMs / totals.netMs) * 100);
+      const humanPct = totals.netMs === 0 ? 0 : 100 - aiPct;
+
+      const tasksChart = this._renderTemporalLineChart(byMonth, (m) => m.completedCount, 'Tareas/mes');
+      const bugsChart = this._renderTemporalLineChart(bugsByMonth, (m) => m.count, 'Bugs/mes');
+      const avgChart = this._renderTemporalBarChart(byMonth, (m) => m.avgElapsedWorkdays, 'Tiempo medio resolución (jornadas)');
+      const netChart = this._renderTemporalBarChart(byMonth, (m) => m.netMs / 3600000, 'Tiempo dedicado/mes (horas)');
+
+      return `
+        <section class="temporal-project-section">
+          <h2 class="temporal-project-title">${projectName}</h2>
+          <div class="temporal-kpi-grid">
+            <div class="temporal-kpi">
+              <div class="temporal-kpi-label">Tiempo dedicado (net)</div>
+              <div class="temporal-kpi-value">${formatDurationShort(totals.netMs)}</div>
+              <div class="temporal-kpi-foot">${totals.netCoveredCount}/${totals.completedCount} tareas con tracking (${coveragePct}%)</div>
+            </div>
+            <div class="temporal-kpi">
+              <div class="temporal-kpi-label">Elapsed (jornadas laborables)</div>
+              <div class="temporal-kpi-value">${totals.elapsedWorkdays.toFixed(1)}</div>
+              <div class="temporal-kpi-foot">Suma de endDate − startDate por tarea</div>
+            </div>
+            <div class="temporal-kpi">
+              <div class="temporal-kpi-label">Tareas completadas</div>
+              <div class="temporal-kpi-value">${totals.completedCount}</div>
+              <div class="temporal-kpi-foot">En el año seleccionado</div>
+            </div>
+            <div class="temporal-kpi">
+              <div class="temporal-kpi-label">Humano vs IA (net)</div>
+              <div class="temporal-kpi-value">${humanPct}% / ${aiPct}%</div>
+              <div class="temporal-kpi-foot">Humano ${formatDurationShort(byKind.human.netMs)} · IA ${formatDurationShort(byKind.ai.netMs)}</div>
+            </div>
+          </div>
+          <div class="temporal-chart-grid">
+            <div class="temporal-chart"><h3>Tareas completadas / mes</h3>${tasksChart}</div>
+            <div class="temporal-chart"><h3>Bugs resueltos / mes</h3>${bugsChart}</div>
+            <div class="temporal-chart"><h3>Tiempo medio resolución / mes</h3>${avgChart}</div>
+            <div class="temporal-chart"><h3>Tiempo dedicado (net) / mes</h3>${netChart}</div>
+          </div>
+          <p class="temporal-note">
+            <strong>Net</strong> usa <code>workCycles</code> + <code>totalWorkDurationMs</code> y solo cubre tareas
+            gestionadas via MCP. <strong>Elapsed</strong> usa la diferencia entre <code>startDate</code> y
+            <code>endDate</code> en jornadas laborables, disponible para toda tarea cerrada.
+          </p>
+        </section>
+      `;
+    }
+
+    _renderTemporalLineChart(series, getValue, fallbackLabel) {
+      if (!series || series.length === 0) {
+        return `<div class="temporal-chart-empty">Sin datos para ${fallbackLabel}</div>`;
+      }
+      const W = 480, H = 160, P = 28;
+      const values = series.map(getValue);
+      const max = Math.max(1, ...values);
+      const step = series.length > 1 ? (W - P * 2) / (series.length - 1) : 0;
+      const points = values.map((v, i) => {
+        const x = P + i * step;
+        const y = H - P - (v / max) * (H - P * 2);
+        return `${x},${y}`;
+      }).join(' ');
+      const dots = values.map((v, i) => {
+        const x = P + i * step;
+        const y = H - P - (v / max) * (H - P * 2);
+        return `<circle cx="${x}" cy="${y}" r="3" fill="var(--brand-primary, #4a9eff)"><title>${series[i].month}: ${v}</title></circle>`;
+      }).join('');
+      const labels = series.map((s, i) => {
+        const x = P + i * step;
+        return `<text x="${x}" y="${H - 8}" text-anchor="middle" font-size="9" fill="var(--text-muted, #64748b)">${s.month.slice(5)}</text>`;
+      }).join('');
+      return `<svg viewBox="0 0 ${W} ${H}" class="temporal-svg">
+        <polyline points="${points}" fill="none" stroke="var(--brand-primary, #4a9eff)" stroke-width="2"/>
+        ${dots}${labels}
+      </svg>`;
+    }
+
+    _renderTemporalBarChart(series, getValue, fallbackLabel) {
+      if (!series || series.length === 0) {
+        return `<div class="temporal-chart-empty">Sin datos para ${fallbackLabel}</div>`;
+      }
+      const W = 480, H = 160, P = 28;
+      const values = series.map(getValue);
+      const max = Math.max(1, ...values);
+      const barWidth = Math.max(8, (W - P * 2) / series.length - 4);
+      const bars = values.map((v, i) => {
+        const x = P + i * ((W - P * 2) / series.length) + 2;
+        const h = (v / max) * (H - P * 2);
+        const y = H - P - h;
+        return `<rect x="${x}" y="${y}" width="${barWidth}" height="${h}" fill="var(--brand-primary, #4a9eff)" rx="2">
+          <title>${series[i].month}: ${v.toFixed(2)}</title>
+        </rect>`;
+      }).join('');
+      const labels = series.map((s, i) => {
+        const x = P + i * ((W - P * 2) / series.length) + barWidth / 2 + 2;
+        return `<text x="${x}" y="${H - 8}" text-anchor="middle" font-size="9" fill="var(--text-muted, #64748b)">${s.month.slice(5)}</text>`;
+      }).join('');
+      return `<svg viewBox="0 0 ${W} ${H}" class="temporal-svg">${bars}${labels}</svg>`;
     }
 
     async updateGanttCharts() {
@@ -2801,6 +2986,91 @@ const emptyMessage = document.getElementById('developerSprintChartEmpty');
     font-weight: 600;
     color: var(--text-primary, #333);
     min-width: 32px;
+  }
+
+  /* Evolución temporal tab (PLN-TSK-0135) */
+  .temporal-project-section {
+    margin-bottom: 2rem;
+    padding: 1rem 1.25rem;
+    background: var(--bg-primary, #fff);
+    border: 1px solid var(--border-default, #e2e8f0);
+    border-radius: 8px;
+  }
+  .temporal-project-title {
+    margin: 0 0 0.75rem;
+    font-size: 1.05rem;
+    color: var(--text-primary, #0f172a);
+  }
+  .temporal-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .temporal-kpi {
+    padding: 0.6rem 0.75rem;
+    background: var(--bg-secondary, #f1f5f9);
+    border-radius: 6px;
+    border-top: 3px solid var(--brand-primary, #4a9eff);
+  }
+  .temporal-kpi-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, #64748b);
+    margin-bottom: 0.25rem;
+  }
+  .temporal-kpi-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary, #0f172a);
+    line-height: 1.1;
+  }
+  .temporal-kpi-foot {
+    font-size: 0.7rem;
+    color: var(--text-muted, #64748b);
+    margin-top: 0.2rem;
+  }
+  .temporal-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 0.75rem;
+  }
+  .temporal-chart {
+    background: var(--bg-secondary, #f8fafc);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem 0.25rem;
+    border: 1px solid var(--border-subtle, #e2e8f0);
+  }
+  .temporal-chart h3 {
+    margin: 0 0 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary, #475569);
+  }
+  .temporal-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .temporal-chart-empty {
+    padding: 1.5rem 0;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-muted, #64748b);
+  }
+  .temporal-note {
+    margin-top: 0.75rem;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    color: var(--text-muted, #64748b);
+  }
+  .temporal-note code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    background: var(--bg-secondary, #f1f5f9);
+    padding: 0.05rem 0.3rem;
+    border-radius: 3px;
   }
 
 </style>
