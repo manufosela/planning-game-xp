@@ -12,6 +12,7 @@ import './wc/AiDocumentUploader.js';
 import './wc/AdrList.js';
 import './wc/DevPlansSection.js';
 import './wc/UserPermissionsPanel.js';
+import './wc/PgBoardConfig.js';
 import './wc/EntityDirectoryManager.js';
 import './wc/GuidelinesManager.js';
 import './wc/VersionUpdateModal.js';

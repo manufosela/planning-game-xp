@@ -15,6 +15,7 @@
       <button id="devPlansTab" data-section="devPlans" class="tablinks">Dev Plans</button>
       <button id="guidelinesTab" data-section="guidelines" class="tablinks guidelines-tab" style="display:none;">Guidelines</button>
       <button id="appTab" data-section="app" class="tablinks app-tab" style="display:none;">App</button>
+      <button id="boardConfigTab" data-section="boardConfig" class="tablinks">Board Config</button>
       <button id="usersTab" data-section="users" class="tablinks users-tab" style="display:none;">Users</button>
       <button id="trashTab" data-section="trash" class="tablinks trash-tab" style="display:none;">🗑️</button>
     </div>
@@ -211,6 +212,13 @@
       <p class="subheader-hint">Controla qué secciones del proyecto y qué acciones de apps puede usar cada usuario. Solo visible para SuperAdmin.</p>
     </section>
     <user-permissions-panel id="userPermissionsPanel"></user-permissions-panel>
+  </div>
+  <div id="boardConfigTabContent" class="tabcontent">
+    <section class="subheader">
+      <h3>Configuración del tablero Kanban</h3>
+      <p class="subheader-hint">Columnas, mapeo a estados y límites WIP del tablero de este proyecto. El tablero real (drag&amp;drop + métricas) llegará en próximas fases.</p>
+    </section>
+    <pg-board-config id="pgBoardConfig"></pg-board-config>
   </div>
   <div id="trashTabContent" class="tabcontent">
     <section class="subheader">
@@ -416,7 +424,7 @@
   let isYearReadOnly = false; // Para años anteriores en modo solo lectura
 
   // All tabs visible for authenticated users. Users/trash only for SuperAdmin, app only if projectHasApps.
-  const ALL_TABS = ['sprints', 'epics', 'tasks', 'bugs', 'proposals', 'qa', 'adrs', 'devPlans'];
+  const ALL_TABS = ['sprints', 'epics', 'tasks', 'bugs', 'proposals', 'qa', 'adrs', 'devPlans', 'boardConfig'];
   const ADMIN_ONLY_TABS = ['users', 'trash'];
   let projectHasApps = false; // Controls App tab visibility
 
