@@ -10,6 +10,7 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
     <div class="wip-tabs">
       <button class="tab-button active" data-tab="wip">WIP actual</button>
       <button class="tab-button" data-tab="backlog">Backlog por developer</button>
+      <button class="tab-button" data-tab="analytics">Resumen de trabajo</button>
     </div>
     <div id="tab-wip" class="tab-panel">
       <div id="wipContent" class="wip-list">Cargando...</div>
@@ -19,6 +20,18 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
         <button id="refreshBacklogBtn" class="refresh-backlog-btn" title="Actualizar lista de backlogs">🔄 Actualizar</button>
       </div>
       <div id="backlogContent" class="backlog-list">Cargando...</div>
+    </div>
+    <div id="tab-analytics" class="tab-panel hidden">
+      <div class="analytics-header">
+        <label for="analytics-period">Periodo:</label>
+        <select id="analytics-period" class="analytics-period-select">
+          <option value="week">Semana actual</option>
+          <option value="month" selected>Mes actual</option>
+          <option value="year">Año actual</option>
+          <option value="all">Todo</option>
+        </select>
+      </div>
+      <div id="analyticsContent" class="analytics-content">Cargando...</div>
     </div>
   </section>
 
@@ -92,17 +105,26 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
     }));
   }
 
+  const tabAnalytics = document.getElementById('tab-analytics');
+  const analyticsContent = document.getElementById('analyticsContent');
+  const analyticsPeriodSelect = document.getElementById('analytics-period');
+
   function updateTabs(tab, updateUrl = true) {
     if (tab) activeTab = tab;
     tabButtons.forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === activeTab);
     });
+    // Hide all
+    tabWip.classList.add('hidden');
+    tabBacklog.classList.add('hidden');
+    if (tabAnalytics) tabAnalytics.classList.add('hidden');
+    // Show active
     if (activeTab === 'backlog') {
       tabBacklog.classList.remove('hidden');
-      tabWip.classList.add('hidden');
-      // No auto-sync - user can click "Sincronizar Backlogs" button manually
+    } else if (activeTab === 'analytics') {
+      if (tabAnalytics) tabAnalytics.classList.remove('hidden');
+      loadAnalytics();
     } else {
-      tabBacklog.classList.add('hidden');
       tabWip.classList.remove('hidden');
     }
 
@@ -120,7 +142,7 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
   // Restore tab and developer from URL on page load
   function restoreTabFromUrl() {
     const urlState = URLStateManager.getState();
-    if (urlState.tab && (urlState.tab === 'wip' || urlState.tab === 'backlog')) {
+    if (urlState.tab && (urlState.tab === 'wip' || urlState.tab === 'backlog' || urlState.tab === 'analytics')) {
       updateTabs(urlState.tab, false); // Don't update URL again
     }
     if (urlState.developer) {
@@ -1409,6 +1431,204 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
     }
   }
 
+  // ===== Work Analytics (PLN-TSK-0056) =====
+
+  function getAnalyticsPeriodBounds(periodKey) {
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = now.getUTCMonth();
+    const d = now.getUTCDate();
+    if (periodKey === 'week') {
+      const day = now.getUTCDay();
+      const monday = new Date(Date.UTC(y, m, d - ((day + 6) % 7)));
+      return { startMs: monday.getTime(), endMs: now.getTime(), label: 'esta semana' };
+    }
+    if (periodKey === 'month') {
+      return { startMs: Date.UTC(y, m, 1), endMs: now.getTime(), label: 'este mes' };
+    }
+    if (periodKey === 'year') {
+      return { startMs: Date.UTC(y, 0, 1), endMs: now.getTime(), label: 'este año' };
+    }
+    return { startMs: 0, endMs: now.getTime(), label: 'desde el inicio' };
+  }
+
+  function taskIsCompletedInRange(task, startMs, endMs) {
+    if (!task || !task.endDate || task.deletedAt) return false;
+    const ts = new Date(task.endDate).getTime();
+    if (!Number.isFinite(ts)) return false;
+    return ts >= startMs && ts <= endMs;
+  }
+
+  async function loadAnalytics() {
+    if (!analyticsContent) return;
+    analyticsContent.innerHTML = '<div class="analytics-loading">Cargando datos cross-project...</div>';
+
+    const [{ aggregateProjectTimeMetrics, AI_DEVELOPER_ID, formatDurationShort }] = await Promise.all([
+      import('/js/services/project-time-metrics.js')
+    ]);
+
+    const periodKey = analyticsPeriodSelect?.value || 'month';
+    const { startMs, endMs, label } = getAnalyticsPeriodBounds(periodKey);
+
+    // Load every project (single read, then loop sections)
+    const projectsSnap = await get(ref(database, '/projects'));
+    const projects = projectsSnap.val() || {};
+    const projectIds = Object.keys(projects).filter((id) => !projects[id]?.archived);
+
+    if (projectIds.length === 0) {
+      analyticsContent.innerHTML = '<div class="analytics-empty">No hay proyectos accesibles.</div>';
+      return;
+    }
+
+    // Per-developer aggregation across all projects
+    const perDev = new Map(); // devId -> { devId, name, kind, projects: Set, netMs, elapsedWorkdays, completedCount, tasks: [] }
+    const perProject = new Map(); // projectId -> { projectId, projectName, netMs, elapsedWorkdays, completedCount }
+
+    for (const projectId of projectIds) {
+      const projectName = projects[projectId]?.name || projectId;
+      const tasksSnap = await get(ref(database, `/cards/${projectId}/TASKS_${projectId}`));
+      const bugsSnap = await get(ref(database, `/cards/${projectId}/BUGS_${projectId}`));
+      const tasks = Object.values(tasksSnap.val() || {});
+      const bugs = Object.values(bugsSnap.val() || {});
+      const all = [...tasks, ...bugs].filter((t) => taskIsCompletedInRange(t, startMs, endMs));
+
+      const projectMetrics = aggregateProjectTimeMetrics(all);
+      if (projectMetrics.totals.completedCount > 0) {
+        perProject.set(projectId, {
+          projectId,
+          projectName,
+          netMs: projectMetrics.totals.netMs,
+          elapsedWorkdays: projectMetrics.totals.elapsedWorkdays,
+          completedCount: projectMetrics.totals.completedCount
+        });
+      }
+
+      for (const devEntry of projectMetrics.byDeveloper) {
+        const id = devEntry.developer;
+        if (!perDev.has(id)) {
+          const name = id === '(sin developer)'
+            ? '(sin developer)'
+            : (entityDirectoryService.getDeveloperDisplayName?.(id) || id);
+          perDev.set(id, {
+            devId: id,
+            name,
+            kind: id === AI_DEVELOPER_ID ? 'ai' : (id === '(sin developer)' ? 'unknown' : 'human'),
+            projects: new Set(),
+            netMs: 0,
+            elapsedWorkdays: 0,
+            completedCount: 0
+          });
+        }
+        const entry = perDev.get(id);
+        entry.netMs += devEntry.netMs;
+        entry.elapsedWorkdays += devEntry.elapsedWorkdays;
+        entry.completedCount += devEntry.completedCount;
+        entry.projects.add(projectName);
+      }
+    }
+
+    const developers = Array.from(perDev.values()).sort((a, b) => b.netMs - a.netMs || b.completedCount - a.completedCount);
+    const projectsList = Array.from(perProject.values()).sort((a, b) => b.netMs - a.netMs);
+
+    const totals = developers.reduce((acc, d) => {
+      acc.netMs += d.netMs;
+      acc.elapsedWorkdays += d.elapsedWorkdays;
+      acc.completedCount += d.completedCount;
+      return acc;
+    }, { netMs: 0, elapsedWorkdays: 0, completedCount: 0 });
+
+    renderAnalytics({ developers, projectsList, totals, label, formatDurationShort });
+  }
+
+  function renderAnalytics({ developers, projectsList, totals, label, formatDurationShort }) {
+    const escapeHtml = (s) => String(s ?? '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    const html = `
+      <div class="analytics-summary">
+        <div class="analytics-kpi">
+          <div class="analytics-kpi-label">Tareas completadas (${label})</div>
+          <div class="analytics-kpi-value">${totals.completedCount}</div>
+        </div>
+        <div class="analytics-kpi">
+          <div class="analytics-kpi-label">Tiempo dedicado (net)</div>
+          <div class="analytics-kpi-value">${formatDurationShort(totals.netMs)}</div>
+        </div>
+        <div class="analytics-kpi">
+          <div class="analytics-kpi-label">Elapsed (jornadas)</div>
+          <div class="analytics-kpi-value">${totals.elapsedWorkdays.toFixed(1)}</div>
+        </div>
+        <div class="analytics-kpi">
+          <div class="analytics-kpi-label">Developers activos</div>
+          <div class="analytics-kpi-value">${developers.length}</div>
+        </div>
+      </div>
+
+      <h3 class="analytics-section-title">Por developer</h3>
+      <table class="analytics-table">
+        <thead>
+          <tr>
+            <th>Developer</th>
+            <th>Tipo</th>
+            <th class="num">Tareas</th>
+            <th class="num">Net</th>
+            <th class="num">Elapsed (jorn)</th>
+            <th>Proyectos</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${developers.length === 0
+            ? `<tr><td colspan="6" class="analytics-empty">Sin actividad ${escapeHtml(label)}.</td></tr>`
+            : developers.map((d) => `
+              <tr>
+                <td>${escapeHtml(d.name)}</td>
+                <td><span class="kind-badge kind-${d.kind}">${d.kind}</span></td>
+                <td class="num">${d.completedCount}</td>
+                <td class="num">${escapeHtml(formatDurationShort(d.netMs))}</td>
+                <td class="num">${d.elapsedWorkdays.toFixed(1)}</td>
+                <td>${Array.from(d.projects).map(escapeHtml).join(', ')}</td>
+              </tr>
+            `).join('')}
+        </tbody>
+      </table>
+
+      <h3 class="analytics-section-title">Por proyecto</h3>
+      <table class="analytics-table">
+        <thead>
+          <tr>
+            <th>Proyecto</th>
+            <th class="num">Tareas</th>
+            <th class="num">Net</th>
+            <th class="num">Elapsed (jorn)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${projectsList.length === 0
+            ? `<tr><td colspan="4" class="analytics-empty">Sin actividad ${escapeHtml(label)}.</td></tr>`
+            : projectsList.map((p) => `
+              <tr>
+                <td>${escapeHtml(p.projectName)}</td>
+                <td class="num">${p.completedCount}</td>
+                <td class="num">${escapeHtml(formatDurationShort(p.netMs))}</td>
+                <td class="num">${p.elapsedWorkdays.toFixed(1)}</td>
+              </tr>
+            `).join('')}
+        </tbody>
+      </table>
+
+      <p class="analytics-note">
+        <strong>Net</strong> usa <code>workCycles + totalWorkDurationMs</code> (solo tareas con tracking MCP).
+        <strong>Elapsed</strong> usa <code>endDate − startDate</code> en jornadas laborables (todas las tareas cerradas).
+      </p>
+    `;
+    analyticsContent.innerHTML = html;
+  }
+
+  analyticsPeriodSelect?.addEventListener('change', () => {
+    if (activeTab === 'analytics') loadAnalytics();
+  });
+
   init();
 </script>
 
@@ -1762,6 +1982,110 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
   @media (max-width: 820px) {
     .wip-container { padding: 1rem; }
     .wip-table th, .wip-table td { padding: 0.6rem 0.5rem; font-size: 0.85rem; }
+  }
+
+  /* Work analytics (PLN-TSK-0056) */
+  .analytics-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+  }
+  .analytics-period-select {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border-default, #d1d5db);
+    border-radius: 6px;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #0f172a);
+    font-size: 0.9rem;
+  }
+  .analytics-content {
+    margin-top: 0.5rem;
+  }
+  .analytics-loading,
+  .analytics-empty {
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-muted, #64748b);
+  }
+  .analytics-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+  .analytics-kpi {
+    padding: 0.6rem 0.85rem;
+    background: var(--bg-secondary, #f1f5f9);
+    border-radius: 6px;
+    border-top: 3px solid var(--brand-primary, #4a9eff);
+  }
+  .analytics-kpi-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, #64748b);
+    margin-bottom: 0.25rem;
+  }
+  .analytics-kpi-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary, #0f172a);
+  }
+  .analytics-section-title {
+    margin: 1.5rem 0 0.5rem;
+    font-size: 1rem;
+    color: var(--text-primary, #0f172a);
+  }
+  .analytics-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg-primary, #fff);
+    border: 1px solid var(--border-default, #e2e8f0);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .analytics-table th,
+  .analytics-table td {
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+    font-size: 0.85rem;
+  }
+  .analytics-table thead th {
+    background: var(--bg-secondary, #f1f5f9);
+    font-weight: 600;
+    color: var(--text-secondary, #475569);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .analytics-table tbody tr:last-child td { border-bottom: none; }
+  .analytics-table tbody tr:hover { background: var(--bg-secondary, #f8fafc); }
+  .analytics-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .kind-badge {
+    display: inline-block;
+    padding: 0.05rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .kind-badge.kind-human { background: rgba(74, 158, 255, 0.15); color: #1d4ed8; }
+  .kind-badge.kind-ai { background: rgba(236, 62, 149, 0.15); color: #b91c5c; }
+  .kind-badge.kind-unknown { background: rgba(100, 116, 139, 0.15); color: #475569; }
+  .analytics-note {
+    margin-top: 1rem;
+    font-size: 0.72rem;
+    color: var(--text-muted, #64748b);
+    line-height: 1.45;
+  }
+  .analytics-note code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    background: var(--bg-secondary, #f1f5f9);
+    padding: 0.05rem 0.3rem;
+    border-radius: 3px;
   }
 </style>
 
