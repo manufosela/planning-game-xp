@@ -7,6 +7,14 @@ Auto-generated from git commits on each build.
 
 ### Added
 
+- Phase 1 — per-project column config (PLN-TSK-0339) (#211)
+- SuperAdmin Users tab with permissions matrix (PLN-TSK-0092) (#210)
+- "Resumen de trabajo" cross-project analytics tab (PLN-TSK-0056) (#209)
+
+## [1.188.0] - 2026-06-20
+
+### Added
+
 - "Evolución temporal" tab with project time metrics (PLN-TSK-0135) (#208)
 
 ## [1.187.0] - 2026-06-07
