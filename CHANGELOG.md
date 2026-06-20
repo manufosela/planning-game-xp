@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Added
 
+- "Evolución temporal" tab with project time metrics (PLN-TSK-0135) (#208)
+
+## [1.187.0] - 2026-06-07
+
+### Added
+
 - Strict "Sprint = 1 day" policy (PMC-TSK-0072, PLN-TSK-0338) (#207)
 - Department view kanban (PLN-TSK-0059) (#206)
 
