@@ -210,6 +210,56 @@ export const pgBoardStyles = css`
   }
   .board-clear:hover { background: var(--bg-tertiary, #e2e8f0); }
 
+  .board-empty-pane {
+    max-width: 560px;
+    margin: 2rem auto;
+    padding: 1.5rem 1.75rem;
+    background: var(--bg-secondary, #f1f5f9);
+    border: 1px solid var(--border-default, #e2e8f0);
+    border-radius: 10px;
+    text-align: left;
+  }
+  .board-empty-pane h2 {
+    margin: 0 0 0.4rem;
+    font-size: 1.05rem;
+    color: var(--text-primary, #0f172a);
+  }
+  .board-empty-pane p {
+    margin: 0 0 0.75rem;
+    color: var(--text-secondary, #475569);
+    line-height: 1.5;
+    font-size: 0.88rem;
+  }
+  .board-empty-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary, #475569);
+  }
+  .board-empty-row select { flex: 1; }
+  .board-empty-hint {
+    color: var(--text-muted, #64748b);
+    font-size: 0.78rem;
+  }
+  .board-empty-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  .board-link {
+    display: inline-block;
+    padding: 0.45rem 0.85rem;
+    background: var(--brand-primary, #4a9eff);
+    color: var(--text-on-primary, #fff);
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .board-link:hover { filter: brightness(1.05); }
+
   .swimlane-header {
     margin: 0.5rem 0 0.35rem;
     padding: 0.35rem 0.6rem;

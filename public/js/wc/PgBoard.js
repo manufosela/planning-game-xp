@@ -41,6 +41,7 @@ import {
 import { showExpandedCardInModal } from '../utils/common-functions.js';
 import { FirebaseService } from '../services/firebase-service.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
+import { database as fbDatabase, ref as fbRef, get as fbGet } from '../../firebase-config.js';
 
 /**
  * <pg-board> — Phase 3 of the real Kanban boards epic.
@@ -94,7 +95,8 @@ export class PgBoard extends LitElement {
       filterText: { state: true },
       filterDeveloper: { state: true },
       filterEpic: { state: true },
-      swimlaneMode: { state: true }
+      swimlaneMode: { state: true },
+      availableProjects: { state: true }
     };
   }
 
@@ -122,6 +124,7 @@ export class PgBoard extends LitElement {
     this.filterDeveloper = '';
     this.filterEpic = '';
     this.swimlaneMode = 'none';
+    this.availableProjects = [];
     this._unsubscribers = [];
     this._projectChangedHandler = (e) => {
       const next = e.detail?.projectId || '';
@@ -152,11 +155,43 @@ export class PgBoard extends LitElement {
     this._unsubscribers = [];
   }
 
+  async _loadAvailableProjects() {
+    try {
+      const snap = await fbGet(fbRef(fbDatabase, '/projects'));
+      const data = snap.val() || {};
+      const list = Object.entries(data)
+        .filter(([, p]) => p && !p.archived)
+        .map(([id, p]) => ({ id, name: p.name || id }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      this.availableProjects = list;
+    } catch (err) {
+      console.warn('[PgBoard] could not list projects for empty state', err);
+      this.availableProjects = [];
+    }
+  }
+
+  _onSelectProject(e) {
+    const next = e.target.value;
+    if (!next) return;
+    this.projectId = next;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('projectId', next);
+      window.history.replaceState({}, '', url.toString());
+    } catch { /* noop */ }
+    this._load();
+  }
+
   async _load() {
     this._teardownListeners();
     if (!this.projectId) {
       this.columns = [];
       this.cards = [];
+      // For the empty state, surface a project picker so the user does
+      // not get stuck on a blank page.
+      if (this.availableProjects.length === 0) {
+        this._loadAvailableProjects();
+      }
       return;
     }
     this.status = 'Cargando tablero...';
@@ -435,10 +470,39 @@ export class PgBoard extends LitElement {
 
   render() {
     if (!this.projectId) {
-      return html`<div class="board-empty">Selecciona un proyecto para ver su tablero.</div>`;
+      return html`
+        <div class="board-empty-pane">
+          <h2>Aún no hay proyecto seleccionado</h2>
+          <p>Elige un proyecto para abrir su tablero Kanban. El tablero usa la configuración de columnas del proyecto (configurable desde <strong>Admin Project → Board Config</strong>).</p>
+          ${this.availableProjects.length > 0 ? html`
+            <label class="board-empty-row">
+              <span>Proyecto:</span>
+              <select class="board-filter" @change=${(e) => this._onSelectProject(e)}>
+                <option value="">— Selecciona —</option>
+                ${this.availableProjects.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
+              </select>
+            </label>
+          ` : html`<p class="board-empty-hint">Cargando proyectos…</p>`}
+          <div class="board-empty-actions">
+            <a class="board-link" href="/adminproject/">Ir a Admin Project</a>
+          </div>
+        </div>
+      `;
     }
     if (this.loadError) {
       return html`<div class="board-error">${this.loadError}</div>`;
+    }
+    if (this.columns.length === 0) {
+      const adminUrl = `/adminproject/?projectId=${encodeURIComponent(this.projectId)}`;
+      return html`
+        <div class="board-empty-pane">
+          <h2>El proyecto no tiene columnas configuradas</h2>
+          <p>Configura las columnas del Kanban en <strong>Admin Project → Board Config</strong>. Por defecto se generan 5 columnas (To Do, In Progress, To Validate, Done&amp;Validated, Blocked).</p>
+          <div class="board-empty-actions">
+            <a class="board-link" href=${adminUrl}>Abrir Board Config de ${this.projectId}</a>
+          </div>
+        </div>
+      `;
     }
 
     const cardsByCol = new Map();
