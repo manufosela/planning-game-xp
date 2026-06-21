@@ -179,4 +179,45 @@ export const pgBoardStyles = css`
     font-size: 0.7rem;
     color: var(--text-muted, #94a3b8);
   }
+
+  .board-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .board-filter {
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--border-default, #d1d5db);
+    border-radius: 6px;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #0f172a);
+    font-size: 0.8rem;
+  }
+  .board-search {
+    flex: 1 1 220px;
+    min-width: 200px;
+  }
+  .board-clear {
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--border-default, #d1d5db);
+    border-radius: 6px;
+    background: var(--bg-secondary, #f1f5f9);
+    color: var(--text-secondary, #475569);
+    cursor: pointer;
+    font-size: 0.78rem;
+  }
+  .board-clear:hover { background: var(--bg-tertiary, #e2e8f0); }
+
+  .swimlane-header {
+    margin: 0.5rem 0 0.35rem;
+    padding: 0.35rem 0.6rem;
+    background: var(--bg-secondary, #f1f5f9);
+    border-left: 3px solid var(--brand-primary, #4a9eff);
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary, #475569);
+  }
 `;

@@ -71,7 +71,12 @@ export class PgBoard extends LitElement {
       status: { state: true },
       loadError: { state: true },
       _dragInfo: { state: true },
-      _dropTargetColId: { state: true }
+      _dropTargetColId: { state: true },
+      filterText: { state: true },
+      filterSprint: { state: true },
+      filterDeveloper: { state: true },
+      filterEpic: { state: true },
+      swimlaneMode: { state: true }
     };
   }
 
@@ -95,6 +100,11 @@ export class PgBoard extends LitElement {
     this.loadError = '';
     this._dragInfo = null;
     this._dropTargetColId = '';
+    this.filterText = '';
+    this.filterSprint = '';
+    this.filterDeveloper = '';
+    this.filterEpic = '';
+    this.swimlaneMode = 'none';
     this._unsubscribers = [];
     this._projectChangedHandler = (e) => {
       const next = e.detail?.projectId || '';
@@ -161,13 +171,57 @@ export class PgBoard extends LitElement {
     }
   }
 
+  _cardMatchesFilters(card) {
+    if (this.filterSprint && card.sprint !== this.filterSprint) return false;
+    if (this.filterDeveloper && card.developer !== this.filterDeveloper) return false;
+    if (this.filterEpic && card.epic !== this.filterEpic) return false;
+    if (this.filterText) {
+      const q = this.filterText.toLowerCase();
+      const hay = `${card.title || ''} ${card.cardId || ''} ${card.description || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }
+
+  _swimlaneKeyForCard(card) {
+    if (this.swimlaneMode === 'epic') return card.epic || '(sin epic)';
+    if (this.swimlaneMode === 'developer') return card.developer || '(sin developer)';
+    return null;
+  }
+
   _cardsForColumn(col) {
     return this.cards
       .filter((c) => {
         if (c.boardColId && c.boardColId === col.id) return true;
         return c.status === col.statusKey && !c.boardColId;
       })
+      .filter((c) => this._cardMatchesFilters(c))
       .sort(compareByRank);
+  }
+
+  // Same as _cardsForColumn but ignoring filters — used by the WIP
+  // counters so the column count shows the project reality, not the
+  // filtered subset.
+  _allCardsForColumn(col) {
+    return this.cards
+      .filter((c) => {
+        if (c.boardColId && c.boardColId === col.id) return true;
+        return c.status === col.statusKey && !c.boardColId;
+      })
+      .sort(compareByRank);
+  }
+
+  _uniqueValues(getter) {
+    const set = new Set();
+    for (const c of this.cards) {
+      const v = getter(c);
+      if (v) set.add(v);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }
+
+  _developerLabel(devId) {
+    return entityDirectoryService.getDeveloperDisplayName?.(devId) || devId;
   }
 
   _onDragStart(e, card, col) {
@@ -370,16 +424,82 @@ export class PgBoard extends LitElement {
     const cardsByCol = new Map();
     for (const col of this.columns) cardsByCol.set(col.id, this._cardsForColumn(col));
 
+    const sprints = this._uniqueValues((c) => c.sprint);
+    const developers = this._uniqueValues((c) => c.developer);
+    const epics = this._uniqueValues((c) => c.epic);
+
+    const swimlanes = this.swimlaneMode === 'none'
+      ? [{ key: null, label: '' }]
+      : (() => {
+          const keys = new Set();
+          for (const col of this.columns) {
+            for (const card of cardsByCol.get(col.id) || []) {
+              keys.add(this._swimlaneKeyForCard(card));
+            }
+          }
+          return Array.from(keys).sort((a, b) => String(a).localeCompare(String(b))).map((k) => ({
+            key: k,
+            label: this.swimlaneMode === 'developer' && k && k !== '(sin developer)'
+              ? this._developerLabel(k)
+              : String(k)
+          }));
+        })();
+
     return html`
       <div class="board-header">
         <span class="board-title">Tablero · ${this.projectId}</span>
         <span class="board-status">${this.status || `${this.cards.length} card(s) · ${this.columns.length} columna(s) · enforceWip: ${this.enforceWip ? 'on' : 'off'}`}</span>
       </div>
 
-      <div class="board-columns">
+      <div class="board-filters">
+        <input class="board-filter board-search" type="search" placeholder="Buscar título, ID o descripción..."
+          .value=${this.filterText}
+          @input=${(e) => { this.filterText = e.target.value; }}
+          aria-label="Buscar cards" />
+        <select class="board-filter" .value=${this.filterSprint}
+          @change=${(e) => { this.filterSprint = e.target.value; }}
+          aria-label="Filtrar por sprint">
+          <option value="">Sprint: todos</option>
+          ${sprints.map((s) => html`<option value=${s} ?selected=${this.filterSprint === s}>${s}</option>`)}
+        </select>
+        <select class="board-filter" .value=${this.filterDeveloper}
+          @change=${(e) => { this.filterDeveloper = e.target.value; }}
+          aria-label="Filtrar por developer">
+          <option value="">Developer: todos</option>
+          ${developers.map((d) => html`<option value=${d} ?selected=${this.filterDeveloper === d}>${this._developerLabel(d)}</option>`)}
+        </select>
+        <select class="board-filter" .value=${this.filterEpic}
+          @change=${(e) => { this.filterEpic = e.target.value; }}
+          aria-label="Filtrar por epic">
+          <option value="">Epic: todos</option>
+          ${epics.map((ep) => html`<option value=${ep} ?selected=${this.filterEpic === ep}>${ep}</option>`)}
+        </select>
+        <select class="board-filter" .value=${this.swimlaneMode}
+          @change=${(e) => { this.swimlaneMode = e.target.value; }}
+          aria-label="Modo swimlane">
+          <option value="none" ?selected=${this.swimlaneMode === 'none'}>Sin swimlanes</option>
+          <option value="epic" ?selected=${this.swimlaneMode === 'epic'}>Por epic</option>
+          <option value="developer" ?selected=${this.swimlaneMode === 'developer'}>Por developer</option>
+        </select>
+        ${this.filterText || this.filterSprint || this.filterDeveloper || this.filterEpic || this.swimlaneMode !== 'none'
+          ? html`<button class="board-clear" type="button"
+              @click=${() => { this.filterText = ''; this.filterSprint = ''; this.filterDeveloper = ''; this.filterEpic = ''; this.swimlaneMode = 'none'; }}
+            >Limpiar filtros</button>`
+          : ''}
+      </div>
+
+      ${swimlanes.map((lane) => html`
+        ${lane.key !== null ? html`<div class="swimlane-header">${lane.label || '(sin valor)'}</div>` : ''}
+        <div class="board-columns">
         ${this.columns.map((col) => {
-          const items = cardsByCol.get(col.id) || [];
-          const wipStatus = computeWipStatus(col, items.length);
+          const allItems = cardsByCol.get(col.id) || [];
+          const items = lane.key === null
+            ? allItems
+            : allItems.filter((c) => this._swimlaneKeyForCard(c) === lane.key);
+          // The WIP count always reflects unfiltered reality so the user
+          // doesn't think a column is empty when they're just filtered.
+          const wipCount = this._allCardsForColumn(col).length;
+          const wipStatus = computeWipStatus(col, wipCount);
           const isTarget = this._dropTargetColId === col.id;
           const block = isTarget && this._dragInfo
             ? shouldBlockDrop({
@@ -399,7 +519,7 @@ export class PgBoard extends LitElement {
               <div class="column-header">
                 <span>${col.name}</span>
                 <span class="col-count ${wipStatus}">
-                  ${items.length}${col.wipLimit != null ? ` / ${col.wipLimit}` : ''}
+                  ${wipCount}${col.wipLimit != null ? ` / ${col.wipLimit}` : ''}
                 </span>
               </div>
               <div class="column-body">
@@ -427,9 +547,10 @@ export class PgBoard extends LitElement {
           `;
         })}
       </div>
+      `)}
 
       <div class="board-footer">
-        Drag&amp;drop entre columnas con validación de transición. Tiempo real vía onValue. Phase 4 conectará el detalle de la card al click.
+        Drag&amp;drop entre columnas con validación de transición. Tiempo real vía onValue. Click en una card → detalle editable (Phase 4). Métricas de flujo abajo (Phase 5). Filtros y swimlanes (Phase 6).
       </div>
     `;
   }
