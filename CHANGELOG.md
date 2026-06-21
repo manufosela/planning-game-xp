@@ -5,6 +5,12 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Fixed
+
+- Inject board styles when in light DOM (PLN-BUG-0103) (#217)
+
+## [1.190.0] - 2026-06-21
+
 ### Added
 
 - Phase 6 — filters, swimlanes, search (PLN-TSK-0344) (#216)
