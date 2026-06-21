@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Fixed
 
+- Drop Sprint filter and auto-regenerate empty column config (#218)
+
+## [1.190.1] - 2026-06-21
+
+### Fixed
+
 - Inject board styles when in light DOM (PLN-BUG-0103) (#217)
 
 ## [1.190.0] - 2026-06-21
