@@ -7,6 +7,16 @@ Auto-generated from git commits on each build.
 
 ### Added
 
+- Phase 6 — filters, swimlanes, search (PLN-TSK-0344) (#216)
+- Phase 5 — flow metrics + snapshots (PLN-TSK-0343) (#215)
+- Phase 4 — card detail modal on click (PLN-TSK-0342) (#214)
+- Phase 3 — drag&drop + real-time board (PLN-TSK-0341) (#213)
+- Phase 2 — WIP limits + enforceWip flag (PLN-TSK-0340) (#212)
+
+## [1.189.0] - 2026-06-20
+
+### Added
+
 - Phase 1 — per-project column config (PLN-TSK-0339) (#211)
 - SuperAdmin Users tab with permissions matrix (PLN-TSK-0092) (#210)
 - "Resumen de trabajo" cross-project analytics tab (PLN-TSK-0056) (#209)
