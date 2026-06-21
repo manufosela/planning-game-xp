@@ -1,5 +1,24 @@
-import { LitElement, html } from 'https://cdn.jsdelivr.net/npm/lit@3.1.0/+esm';
+import { LitElement, html, unsafeCSS } from 'https://cdn.jsdelivr.net/npm/lit@3.1.0/+esm';
 import { pgBoardStyles } from './pg-board-styles.js';
+
+// pgBoardStyles is a Lit CSSResult; .cssText is the underlying string.
+// We render it inside an inline <style> because <pg-board> uses light DOM
+// (per the repo convention) and Lit's `static styles` only applies in
+// shadow DOM.
+const PG_BOARD_CSS_TEXT = pgBoardStyles.cssText || String(pgBoardStyles);
+const PG_BOARD_STYLE_ID = 'pg-board-light-dom-styles';
+
+function ensurePgBoardStyles() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById(PG_BOARD_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = PG_BOARD_STYLE_ID;
+  // Strip the :host selectors that don't apply outside shadow DOM.
+  style.textContent = PG_BOARD_CSS_TEXT.replace(/:host\s*{[^}]*}/g, '');
+  document.head.appendChild(style);
+}
+// no-op reference so bundlers don't drop the unsafeCSS import
+void unsafeCSS;
 import { database, ref, onValue } from '../../firebase-config.js';
 import {
   loadColumnsForProject,
@@ -117,6 +136,7 @@ export class PgBoard extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    ensurePgBoardStyles();
     document.addEventListener('project-changed', this._projectChangedHandler);
     this._load();
   }
