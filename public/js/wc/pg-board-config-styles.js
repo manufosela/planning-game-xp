@@ -154,4 +154,34 @@ export const pgBoardConfigStyles = css`
     color: var(--color-warning, #d97706);
     font-weight: 600;
   }
+
+  .enforce-wip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary, #475569);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .enforce-wip input[type="checkbox"] {
+    accent-color: var(--brand-primary, #4a9eff);
+  }
+
+  .wip-pill {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-secondary, #f1f5f9);
+    color: var(--text-secondary, #475569);
+  }
+  .wip-pill.wip-none   { display: none; }
+  .wip-pill.wip-under  { background: rgba(74, 158, 255, 0.15); color: #1d4ed8; }
+  .wip-pill.wip-at-limit   { background: rgba(217, 119, 6, 0.18); color: #b45309; }
+  .wip-pill.wip-over-limit { background: rgba(220, 38, 38, 0.18); color: #b91c1c; }
 `;

@@ -136,6 +136,85 @@ export function findDuplicateStatusKeys(columns) {
 }
 
 /**
+ * Card flags considered "expedite" (urgent items that bypass WIP enforcement).
+ * Matches the spec at docs/prompts/kanban-real-boards.md.
+ *
+ * @param {Object} card
+ * @returns {boolean}
+ */
+export function isExpediteCard(card) {
+  if (!card) return false;
+  if (card.expedite === true) return true;
+  if (card.expedited === true) return true;
+  if (typeof card.priorityClass === 'string' && /expedite|urgent/i.test(card.priorityClass)) return true;
+  if (typeof card.priority === 'string' && /expedite|urgent|hotfix/i.test(card.priority)) return true;
+  return false;
+}
+
+/**
+ * WIP status for a column given the current card count.
+ *  - `none`      → column has no limit configured
+ *  - `under`     → count below the limit
+ *  - `at-limit`  → count equals the limit
+ *  - `over-limit`→ count strictly greater than the limit
+ *
+ * @param {{wipLimit: (number|null)}} column
+ * @param {number} count
+ * @returns {'none'|'under'|'at-limit'|'over-limit'}
+ */
+export function computeWipStatus(column, count) {
+  const limit = column?.wipLimit;
+  if (limit === null || limit === undefined) return 'none';
+  if (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 0) return 'none';
+  const n = Number(count) || 0;
+  if (n < limit) return 'under';
+  if (n === limit) return 'at-limit';
+  return 'over-limit';
+}
+
+/**
+ * Decide whether a card drop on a column must be blocked.
+ *
+ * Honors the project-level `enforceWip` flag and bypasses the block
+ * when the card is marked expedite. A card already in the column does
+ * NOT count for its own move when `card.currentColumnId` matches.
+ *
+ * @param {Object} params
+ * @param {Object} params.column
+ * @param {number} params.currentCount - Cards currently in the column (before move).
+ * @param {Object} params.card - Card being dropped.
+ * @param {boolean} [params.enforceWip=false]
+ * @returns {{ blocked: boolean, reason: string|null }}
+ */
+export function shouldBlockDrop({ column, currentCount, card, enforceWip = false }) {
+  if (!enforceWip) return { blocked: false, reason: null };
+  const status = computeWipStatus(column, Number(currentCount) || 0);
+  if (status !== 'at-limit' && status !== 'over-limit') return { blocked: false, reason: null };
+  if (isExpediteCard(card)) {
+    return { blocked: false, reason: 'expedite-bypass' };
+  }
+  return {
+    blocked: true,
+    reason: `Columna "${column?.name || column?.id || 'destino'}" al límite WIP (${column?.wipLimit}). enforceWip activo.`
+  };
+}
+
+/**
+ * Count cards already bucketed by column id. Convenience wrapper around
+ * bucketCardsByColumn for UI consumers that only need the counts.
+ *
+ * @param {Object[]} columns
+ * @param {Object[]} cards
+ * @returns {Object<string, number>}
+ */
+export function countCardsPerColumn(columns, cards) {
+  const { byColumn } = bucketCardsByColumn(columns, cards);
+  const counts = {};
+  for (const [colId, list] of Object.entries(byColumn)) counts[colId] = list.length;
+  return counts;
+}
+
+/**
  * Bucket a list of cards by column. Cards whose status maps to a column's
  * statusKey land there. Cards whose status doesn't match any column land
  * in the returned `unbucketed` array.

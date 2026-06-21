@@ -5,9 +5,17 @@ import {
   saveColumns,
   upsertColumn,
   removeColumn,
-  moveColumnAndPersist
+  moveColumnAndPersist,
+  getEnforceWip,
+  setEnforceWip
 } from '../services/board-config-service.js';
-import { findDuplicateStatusKeys, slugifyStatus, DEFAULT_TASK_STATUSES, generateDefaultColumns } from '/js/utils/board-columns.js';
+import {
+  findDuplicateStatusKeys,
+  slugifyStatus,
+  DEFAULT_TASK_STATUSES,
+  generateDefaultColumns,
+  computeWipStatus
+} from '/js/utils/board-columns.js';
 import { modalService } from '/js/services/modal-service.js';
 
 async function confirmAction(message, { title = 'Confirmar', confirmText = 'Sí', cancelText = 'Cancelar' } = {}) {
@@ -32,6 +40,7 @@ export class PgBoardConfig extends LitElement {
     return {
       projectId: { type: String, attribute: 'project-id', reflect: true },
       columns: { state: true },
+      enforceWip: { state: true },
       status: { state: true },
       loadError: { state: true }
     };
@@ -45,6 +54,7 @@ export class PgBoardConfig extends LitElement {
     super();
     this.projectId = window.currentProjectId || document.body?.dataset?.projectId || '';
     this.columns = [];
+    this.enforceWip = false;
     this.status = '';
     this.loadError = '';
     this._projectChangedHandler = (e) => {
@@ -75,13 +85,31 @@ export class PgBoardConfig extends LitElement {
     this.status = 'Cargando columnas...';
     this.loadError = '';
     try {
-      this.columns = await loadColumnsForProject(this.projectId);
+      const [columns, enforceWip] = await Promise.all([
+        loadColumnsForProject(this.projectId),
+        getEnforceWip(this.projectId)
+      ]);
+      this.columns = columns;
+      this.enforceWip = enforceWip;
       this.status = '';
     } catch (err) {
       console.error('[PgBoardConfig] load failed', err);
       this.loadError = err?.message || 'Error cargando columnas';
       this.columns = [];
+      this.enforceWip = false;
       this.status = '';
+    }
+  }
+
+  async _onEnforceWipToggle(e) {
+    const next = Boolean(e.target.checked);
+    try {
+      await setEnforceWip(this.projectId, next);
+      this.enforceWip = next;
+      this._flashStatus(next ? 'enforceWip activado' : 'enforceWip desactivado');
+    } catch (err) {
+      console.error('[PgBoardConfig] enforceWip toggle failed', err);
+      this._flashStatus('Error guardando enforceWip');
     }
   }
 
@@ -195,6 +223,14 @@ export class PgBoardConfig extends LitElement {
       <div class="panel">
         <div class="panel-toolbar">
           <span class="panel-status">${this.status || `${sorted.length} columna(s)`}</span>
+          <label class="enforce-wip">
+            <input
+              type="checkbox"
+              .checked=${this.enforceWip}
+              @change=${this._onEnforceWipToggle}
+            />
+            <span>enforce WIP</span>
+          </label>
           <div>
             <button class="row-btn" type="button" @click=${this._onResetDefaults}>↺ Defaults</button>
             <button class="add-btn" type="button" @click=${this._onAdd}>+ Añadir columna</button>
@@ -239,6 +275,11 @@ export class PgBoardConfig extends LitElement {
                       <input class="col-input short" type="number" min="0" placeholder="—"
                         .value=${col.wipLimit ?? ''}
                         @change=${(e) => this._onFieldChange(col, 'wipLimit', e.target.value)} />
+                      ${col.wipLimit != null ? html`
+                        <span class="wip-pill wip-${computeWipStatus(col, 0)}" title="WIP status preview">
+                          ${col.wipLimit}
+                        </span>
+                      ` : ''}
                     </td>
                     <td class="col-actions">
                       <button class="row-btn" type="button" ?disabled=${idx === 0} @click=${() => this._onMove(col, -1)} title="Subir">▲</button>
