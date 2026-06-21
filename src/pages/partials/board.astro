@@ -1,10 +1,21 @@
 <div data-main>
   <section style="padding: 1rem;">
+    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom: 0.75rem;">
+      <h1 style="margin:0; font-size:1rem; font-weight:600;">Tablero del proyecto</h1>
+      <label style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.8rem; color: var(--text-muted, #64748b);">
+        <input type="checkbox" id="toggleMetrics" />
+        <span>Mostrar métricas de flujo</span>
+      </label>
+    </div>
     <pg-board id="pgBoard"></pg-board>
+    <section id="metricsSection" style="display:none; margin-top: 1.25rem; padding: 0.5rem 0;">
+      <pg-flow-metrics id="pgFlowMetrics"></pg-flow-metrics>
+    </section>
   </section>
 
   <script type="module">
     import '/js/wc/PgBoard.js';
+    import '/js/wc/PgFlowMetrics.js';
 
     function syncProjectIdToBoard() {
       const url = new URL(window.location.href);
@@ -13,12 +24,26 @@
         || document.body?.dataset?.projectId
         || '';
       const board = document.getElementById('pgBoard');
-      if (!board) return;
-      if (projectId) board.projectId = projectId;
+      const metrics = document.getElementById('pgFlowMetrics');
+      if (board && projectId) board.projectId = projectId;
+      if (metrics && projectId) metrics.projectId = projectId;
     }
 
-    document.addEventListener('astro:page-load', syncProjectIdToBoard);
+    function wireMetricsToggle() {
+      const toggle = document.getElementById('toggleMetrics');
+      const section = document.getElementById('metricsSection');
+      if (!toggle || !section) return;
+      toggle.addEventListener('change', () => {
+        section.style.display = toggle.checked ? 'block' : 'none';
+      });
+    }
+
+    document.addEventListener('astro:page-load', () => {
+      syncProjectIdToBoard();
+      wireMetricsToggle();
+    });
     document.addEventListener('project-changed', syncProjectIdToBoard);
     syncProjectIdToBoard();
+    wireMetricsToggle();
   </script>
 </div>

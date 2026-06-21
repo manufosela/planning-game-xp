@@ -7,7 +7,7 @@
  * become too close to fit a new one, a project-wide respread is required.
  */
 
-import { database, ref, update, runTransaction } from '../../firebase-config.js';
+import { database, ref, update, runTransaction, push, set } from '../../firebase-config.js';
 
 export const RANK_STEP = 1000;
 
@@ -128,6 +128,39 @@ export async function persistColumnRespread({ projectId, cardType, orderedCards 
   });
   if (Object.keys(updates).length > 0) await update(ref(database), updates);
   return newRanks;
+}
+
+/**
+ * Write a single board snapshot under
+ * /projects/{projectId}/board/snapshots/{pushKey}. Skips redundant writes
+ * when the previous snapshot has the same `perColumn` map and `done`
+ * value.
+ *
+ * @param {Object} params
+ * @param {string} params.projectId
+ * @param {Object<string, number>} params.perColumn
+ * @param {number} params.done
+ * @param {Object} [params.lastSnapshot] - Optional previous snapshot used to
+ *   short-circuit redundant writes.
+ * @returns {Promise<{ written: boolean, key?: string, snapshot?: Object }>}
+ */
+export async function writeBoardSnapshot({ projectId, perColumn, done, lastSnapshot }) {
+  if (!projectId) throw new Error('projectId is required');
+  const safePerColumn = { ...(perColumn || {}) };
+  const safeDone = Number(done) || 0;
+  if (lastSnapshot) {
+    const prevPerColumn = lastSnapshot.perColumn || {};
+    const sameDone = (Number(lastSnapshot.done) || 0) === safeDone;
+    const sameKeys = Object.keys(prevPerColumn).length === Object.keys(safePerColumn).length;
+    if (sameDone && sameKeys && Object.keys(safePerColumn).every((k) => prevPerColumn[k] === safePerColumn[k])) {
+      return { written: false };
+    }
+  }
+  const snapshot = { at: new Date().toISOString(), perColumn: safePerColumn, done: safeDone };
+  const snapsRef = ref(database, `/projects/${projectId}/board/snapshots`);
+  const childRef = push(snapsRef);
+  await set(childRef, snapshot);
+  return { written: true, key: childRef.key, snapshot };
 }
 
 // Re-export for testability without requiring Firebase in tests.

@@ -10,6 +10,7 @@ import {
   compareByRank,
   persistCardMove,
   persistColumnRespread,
+  writeBoardSnapshot,
   RANK_STEP
 } from '../services/board-move-service.js';
 import {
@@ -324,9 +325,37 @@ export class PgBoard extends LitElement {
         newRank
       });
       notify(`"${card.title || card.cardId || 'Card'}" → ${targetCol.name}`, 'success');
+      // Phase 5: snapshot the board state after each persisted move so
+      // <pg-flow-metrics> has data to chart. Counting is deferred to the
+      // next onValue tick so we sample post-move.
+      this._scheduleSnapshot();
     } catch (err) {
       console.error('[PgBoard] persistCardMove failed', err);
       notify(`No se pudo mover la card: ${err?.message || 'error desconocido'}`, 'error');
+    }
+  }
+
+  _scheduleSnapshot() {
+    if (this._snapshotTimer) clearTimeout(this._snapshotTimer);
+    this._snapshotTimer = setTimeout(() => this._snapshotCurrentState(), 400);
+  }
+
+  async _snapshotCurrentState() {
+    if (!this.projectId || !this.columns?.length) return;
+    const perColumn = {};
+    for (const col of this.columns) perColumn[col.id] = this._cardsForColumn(col).length;
+    const done = this.cards.filter((c) => c.status === 'Done&Validated').length;
+    try {
+      await writeBoardSnapshot({
+        projectId: this.projectId,
+        perColumn,
+        done,
+        lastSnapshot: this._lastSnapshot
+      }).then((result) => {
+        if (result.written) this._lastSnapshot = result.snapshot;
+      });
+    } catch (err) {
+      console.warn('[PgBoard] snapshot failed', err);
     }
   }
 
