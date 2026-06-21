@@ -7,7 +7,11 @@ import {
   normalizeColumns,
   moveColumn,
   findDuplicateStatusKeys,
-  bucketCardsByColumn
+  bucketCardsByColumn,
+  countCardsPerColumn,
+  computeWipStatus,
+  isExpediteCard,
+  shouldBlockDrop
 } from '../../shared/board-columns.js';
 
 describe('slugifyStatus', () => {
@@ -160,5 +164,94 @@ describe('bucketCardsByColumn', () => {
     const result = bucketCardsByColumn(cols, []);
     expect(Object.values(result.byColumn).every((arr) => arr.length === 0)).toBe(true);
     expect(result.unbucketed).toEqual([]);
+  });
+});
+
+describe('countCardsPerColumn', () => {
+  const cols = generateDefaultColumns(['To Do', 'In Progress']);
+
+  it('returns 0 for empty input', () => {
+    expect(countCardsPerColumn(cols, [])).toEqual({ 'to-do': 0, 'in-progress': 0 });
+  });
+
+  it('counts only non-deleted matching cards', () => {
+    const cards = [
+      { status: 'To Do' },
+      { status: 'In Progress' },
+      { status: 'In Progress' },
+      { status: 'In Progress', deletedAt: 'now' },
+      { status: 'Done' }
+    ];
+    expect(countCardsPerColumn(cols, cards)).toEqual({ 'to-do': 1, 'in-progress': 2 });
+  });
+});
+
+describe('isExpediteCard', () => {
+  it('detects boolean expedite flag', () => {
+    expect(isExpediteCard({ expedite: true })).toBe(true);
+    expect(isExpediteCard({ expedited: true })).toBe(true);
+  });
+  it('detects expedite via priorityClass / priority text', () => {
+    expect(isExpediteCard({ priorityClass: 'Expedite' })).toBe(true);
+    expect(isExpediteCard({ priority: 'URGENT-hotfix' })).toBe(true);
+  });
+  it('returns false otherwise', () => {
+    expect(isExpediteCard({})).toBe(false);
+    expect(isExpediteCard(null)).toBe(false);
+    expect(isExpediteCard({ priority: 'normal' })).toBe(false);
+  });
+});
+
+describe('computeWipStatus', () => {
+  it('returns "none" when limit is null/undefined/invalid', () => {
+    expect(computeWipStatus({ wipLimit: null }, 5)).toBe('none');
+    expect(computeWipStatus({}, 5)).toBe('none');
+    expect(computeWipStatus({ wipLimit: -1 }, 5)).toBe('none');
+  });
+  it('compares against the limit', () => {
+    expect(computeWipStatus({ wipLimit: 3 }, 0)).toBe('under');
+    expect(computeWipStatus({ wipLimit: 3 }, 2)).toBe('under');
+    expect(computeWipStatus({ wipLimit: 3 }, 3)).toBe('at-limit');
+    expect(computeWipStatus({ wipLimit: 3 }, 4)).toBe('over-limit');
+  });
+  it('treats wipLimit 0 as at-limit at count 0', () => {
+    expect(computeWipStatus({ wipLimit: 0 }, 0)).toBe('at-limit');
+    expect(computeWipStatus({ wipLimit: 0 }, 1)).toBe('over-limit');
+  });
+});
+
+describe('shouldBlockDrop', () => {
+  it('never blocks when enforceWip=false', () => {
+    expect(shouldBlockDrop({
+      column: { wipLimit: 1 }, currentCount: 5, card: {}, enforceWip: false
+    })).toEqual({ blocked: false, reason: null });
+  });
+  it('never blocks when column has no limit', () => {
+    expect(shouldBlockDrop({
+      column: { wipLimit: null }, currentCount: 99, card: {}, enforceWip: true
+    })).toEqual({ blocked: false, reason: null });
+  });
+  it('blocks at-limit when enforceWip=true and non-expedite', () => {
+    const result = shouldBlockDrop({
+      column: { wipLimit: 3, name: 'In Progress' }, currentCount: 3, card: {}, enforceWip: true
+    });
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toContain('In Progress');
+    expect(result.reason).toContain('3');
+  });
+  it('blocks over-limit when enforceWip=true and non-expedite', () => {
+    expect(shouldBlockDrop({
+      column: { wipLimit: 3 }, currentCount: 5, card: {}, enforceWip: true
+    }).blocked).toBe(true);
+  });
+  it('lets expedite cards bypass the block', () => {
+    expect(shouldBlockDrop({
+      column: { wipLimit: 3 }, currentCount: 5, card: { expedite: true }, enforceWip: true
+    })).toEqual({ blocked: false, reason: 'expedite-bypass' });
+  });
+  it('does not block when under limit', () => {
+    expect(shouldBlockDrop({
+      column: { wipLimit: 3 }, currentCount: 1, card: {}, enforceWip: true
+    })).toEqual({ blocked: false, reason: null });
   });
 });

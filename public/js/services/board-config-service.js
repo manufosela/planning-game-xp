@@ -19,6 +19,35 @@ import {
 } from '/js/utils/board-columns.js';
 
 const COLUMNS_PATH = (projectId) => `/projects/${projectId}/board/columns`;
+const ENFORCE_WIP_PATH = (projectId) => `/projects/${projectId}/board/enforceWip`;
+
+/**
+ * Read the project-level enforceWip flag.
+ * @param {string} projectId
+ * @returns {Promise<boolean>}
+ */
+export async function getEnforceWip(projectId) {
+  if (!projectId) return false;
+  try {
+    const snap = await get(ref(database, ENFORCE_WIP_PATH(projectId)));
+    return Boolean(snap.val());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Write the project-level enforceWip flag.
+ * @param {string} projectId
+ * @param {boolean} enabled
+ * @returns {Promise<boolean>}
+ */
+export async function setEnforceWip(projectId, enabled) {
+  if (!projectId) throw new Error('projectId is required');
+  const value = Boolean(enabled);
+  await set(ref(database, ENFORCE_WIP_PATH(projectId)), value);
+  return value;
+}
 
 /**
  * Load the column configuration for a project. If none exists, generate
