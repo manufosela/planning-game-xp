@@ -18,6 +18,9 @@ import {
   isExpediteCard,
   normalizeColumns
 } from '/js/utils/board-columns.js';
+import { showExpandedCardInModal } from '../utils/common-functions.js';
+import { FirebaseService } from '../services/firebase-service.js';
+import { entityDirectoryService } from '../services/entity-directory-service.js';
 
 /**
  * <pg-board> — Phase 3 of the real Kanban boards epic.
@@ -168,9 +171,65 @@ export class PgBoard extends LitElement {
 
   _onDragStart(e, card, col) {
     this._dragInfo = { card, fromColId: col.id, fromStatus: card.status };
+    this._wasDragged = true;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', card.firebaseId);
     e.target.classList.add('dragging');
+  }
+
+  async _onCardClick(e, card) {
+    // The browser does not fire `click` after a successful drag, but we
+    // still defend against a stale dragstart that ended outside any drop
+    // target.
+    if (this._wasDragged) {
+      this._wasDragged = false;
+      return;
+    }
+    await this._openCardDetail(card);
+  }
+
+  async _openCardDetail(card) {
+    try {
+      await entityDirectoryService.init?.();
+      const [statusList, projectSprintList] = await Promise.all([
+        FirebaseService.getStatusList('task-card').catch(() => []),
+        FirebaseService.getSprintList(this.projectId).catch(() => ({}))
+      ]);
+      const developersList = (entityDirectoryService.getActiveDevelopers?.() || []).map((d) => ({
+        id: d.id, email: d.email, name: d.name
+      }));
+      const statusArray = Array.isArray(statusList) ? statusList : Object.keys(statusList || {});
+
+      // Load every persisted field for the card; the in-memory copy only
+      // carries the board-projected fields.
+      const path = `/cards/${this.projectId}/TASKS_${this.projectId}`;
+      const allCards = await FirebaseService.getCards(path);
+      const fullCard = allCards?.[card.firebaseId] || card;
+
+      const taskCardEl = document.createElement('task-card');
+      Object.assign(taskCardEl, {
+        ...fullCard,
+        firebaseId: card.firebaseId,
+        id: card.firebaseId,
+        projectId: this.projectId,
+        cardType: 'tasks',
+        section: 'tasks',
+        group: 'tasks',
+        expanded: true,
+        isEditable: true,
+        statusList: statusArray,
+        developerList: developersList,
+        developers: developersList,
+        globalSprintList: projectSprintList,
+        userEmail: document.body?.dataset?.userEmail || '',
+        _skipClone: true
+      });
+
+      showExpandedCardInModal(taskCardEl);
+    } catch (err) {
+      console.error('[PgBoard] open card detail failed', err);
+      notify(`No se pudo abrir el detalle: ${err?.message || 'error desconocido'}`, 'error');
+    }
   }
 
   _onDragEnd(e) {
@@ -321,6 +380,7 @@ export class PgBoard extends LitElement {
                     <div class="card ${isExpediteCard(card) ? 'expedite' : ''}"
                          draggable="true"
                          data-card-id=${card.firebaseId}
+                         @click=${(e) => this._onCardClick(e, card)}
                          @dragstart=${(e) => this._onDragStart(e, card, col)}
                          @dragend=${(e) => this._onDragEnd(e)}>
                       <div class="card-title" title=${card.title || ''}>${card.title || '(sin título)'}</div>
