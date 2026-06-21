@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Fixed
 
+- Explain and unblock the empty board state (PLN-BUG-0104) (#219)
+
+## [1.190.2] - 2026-06-21
+
+### Fixed
+
 - Drop Sprint filter and auto-regenerate empty column config (#218)
 
 ## [1.190.1] - 2026-06-21
