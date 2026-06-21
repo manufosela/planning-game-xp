@@ -1,0 +1,24 @@
+<div data-main>
+  <section style="padding: 1rem;">
+    <pg-board id="pgBoard"></pg-board>
+  </section>
+
+  <script type="module">
+    import '/js/wc/PgBoard.js';
+
+    function syncProjectIdToBoard() {
+      const url = new URL(window.location.href);
+      const projectId = url.searchParams.get('projectId')
+        || window.currentProjectId
+        || document.body?.dataset?.projectId
+        || '';
+      const board = document.getElementById('pgBoard');
+      if (!board) return;
+      if (projectId) board.projectId = projectId;
+    }
+
+    document.addEventListener('astro:page-load', syncProjectIdToBoard);
+    document.addEventListener('project-changed', syncProjectIdToBoard);
+    syncProjectIdToBoard();
+  </script>
+</div>

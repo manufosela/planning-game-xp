@@ -9,7 +9,7 @@
  * is the thin Firebase wrapper around it.
  */
 
-import { database, ref, get, set, update, remove } from '/firebase-config.js';
+import { database, ref, get, set, update, remove } from '../../firebase-config.js';
 import {
   DEFAULT_TASK_STATUSES,
   buildColumn,

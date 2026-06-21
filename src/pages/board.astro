@@ -1,0 +1,20 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { appShellRoutes, resolveAppShellPartial } from '../lib/app-shell-routes.js';
+
+const shellRoute = Astro.url.pathname;
+const shellPartial = resolveAppShellPartial(shellRoute);
+---
+
+<Layout
+  title="Board"
+  shellRoute={shellRoute}
+  shellPartial={shellPartial}
+  shellRoutes={appShellRoutes}
+>
+  <noscript>
+    <div style="padding: 1.5rem;">
+      Esta página necesita JavaScript para cargar el tablero.
+    </div>
+  </noscript>
+</Layout>
