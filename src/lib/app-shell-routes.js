@@ -7,7 +7,8 @@ export const appShellRoutes = {
   '/sprintview/': '/partials/sprintview',
   '/cleanview/': '/partials/cleanview',
   '/development/': '/partials/development',
-  '/global-config/': '/partials/global-config'
+  '/global-config/': '/partials/global-config',
+  '/board/': '/partials/board'
 };
 
 const normalizeRoute = (value) => {
