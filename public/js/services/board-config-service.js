@@ -61,9 +61,12 @@ export async function loadColumnsForProject(projectId) {
   if (!projectId) throw new Error('projectId is required');
   const snap = await get(ref(database, COLUMNS_PATH(projectId)));
   if (snap.exists()) {
-    return normalizeColumns(snap.val());
+    const columns = normalizeColumns(snap.val());
+    if (columns.length > 0) return columns;
+    // Snapshot existed but every entry was malformed/invalid → regenerate
+    // the defaults so the board is usable instead of a silent zero-cols
+    // state.
   }
-  // First load → generate + persist defaults
   const defaults = generateDefaultColumns(DEFAULT_TASK_STATUSES);
   await saveColumns(projectId, defaults);
   return defaults;

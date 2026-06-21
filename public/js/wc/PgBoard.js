@@ -92,7 +92,6 @@ export class PgBoard extends LitElement {
       _dragInfo: { state: true },
       _dropTargetColId: { state: true },
       filterText: { state: true },
-      filterSprint: { state: true },
       filterDeveloper: { state: true },
       filterEpic: { state: true },
       swimlaneMode: { state: true }
@@ -120,7 +119,6 @@ export class PgBoard extends LitElement {
     this._dragInfo = null;
     this._dropTargetColId = '';
     this.filterText = '';
-    this.filterSprint = '';
     this.filterDeveloper = '';
     this.filterEpic = '';
     this.swimlaneMode = 'none';
@@ -192,7 +190,9 @@ export class PgBoard extends LitElement {
   }
 
   _cardMatchesFilters(card) {
-    if (this.filterSprint && card.sprint !== this.filterSprint) return false;
+    // Kanban is a flat backlog. We intentionally do NOT filter by sprint
+    // here (sprints are a 1-day measurement unit in this PG, see
+    // shared/sprint-naming.js); use developer / epic / text instead.
     if (this.filterDeveloper && card.developer !== this.filterDeveloper) return false;
     if (this.filterEpic && card.epic !== this.filterEpic) return false;
     if (this.filterText) {
@@ -444,7 +444,6 @@ export class PgBoard extends LitElement {
     const cardsByCol = new Map();
     for (const col of this.columns) cardsByCol.set(col.id, this._cardsForColumn(col));
 
-    const sprints = this._uniqueValues((c) => c.sprint);
     const developers = this._uniqueValues((c) => c.developer);
     const epics = this._uniqueValues((c) => c.epic);
 
@@ -476,12 +475,6 @@ export class PgBoard extends LitElement {
           .value=${this.filterText}
           @input=${(e) => { this.filterText = e.target.value; }}
           aria-label="Buscar cards" />
-        <select class="board-filter" .value=${this.filterSprint}
-          @change=${(e) => { this.filterSprint = e.target.value; }}
-          aria-label="Filtrar por sprint">
-          <option value="">Sprint: todos</option>
-          ${sprints.map((s) => html`<option value=${s} ?selected=${this.filterSprint === s}>${s}</option>`)}
-        </select>
         <select class="board-filter" .value=${this.filterDeveloper}
           @change=${(e) => { this.filterDeveloper = e.target.value; }}
           aria-label="Filtrar por developer">
@@ -501,9 +494,9 @@ export class PgBoard extends LitElement {
           <option value="epic" ?selected=${this.swimlaneMode === 'epic'}>Por epic</option>
           <option value="developer" ?selected=${this.swimlaneMode === 'developer'}>Por developer</option>
         </select>
-        ${this.filterText || this.filterSprint || this.filterDeveloper || this.filterEpic || this.swimlaneMode !== 'none'
+        ${this.filterText || this.filterDeveloper || this.filterEpic || this.swimlaneMode !== 'none'
           ? html`<button class="board-clear" type="button"
-              @click=${() => { this.filterText = ''; this.filterSprint = ''; this.filterDeveloper = ''; this.filterEpic = ''; this.swimlaneMode = 'none'; }}
+              @click=${() => { this.filterText = ''; this.filterDeveloper = ''; this.filterEpic = ''; this.swimlaneMode = 'none'; }}
             >Limpiar filtros</button>`
           : ''}
       </div>
