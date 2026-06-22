@@ -317,8 +317,29 @@ export class PgBoard extends LitElement {
       const fullCard = allCards?.[card.firebaseId] || card;
 
       const taskCardEl = document.createElement('task-card');
+
+      // TaskCard exposes a few derived getters (priority is computed
+      // from businessPoints/devPoints) and reflected properties that
+      // don't tolerate a blind spread of the persisted card. Assign
+      // only the fields TaskCard actually drives from props.
+      const SAFE_FIELDS = [
+        'cardId', 'title', 'description', 'descriptionStructured',
+        'acceptanceCriteria', 'acceptanceCriteriaStructured',
+        'status', 'developer', 'coDeveloper', 'codeveloper', 'validator', 'coValidator',
+        'epic', 'sprint', 'devPoints', 'businessPoints', 'realDevPoints', 'realBusinessPoints',
+        'startDate', 'endDate', 'year', 'spike', 'expedited',
+        'blockedByBusiness', 'blockedByDevelopment',
+        'bbbWhy', 'bbbWho', 'bbdWhy', 'bbdWho',
+        'notes', 'attachment', 'commits',
+        'reopenCount', 'reopenCycles',
+        'createdBy', 'createdAt', 'updatedAt'
+      ];
+      for (const key of SAFE_FIELDS) {
+        if (fullCard[key] !== undefined) {
+          try { taskCardEl[key] = fullCard[key]; } catch { /* getter-only prop */ }
+        }
+      }
       Object.assign(taskCardEl, {
-        ...fullCard,
         firebaseId: card.firebaseId,
         id: card.firebaseId,
         projectId: this.projectId,
