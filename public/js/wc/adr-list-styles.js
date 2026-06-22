@@ -111,21 +111,24 @@ export const AdrListStyles = css`
     color: var(--text-secondary, #666);
   }
 
-  .adr-stat.proposed {
-    background: #fef3c7;
-  }
+  /* Status pills always pair light backgrounds with dark literal text
+     so they remain legible in dark mode (text-primary tokens turn light
+     there). Same palette as the AdrCard status badge. */
+  .adr-stat.proposed   { background: #fef3c7; }
+  .adr-stat.proposed   .adr-stat-count,
+  .adr-stat.proposed   .adr-stat-label { color: #92400e; }
 
-  .adr-stat.accepted {
-    background: #d1fae5;
-  }
+  .adr-stat.accepted   { background: #d1fae5; }
+  .adr-stat.accepted   .adr-stat-count,
+  .adr-stat.accepted   .adr-stat-label { color: #065f46; }
 
-  .adr-stat.deprecated {
-    background: #fee2e2;
-  }
+  .adr-stat.deprecated { background: #fee2e2; }
+  .adr-stat.deprecated .adr-stat-count,
+  .adr-stat.deprecated .adr-stat-label { color: #991b1b; }
 
-  .adr-stat.superseded {
-    background: #e5e7eb;
-  }
+  .adr-stat.superseded { background: #e5e7eb; }
+  .adr-stat.superseded .adr-stat-count,
+  .adr-stat.superseded .adr-stat-label { color: #4b5563; }
 
   .loading-indicator {
     display: flex;
