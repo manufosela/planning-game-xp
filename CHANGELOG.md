@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Fixed
 
+- Use explicit field list when hydrating TaskCard (PLN-BUG-0105) (#220)
+
+## [1.190.3] - 2026-06-21
+
+### Fixed
+
 - Explain and unblock the empty board state (PLN-BUG-0104) (#219)
 
 ## [1.190.2] - 2026-06-21
