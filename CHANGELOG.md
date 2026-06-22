@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Fixed
 
+- Pin status-pill text to literal dark colors (PLN-BUG-0106 follow-up) (#222)
+
+## [1.190.5] - 2026-06-22
+
+### Fixed
+
 - Drop the undefined --surface-* tokens (PLN-BUG-0106) (#221)
 
 ## [1.190.4] - 2026-06-22
