@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Fixed
 
+- URL projectId wins over last-used localStorage (PLN-BUG-0108) (#223)
+
+## [1.190.6] - 2026-06-22
+
+### Fixed
+
 - Pin status-pill text to literal dark colors (PLN-BUG-0106 follow-up) (#222)
 
 ## [1.190.5] - 2026-06-22
