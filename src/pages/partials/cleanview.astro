@@ -456,32 +456,31 @@
       projectSelector.append(opt);
     });
 
-    // Restore or default selection
-    if (currentProject && projectNames.includes(currentProject)) {
-      projectSelector.value = currentProject;
-    } else {
-      currentProject = projectNames[0];
-      projectSelector.value = currentProject;
-      localStorage.setItem('cleanview-project', currentProject);
-    }
-
-    // Make sure the URL reflects the initial selection so MenuNav can
-    // propagate ?projectId= when the user navigates to another page.
-    syncProjectToUrl(currentProject);
-
-    loadProjectData();
-
-    // Handle deep link: ?projectId=X&cardId=Y
+    // Resolve initial project in priority order: URL ?projectId= (the
+    // value MenuNav propagates from other pages) wins over the last-used
+    // value in localStorage, which in turn wins over the first project
+    // in the list. PLN-BUG-0108: cleanview used to overwrite the URL
+    // with its localStorage value, which broke the propagation back to
+    // /adminproject.
     const urlParams = new URLSearchParams(window.location.search);
     const deepLinkProjectId = urlParams.get('projectId');
     const deepLinkCardId = urlParams.get('cardId');
 
     if (deepLinkProjectId && projectNames.includes(deepLinkProjectId)) {
       currentProject = deepLinkProjectId;
-      projectSelector.value = deepLinkProjectId;
-      localStorage.setItem('cleanview-project', deepLinkProjectId);
-      loadProjectData();
+    } else if (currentProject && projectNames.includes(currentProject)) {
+      // localStorage value still valid for this user
+    } else {
+      currentProject = projectNames[0];
     }
+    projectSelector.value = currentProject;
+    localStorage.setItem('cleanview-project', currentProject);
+
+    // Make sure the URL reflects the resolved selection so MenuNav can
+    // propagate ?projectId= when the user navigates to another page.
+    syncProjectToUrl(currentProject);
+
+    loadProjectData();
 
     if (deepLinkCardId) {
       // Wait for data to load, then open the card
