@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Fixed
 
+- Drop the undefined --surface-* tokens (PLN-BUG-0106) (#221)
+
+## [1.190.4] - 2026-06-22
+
+### Fixed
+
 - Use explicit field list when hydrating TaskCard (PLN-BUG-0105) (#220)
 
 ## [1.190.3] - 2026-06-21
