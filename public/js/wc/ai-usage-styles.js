@@ -36,14 +36,14 @@ export const AiUsageStyles = css`
   }
 
   .ai-usage-row:hover td {
-    background: var(--surface-secondary, #f8f9fa);
+    background: var(--bg-secondary, #f8f9fa);
   }
 
   .ai-usage-totals td {
     padding: 0.5rem 0.75rem;
     border-top: 2px solid var(--border-default, #dee2e6);
     font-weight: 600;
-    background: var(--surface-secondary, #f8f9fa);
+    background: var(--bg-secondary, #f8f9fa);
   }
 
   .ai-model-badge {
@@ -79,7 +79,7 @@ export const AiUsageStyles = css`
     font-size: 0.8rem;
     padding: 0.15rem 0.4rem;
     border-radius: 3px;
-    background: var(--surface-tertiary, #e5e5e5);
+    background: var(--bg-tertiary, #e5e5e5);
     white-space: nowrap;
   }
 

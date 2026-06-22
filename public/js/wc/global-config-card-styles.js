@@ -10,7 +10,7 @@ export const GlobalConfigCardStyles = css`
   }
 
   .config-card {
-    background: var(--surface-primary, #ffffff);
+    background: var(--bg-primary, #fff);
     border: 1px solid var(--border-color, #e0e0e0);
     border-radius: 8px;
     padding: 1.25rem;
@@ -115,7 +115,7 @@ export const GlobalConfigCardStyles = css`
     font-family: monospace;
     font-size: 0.85rem;
     line-height: 1.5;
-    background: var(--surface-secondary, #f5f5f5);
+    background: var(--bg-secondary, #f5f5f5);
     padding: 1rem;
     border-radius: 4px;
     white-space: pre-wrap;
@@ -163,7 +163,7 @@ export const GlobalConfigCardStyles = css`
     border: 1px solid var(--border-color, #e0e0e0);
     border-radius: 4px;
     font-size: 0.85rem;
-    background: var(--input-bg, white);
+    background: var(--bg-primary, #fff);
     color: var(--text-primary, #333);
     cursor: pointer;
   }
@@ -196,12 +196,12 @@ export const GlobalConfigCardStyles = css`
   }
 
   .config-btn-secondary {
-    background: var(--surface-secondary, #e5e7eb);
+    background: var(--bg-secondary, #e5e7eb);
     color: var(--text-primary, #333);
   }
 
   .config-btn-secondary:hover {
-    background: var(--surface-tertiary, #d1d5db);
+    background: var(--bg-tertiary, #d1d5db);
   }
 
   .config-btn-danger {
