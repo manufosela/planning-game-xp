@@ -11,6 +11,10 @@ import {
 } from '../../shared/sprint-naming.js';
 import { getMcpUserId } from '../user.js';
 
+export const SPRINT_POLICY_NOTE =
+  'Sprint = 1 day of work by default (this is not Scrum). ' +
+  'Pass explicit startDate and/or endDate to extend a sprint beyond a single day.';
+
 export const listSprintsSchema = z.object({
   projectId: z.string().describe('Project ID (e.g., "Cinema4D", "Intranet")'),
   year: z.number().optional().describe('Filter by year')
@@ -27,16 +31,39 @@ export const createSprintSchema = z.object({
     'Ignored when an explicit title is passed.'
   ),
   startDate: z.string().optional().describe(
-    'Ignored. The sprint always spans the current UTC day (startDate=today 00:00:00Z, endDate=today 23:59:59Z). ' +
-    'Passing this triggers a warning in the response.'
+    'Optional. Sprint start date (YYYY-MM-DD or full ISO). ' +
+    'Defaults to today (UTC). The provided day is snapped to 00:00:00.000Z of that day.'
   ),
   endDate: z.string().optional().describe(
-    'Ignored. See startDate.'
+    'Optional. Sprint end date (YYYY-MM-DD or full ISO). ' +
+    'Defaults to the same day as startDate (1-day sprint). Snapped to 23:59:59.999Z of that day. ' +
+    'Must be on or after startDate.'
   ),
   status: z.string().optional().describe('Sprint status (default: "Planning")'),
   devPoints: z.number().optional().describe('Total dev points planned'),
   businessPoints: z.number().optional().describe('Total business points planned')
 });
+
+function parseDateInput(input, fieldName) {
+  if (input === undefined || input === null) return null;
+  if (typeof input !== 'string') {
+    throw new Error(`${fieldName} must be an ISO date string (YYYY-MM-DD or full ISO).`);
+  }
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid ${fieldName}: "${input}". Expected ISO date (YYYY-MM-DD or full ISO).`);
+  }
+  return parsed;
+}
+
+function computeDurationDays(startIsoDate, endIsoDate) {
+  const start = new Date(`${startIsoDate}T00:00:00.000Z`);
+  const end = new Date(`${endIsoDate}T00:00:00.000Z`);
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  return Math.round((end.getTime() - start.getTime()) / oneDayMs) + 1;
+}
 
 export const updateSprintSchema = z.object({
   projectId: z.string().describe('Project ID'),
@@ -131,35 +158,52 @@ export async function createSprint({
   const existingSnapshot = await db.ref(sectionPath).once('value');
   const existingSprints = existingSnapshot.val();
 
-  // Strict policy: 1 sprint = 1 day, UTC.
-  const bounds = getSprintBoundsForDay(now);
+  // Sprint = 1 day by default. Caller can extend by passing explicit
+  // startDate/endDate; the canonical title format stays forced.
+  const startInput = parseDateInput(startDate, 'startDate');
+  const endInput = parseDateInput(endDate, 'endDate');
+
+  const referenceDate = startInput || now;
+  const startBounds = getSprintBoundsForDay(referenceDate);
+  const endBounds = getSprintBoundsForDay(endInput || referenceDate);
+
+  const finalStart = startBounds.startDate;
+  const finalEnd = endBounds.endDate;
+
+  if (finalEnd < finalStart) {
+    throw new Error(
+      `Invalid sprint range: endDate (${endBounds.isoDate}) must be on or after ` +
+      `startDate (${startBounds.isoDate}).`
+    );
+  }
+
+  const durationDays = computeDurationDays(startBounds.isoDate, endBounds.isoDate);
   const warnings = [];
 
-  // Idempotency: if a sprint already covers today, return it.
-  const existingToday = findSprintForDay(existingSprints, now);
-  if (existingToday) {
+  // Idempotency: if a sprint already starts on the reference day, return it.
+  // (Multi-day requests find the same anchor too — extend via update_sprint.)
+  const existingForDay = findSprintForDay(existingSprints, referenceDate);
+  if (existingForDay) {
+    const sameDay = referenceDate.toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
     return {
       content: [{
         type: 'text',
         text: JSON.stringify({
-          message: 'Sprint for today already exists; returning the existing one (idempotent).',
+          message: sameDay
+            ? 'Sprint for today already exists; returning the existing one (idempotent).'
+            : 'A sprint already starts on that day; returning the existing one (idempotent). ' +
+              'Use update_sprint to change its duration.',
           idempotent: true,
-          cardId: existingToday.sprint.cardId,
-          firebaseId: existingToday.firebaseId,
+          policy: SPRINT_POLICY_NOTE,
+          cardId: existingForDay.sprint.cardId,
+          firebaseId: existingForDay.firebaseId,
           projectId,
-          title: existingToday.sprint.title,
-          startDate: existingToday.sprint.startDate,
-          endDate: existingToday.sprint.endDate
+          title: existingForDay.sprint.title,
+          startDate: existingForDay.sprint.startDate,
+          endDate: existingForDay.sprint.endDate
         }, null, 2)
       }]
     };
-  }
-
-  if (startDate || endDate) {
-    warnings.push(
-      `Ignored startDate/endDate input — sprints always span the current UTC day ` +
-      `(${bounds.startDate} → ${bounds.endDate}).`
-    );
   }
 
   // Resolve the title: explicit (must be valid) or auto-generated.
@@ -176,9 +220,9 @@ export async function createSprint({
       warnings.push('Ignored "suffix" because an explicit title was provided.');
     }
   } else {
-    const sprintYear = Number(bounds.isoDate.slice(0, 4));
+    const sprintYear = Number(startBounds.isoDate.slice(0, 4));
     const nextNumber = getNextSprintNumberForYear(existingSprints, sprintYear);
-    finalTitle = buildSprintName(nextNumber, bounds.dateTag, suffix);
+    finalTitle = buildSprintName(nextNumber, startBounds.dateTag, suffix);
     autoGenerated = true;
   }
 
@@ -202,7 +246,7 @@ export async function createSprint({
     return `${counterKey}-${newIdStr}`;
   });
 
-  const sprintYear = Number(bounds.isoDate.slice(0, 4));
+  const sprintYear = Number(startBounds.isoDate.slice(0, 4));
   const newSprintRef = db.ref(sectionPath).push();
 
   const sprintData = {
@@ -213,8 +257,8 @@ export async function createSprint({
     title: finalTitle,
     year: sprintYear,
     status: status || 'Planning',
-    startDate: bounds.startDate,
-    endDate: bounds.endDate,
+    startDate: finalStart,
+    endDate: finalEnd,
     createdAt: now.toISOString(),
     createdBy: getMcpUserId(),
     firebaseId: newSprintRef.key
@@ -227,13 +271,14 @@ export async function createSprint({
 
   const response = {
     message: 'Sprint created successfully',
+    policy: SPRINT_POLICY_NOTE,
     cardId,
     firebaseId: newSprintRef.key,
     projectId,
     title: finalTitle,
-    startDate: bounds.startDate,
-    endDate: bounds.endDate,
-    durationDays: 1,
+    startDate: finalStart,
+    endDate: finalEnd,
+    durationDays,
     autoGenerated
   };
   if (warnings.length > 0) response.warnings = warnings;
