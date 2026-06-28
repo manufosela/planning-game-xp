@@ -1,6 +1,6 @@
 {
   "name": "planning-game-mcp",
-  "version": "1.22.0",
+  "version": "1.23.0",
   "description": "Integrated MCP Server for Planning GameXP",
   "private": true,
   "type": "module",
