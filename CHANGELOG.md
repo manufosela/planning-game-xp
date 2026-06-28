@@ -5,6 +5,12 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Added
+
+- Respect explicit sprint dates while keeping 1-day default (PLN-TSK-0346) (#224)
+
+## [1.190.7] - 2026-06-22
+
 ### Fixed
 
 - URL projectId wins over last-used localStorage (PLN-BUG-0108) (#223)
