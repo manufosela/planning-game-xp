@@ -26,6 +26,7 @@ import { epicMatcher } from '../filters/matchers/epic-matcher.js';
 import { priorityMatcher } from '../filters/matchers/priority-matcher.js';
 import { createdByMatcher } from '../filters/matchers/created-by-matcher.js';
 import { repositoryLabelMatcher } from '../filters/matchers/repository-matcher.js';
+import { taskCategoryMatcher } from '../filters/matchers/task-category-matcher.js';
 
 export class UnifiedFilterService {
   constructor() {
@@ -58,6 +59,7 @@ export class UnifiedFilterService {
     this.engine.registerMatcher('priority', priorityMatcher);
     this.engine.registerMatcher('createdBy', createdByMatcher);
     this.engine.registerMatcher('repositoryLabel', repositoryLabelMatcher);
+    this.engine.registerMatcher('taskCategory', taskCategoryMatcher);
 
     // Listen for year changes
     window.addEventListener('year-changed', this._handleYearChange.bind(this));

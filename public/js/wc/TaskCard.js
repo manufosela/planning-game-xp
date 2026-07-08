@@ -63,6 +63,8 @@ export class TaskCard extends AiUsageDisplayMixin(CommitsDisplayMixin(NotesManag
       },
       spike: { type: Boolean },
       expedited: { type: Boolean },
+      taskCategory: { type: String },
+      completionNote: { type: String },
       status: { type: String },
       statusList: { type: Array },
       developer: { type: String },
@@ -2354,6 +2356,8 @@ this.isSuperAdmin = false;
       relatedTasks: this.relatedTasks,
       spike: this.spike,
       expedited: this.expedited,
+      taskCategory: this.taskCategory,
+      completionNote: this.completionNote,
       notes: this.notes,
       repositoryLabel: repoLabel
     };
@@ -2631,6 +2635,7 @@ this.isSuperAdmin = false;
       <div class="card-header">
         <div class="title-row">
           <div class="title" title="${this.title || ''}">${this.title || ''}</div>
+          ${this._renderNocodeBadge()}
           ${this._renderPlanBadge()}
         </div>
         <div class="card-id-row">
@@ -2665,9 +2670,41 @@ this.isSuperAdmin = false;
             ?disabled=${!this.isEditable}
           />
           <span class="cardid-badge" title="Click para copiar ID" style="cursor:pointer" @click=${this._copyCardId}>${this.cardId || ''}</span>
+          ${this._renderNocodeBadge()}
           ${this._renderPlanBadge()}
           ${this._renderPipelineBadges()}
         </section>
+      </div>
+    `;
+  }
+
+  _renderNocodeBadge() {
+    if (this.taskCategory !== 'nocode') return '';
+    return html`<span class="nocode-badge" title="Tarea sin código — no requiere commits ni PR" aria-label="Tarea sin código">sin código</span>`;
+  }
+
+  _renderCompletionNotePanel() {
+    const note = this.completionNote || '';
+    const minLen = 20;
+    const remaining = Math.max(0, minLen - note.trim().length);
+    return html`
+      <div class="commits-panel">
+        <p style="margin: 0 0 0.5rem; color: var(--text-secondary); font-size: 0.85em;">
+          Describe qué se hizo. Sustituye al log de commits como audit trail para tareas sin código.
+        </p>
+        <textarea
+          id="completionNote"
+          class="notes-textarea"
+          rows="6"
+          .value=${note}
+          @input=${this._handleCompletionNoteChange}
+          ?disabled=${!this.canEdit}
+          placeholder="Ej: Ingested 47 contributors from GitHub API into /people, deduplicated by email."
+        ></textarea>
+        ${remaining > 0
+          ? html`<p style="margin: 0.3rem 0 0; color: var(--color-warning, #b45309); font-size: 0.8em;">Faltan ${remaining} caracteres (mínimo ${minLen}).</p>`
+          : html`<p style="margin: 0.3rem 0 0; color: var(--color-success, #16a34a); font-size: 0.8em;">✓ Nota suficiente.</p>`
+        }
       </div>
     `;
   }
@@ -2824,6 +2861,13 @@ this.isSuperAdmin = false;
         <div class="form-field checkbox-field">
           <input type="checkbox" id="expedited" ?checked=${this.expedited} @change=${this._handleExpeditedChange} ?disabled=${!this.canEdit}>
           <label for="expedited">Expedited</label>
+        </div>
+        <div class="form-field inline" title="Tareas sin código (limpieza de datos, docs, gestión) transitan a To Validate sin commits ni PR — solo requieren completionNote">
+          <label for="taskCategory">Categoría</label>
+          <select id="taskCategory" class="${this._getFieldClass('taskCategory')}" .value=${this.taskCategory || 'code'} @change=${this._handleTaskCategoryChange} ?disabled=${!this.canEdit}>
+            <option value="code">Con código</option>
+            <option value="nocode">Sin código</option>
+          </select>
         </div>
         <div class="form-field inline">
           <label class="${this._getLabelClass('businessPoints')}" title="Business Points">Bus. Points</label>
@@ -3169,8 +3213,8 @@ return html`<div class="no-related-tasks">No hay tareas relacionadas</div>`;
         </div>
         </color-tab>
         ` : ''}
-        <color-tab name="commits" label="${this._getCommitsTabLabel()}" color="#0ea5e9">
-        ${this.renderCommitsPanel()}
+        <color-tab name="commits" label="${this.taskCategory === 'nocode' ? 'Completion note' : this._getCommitsTabLabel()}" color="#0ea5e9">
+        ${this.taskCategory === 'nocode' ? this._renderCompletionNotePanel() : this.renderCommitsPanel()}
         </color-tab>
         ${this._getAiUsageArray().length > 0 ? html`
         <color-tab name="aiUsage" label="${this._getAiUsageTabLabel()}" color="#8b5cf6">
@@ -3646,6 +3690,17 @@ this._showNotification(`No se pudo generar Acceptance Criteria con IA: ${reason}
   }
   _handleSpikeChange(e) { this.spike = e.target.checked; }
   _handleExpeditedChange(e) { this.expedited = e.target.checked; }
+  _handleTaskCategoryChange(e) {
+    const value = e.target.value === 'nocode' ? 'nocode' : 'code';
+    this.taskCategory = value;
+    if (value === 'code') {
+      // Optional: keep completionNote around so the user can restore it if they flip back,
+      // but a category flip to code implies commits are the audit trail. Do not clear it.
+    }
+  }
+  _handleCompletionNoteChange(e) {
+    this.completionNote = e.target.value;
+  }
   _handleBbdWhyChange(e) { this.bbdWhy = e.target.value; }
   _handleBbbWhyChange(e) { this.bbbWhy = e.target.value; }
   _handleDeveloperChange(e) {
@@ -4147,7 +4202,9 @@ this.repositoryLabel = newLabel;
       acceptanceCriteria: this.acceptanceCriteria,
       description: this.description,
       spike: this.spike,
-      expedited: this.expedited
+      expedited: this.expedited,
+      taskCategory: this.taskCategory,
+      completionNote: this.completionNote
     };
 
     document.dispatchEvent(new CustomEvent('task-status-updated', {
@@ -5866,6 +5923,8 @@ taskElement.requestUpdate();
       coValidator: this.coValidator || '',
       spike: this.spike || false,
       expedited: this.expedited || false,
+      taskCategory: this.taskCategory || 'code',
+      completionNote: this.completionNote || '',
       blockedByBusiness: this.blockedByBusiness || false,
       blockedByDevelopment: this.blockedByDevelopment || false,
       bbbWhy: this.bbbWhy || '',

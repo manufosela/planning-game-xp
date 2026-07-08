@@ -328,6 +328,7 @@ export class PgBoard extends LitElement {
         'status', 'developer', 'coDeveloper', 'codeveloper', 'validator', 'coValidator',
         'epic', 'sprint', 'devPoints', 'businessPoints', 'realDevPoints', 'realBusinessPoints',
         'startDate', 'endDate', 'year', 'spike', 'expedited',
+        'taskCategory', 'completionNote',
         'blockedByBusiness', 'blockedByDevelopment',
         'bbbWhy', 'bbbWho', 'bbdWhy', 'bbdWho',
         'notes', 'attachment', 'commits',

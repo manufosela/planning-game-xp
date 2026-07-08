@@ -17,8 +17,16 @@ import {
   VALID_PLAN_STATUSES,
   VALID_STEP_STATUSES,
   PR_CREATED_EXPECTED_SHAPE,
-  PR_CREATED_EXAMPLE
+  PR_CREATED_EXAMPLE,
+  COMPLETION_NOTE_MIN_LENGTH,
+  TASK_CATEGORY_VALUES
 } from './constants.js';
+import {
+  getTaskCategory,
+  requiresPipelineStatus,
+  isValidCompletionNote,
+  isValidTaskCategory
+} from './task-category.js';
 
 // ──────────────────────────────────────────────
 // pipelineStatus.prCreated diagnosis (actionable errors)
@@ -262,6 +270,16 @@ export function validateTaskFields(data, isUpdate = false) {
       `Invalid task priority "${data.priority}". Valid task priorities are: ${VALID_TASK_PRIORITIES.join(', ')}`
     );
   }
+  if (data.taskCategory !== undefined && !isValidTaskCategory(data.taskCategory)) {
+    throw new Error(
+      `Invalid taskCategory "${data.taskCategory}". Valid values: ${TASK_CATEGORY_VALUES.join(', ')}.`
+    );
+  }
+  if (data.completionNote !== undefined && data.completionNote !== null && data.completionNote !== '' && !isValidCompletionNote(data.completionNote)) {
+    throw new Error(
+      `Invalid completionNote: must be a string of at least ${COMPLETION_NOTE_MIN_LENGTH} chars.`
+    );
+  }
 }
 
 export function collectTaskValidationIssues(data) {
@@ -273,6 +291,14 @@ export function collectTaskValidationIssues(data) {
   if (data.priority !== undefined && !VALID_TASK_PRIORITIES.includes(data.priority)) {
     result.valid = false;
     result.errors.push({ code: 'INVALID_PRIORITY', message: `Invalid task priority "${data.priority}".`, validValues: VALID_TASK_PRIORITIES });
+  }
+  if (data.taskCategory !== undefined && !isValidTaskCategory(data.taskCategory)) {
+    result.valid = false;
+    result.errors.push({ code: 'INVALID_TASK_CATEGORY', message: `Invalid taskCategory "${data.taskCategory}".`, validValues: TASK_CATEGORY_VALUES });
+  }
+  if (data.completionNote !== undefined && data.completionNote !== null && data.completionNote !== '' && !isValidCompletionNote(data.completionNote)) {
+    result.valid = false;
+    result.errors.push({ code: 'INVALID_COMPLETION_NOTE', message: `completionNote must be a string of at least ${COMPLETION_NOTE_MIN_LENGTH} chars.` });
   }
   return result;
 }
@@ -328,23 +354,38 @@ export function validateStatusTransition(currentCard, updates, type) {
   }
 
   if (newStatus === 'To Validate') {
+    const category = getTaskCategory(finalCard);
     const missingForValidate = [];
     if (!hasValidValue(finalCard, 'startDate')) missingForValidate.push('startDate (when work started, e.g., "2024-01-15")');
-    if (!(Array.isArray(finalCard.commits) && finalCard.commits.length > 0)) {
-      missingForValidate.push('commits (at least one commit with hash, message, date, author)');
+
+    if (category === 'nocode') {
+      // nocode tasks: no commits, no PR — completionNote is the audit trail.
+      if (!hasValidValue(finalCard, 'endDate')) {
+        missingForValidate.push('endDate (when work finished, e.g., "2024-01-20")');
+      }
+      if (!isValidCompletionNote(finalCard.completionNote)) {
+        missingForValidate.push(
+          `completionNote (a description of what was done, min ${COMPLETION_NOTE_MIN_LENGTH} chars — replaces the commit log for nocode tasks)`
+        );
+      }
+    } else {
+      // code tasks: legacy behaviour — commits + PR.
+      if (!(Array.isArray(finalCard.commits) && finalCard.commits.length > 0)) {
+        missingForValidate.push('commits (at least one commit with hash, message, date, author)');
+      }
+      const prDiag = diagnosePrCreated(finalCard.pipelineStatus);
+      if (!prDiag.ok) {
+        missingForValidate.push(formatPrCreatedError(prDiag));
+      }
     }
+
     for (const field of REQUIRED_FIELDS_TO_LEAVE_TODO) {
       if (!hasValidValue(finalCard, field)) missingForValidate.push(FRIENDLY_FIELD_NAMES[field] || field);
-    }
-    // pipelineStatus.prCreated is required for "To Validate"
-    const prDiag = diagnosePrCreated(finalCard.pipelineStatus);
-    if (!prDiag.ok) {
-      missingForValidate.push(formatPrCreatedError(prDiag));
     }
 
     if (missingForValidate.length > 0) {
       throw new Error(
-        `Cannot change to "To Validate": missing required fields: ${missingForValidate.join(', ')}. ` +
+        `Cannot change to "To Validate" (taskCategory="${category}"): missing required fields: ${missingForValidate.join(', ')}. ` +
         'All tasks must have complete information before being sent for validation.'
       );
     }
@@ -392,40 +433,64 @@ export function collectValidationIssues(currentCard, updates, type) {
 
   if (newStatus === 'To Validate') {
     const finalCard = { ...currentCard, ...updates };
+    const category = getTaskCategory(finalCard);
+    result.taskCategory = category;
+
     if (!hasValidValue(finalCard, 'startDate')) {
       result.valid = false; result.missingFields.push('startDate');
       result.requiredFields.startDate = { required: true, currentValue: currentCard.startDate || null, providedInUpdate: updates.startDate !== undefined, finalValue: finalCard.startDate || null, missing: true };
       result.errors.push({ code: 'MISSING_START_DATE', message: 'Cannot change to "To Validate": startDate is required.', suggestion: 'Include startDate in ISO format.' });
     }
-    if (!(Array.isArray(finalCard.commits) && finalCard.commits.length > 0)) {
-      result.valid = false; result.missingFields.push('commits');
-      result.requiredFields.commits = { required: true, currentValue: currentCard.commits || null, providedInUpdate: updates.commits !== undefined, finalValue: finalCard.commits || null, missing: true };
-      result.errors.push({ code: 'MISSING_COMMITS', message: 'Cannot change to "To Validate": at least one commit is required.' });
+
+    if (category === 'nocode') {
+      // nocode tasks: no commits, no PR — completionNote + endDate are the audit trail.
+      if (!hasValidValue(finalCard, 'endDate')) {
+        result.valid = false; result.missingFields.push('endDate');
+        result.requiredFields.endDate = { required: true, currentValue: currentCard.endDate || null, providedInUpdate: updates.endDate !== undefined, finalValue: finalCard.endDate || null, missing: true };
+        result.errors.push({ code: 'MISSING_END_DATE', message: 'Cannot change to "To Validate" (nocode): endDate is required.', suggestion: 'Include endDate in ISO format.' });
+      }
+      if (!isValidCompletionNote(finalCard.completionNote)) {
+        result.valid = false; result.missingFields.push('completionNote');
+        result.requiredFields.completionNote = { required: true, currentValue: currentCard.completionNote || null, providedInUpdate: updates.completionNote !== undefined, finalValue: finalCard.completionNote || null, missing: true };
+        result.errors.push({
+          code: 'MISSING_COMPLETION_NOTE',
+          field: 'completionNote',
+          message: `Cannot change to "To Validate" (nocode): completionNote is required (min ${COMPLETION_NOTE_MIN_LENGTH} chars).`,
+          suggestion: 'Describe briefly what was done. This replaces the commit log for nocode tasks.'
+        });
+      }
+    } else {
+      // code tasks: legacy behaviour — commits + PR.
+      if (!(Array.isArray(finalCard.commits) && finalCard.commits.length > 0)) {
+        result.valid = false; result.missingFields.push('commits');
+        result.requiredFields.commits = { required: true, currentValue: currentCard.commits || null, providedInUpdate: updates.commits !== undefined, finalValue: finalCard.commits || null, missing: true };
+        result.errors.push({ code: 'MISSING_COMMITS', message: 'Cannot change to "To Validate": at least one commit is required.' });
+      }
+      const prDiag = diagnosePrCreated(finalCard.pipelineStatus);
+      if (!prDiag.ok) {
+        result.valid = false; result.missingFields.push('pipelineStatus');
+        result.requiredFields.pipelineStatus = {
+          required: true, currentValue: currentCard.pipelineStatus || null,
+          providedInUpdate: updates.pipelineStatus !== undefined, finalValue: finalCard.pipelineStatus || null, missing: true,
+          expected: prDiag.expected, received: prDiag.received, example: prDiag.example
+        };
+        result.errors.push({
+          code: 'MISSING_PIPELINE_STATUS',
+          field: 'pipelineStatus.prCreated',
+          message: `Cannot change to "To Validate": ${formatPrCreatedError(prDiag)}`,
+          expected: prDiag.expected,
+          received: prDiag.received,
+          example: prDiag.example,
+          suggestion: 'Set pipelineStatus.prCreated to an object with prUrl and prNumber (create the PR first).'
+        });
+      }
     }
+
     for (const field of REQUIRED_FIELDS_TO_LEAVE_TODO) {
       if (!hasValidValue(finalCard, field) && !result.missingFields.includes(field)) {
         result.valid = false; result.missingFields.push(field);
         result.errors.push({ code: 'MISSING_REQUIRED_FIELD', message: `Cannot change to "To Validate": ${field} is required.` });
       }
-    }
-    // pipelineStatus.prCreated is required
-    const prDiag = diagnosePrCreated(finalCard.pipelineStatus);
-    if (!prDiag.ok) {
-      result.valid = false; result.missingFields.push('pipelineStatus');
-      result.requiredFields.pipelineStatus = {
-        required: true, currentValue: currentCard.pipelineStatus || null,
-        providedInUpdate: updates.pipelineStatus !== undefined, finalValue: finalCard.pipelineStatus || null, missing: true,
-        expected: prDiag.expected, received: prDiag.received, example: prDiag.example
-      };
-      result.errors.push({
-        code: 'MISSING_PIPELINE_STATUS',
-        field: 'pipelineStatus.prCreated',
-        message: `Cannot change to "To Validate": ${formatPrCreatedError(prDiag)}`,
-        expected: prDiag.expected,
-        received: prDiag.received,
-        example: prDiag.example,
-        suggestion: 'Set pipelineStatus.prCreated to an object with prUrl and prNumber (create the PR first).'
-      });
     }
   }
 

@@ -41,6 +41,16 @@ import {
   migrateImplementationPlan,
   validateImplementationPlan
 } from '../../shared/validation.js';
+import {
+  TASK_CATEGORY_VALUES,
+  TASK_CATEGORY_NOCODE,
+  COMPLETION_NOTE_MIN_LENGTH,
+  getTaskCategory,
+  isValidTaskCategory,
+  isValidCompletionNote,
+  requiresPipelineStatus,
+  toValidateRequirementsByCategory
+} from '../../shared/task-category.js';
 import { getListTexts, getListPairs, resolveValue } from '../services/list-service.js';
 
 // Re-export for use by register-tools.js and tests
@@ -250,6 +260,8 @@ export const createCardSchema = z.object({
   devPoints: z.number().optional().describe('Development points (1-5 or fibonacci). Used to calculate task priority.'),
   businessPoints: z.number().optional().describe('Business points (1-5 or fibonacci). Used to calculate task priority.'),
   planId: z.string().optional().describe('Plan ID (Firebase key) to link this task to a development plan. Only for tasks.'),
+  taskCategory: z.enum(TASK_CATEGORY_VALUES).optional().describe('Task category — "code" (default) or "nocode". Only for tasks. nocode tasks (data cleanup, docs, ops, external ingestion) transition to "To Validate" without commits/PR; instead they require completionNote as audit trail.'),
+  completionNote: z.string().optional().describe(`Description of what was done. Required for nocode tasks reaching "To Validate", min ${COMPLETION_NOTE_MIN_LENGTH} chars. Replaces the commit log as audit trail.`),
   year: z.number().optional().describe('Year (default: current year)')
 });
 
@@ -467,7 +479,7 @@ async function resolveValidator(db, projectId, validator, developer) {
   );
 }
 
-export async function createCard({ projectId, type, title, description, descriptionStructured, acceptanceCriteria, acceptanceCriteriaStructured, epic, implementationPlan, status, priority, developer, codeveloper, validator, sprint, devPoints, businessPoints, planId, year }) {
+export async function createCard({ projectId, type, title, description, descriptionStructured, acceptanceCriteria, acceptanceCriteriaStructured, epic, implementationPlan, status, priority, developer, codeveloper, validator, sprint, devPoints, businessPoints, planId, taskCategory, completionNote, year }) {
   // ── EARLY PREFLIGHT: fail fast with ALL missing fields at once ──
   if (type === 'task') {
     const missing = [];
@@ -735,6 +747,19 @@ export async function createCard({ projectId, type, title, description, descript
   if (validator) cardData.validator = validator;
   if (sprint) cardData.sprint = sprint;
   if (type === 'task' && planId) cardData.planId = planId;
+
+  if (type === 'task' && taskCategory !== undefined) {
+    if (!isValidTaskCategory(taskCategory)) {
+      throw new Error(`Invalid taskCategory "${taskCategory}". Valid values: ${TASK_CATEGORY_VALUES.join(', ')}.`);
+    }
+    cardData.taskCategory = taskCategory;
+  }
+  if (type === 'task' && completionNote !== undefined && completionNote !== null && completionNote !== '') {
+    if (!isValidCompletionNote(completionNote)) {
+      throw new Error(`Invalid completionNote: must be a string of at least ${COMPLETION_NOTE_MIN_LENGTH} chars.`);
+    }
+    cardData.completionNote = completionNote;
+  }
 
   if (devPoints !== undefined) cardData.devPoints = devPoints;
   if (businessPoints !== undefined) cardData.businessPoints = businessPoints;
@@ -1387,6 +1412,12 @@ export async function getTransitionRules({ type = 'task' }) {
           transitionRules: TASK_TRANSITION_RULES,
           requiredFieldsToLeaveToDo: REQUIRED_FIELDS_TO_LEAVE_TODO,
           requiredFieldsForToValidate: [...REQUIRED_FIELDS_TO_LEAVE_TODO, ...REQUIRED_FIELDS_FOR_TO_VALIDATE, 'pipelineStatus.prCreated'],
+          requiredFieldsForToValidateByCategory: toValidateRequirementsByCategory(),
+          taskCategory: {
+            values: TASK_CATEGORY_VALUES,
+            default: 'code',
+            note: 'Optional. Tasks flagged as "nocode" (data cleanup, docs, ops) transition to "To Validate" without commits/pipelineStatus.prCreated; instead they require completionNote (min ' + COMPLETION_NOTE_MIN_LENGTH + ' chars) as audit trail.'
+          },
           fieldDescriptions: {
             title: 'Task title',
             developer: 'Developer ID (must start with dev_)',
@@ -1397,14 +1428,24 @@ export async function getTransitionRules({ type = 'task' }) {
             businessPoints: 'Business points (numeric)',
             acceptanceCriteria: 'Acceptance criteria (text or acceptanceCriteriaStructured array)',
             startDate: 'Date work started (YYYY-MM-DD format)',
-            commits: 'Array of commits [{hash, message, date, author}]',
-            pipelineStatus: `Pipeline tracking object. ${PR_CREATED_EXPECTED_SHAPE}`
+            endDate: 'Date work finished (YYYY-MM-DD format). Required for nocode "To Validate".',
+            commits: 'Array of commits [{hash, message, date, author}]. Required only for code tasks.',
+            pipelineStatus: `Pipeline tracking object. ${PR_CREATED_EXPECTED_SHAPE}. Required only for code tasks.`,
+            taskCategory: '"code" | "nocode" (default "code" when absent). Decides which To Validate fields are required.',
+            completionNote: `String (min ${COMPLETION_NOTE_MIN_LENGTH} chars). Required for nocode tasks reaching "To Validate" — replaces the commit log.`
           },
           exampleValidUpdate: {
             status: 'To Validate',
             startDate: '2024-01-15',
             commits: [{ hash: 'abc1234', message: 'feat: implement feature', date: '2024-01-20T10:00:00Z', author: 'dev@example.com' }],
             pipelineStatus: { prCreated: { ...PR_CREATED_EXAMPLE } }
+          },
+          exampleValidUpdateNocode: {
+            status: 'To Validate',
+            taskCategory: 'nocode',
+            startDate: '2024-01-15',
+            endDate: '2024-01-20',
+            completionNote: 'Ingested 47 contributors from GitHub API into /people, deduplicated by email.'
           }
         }, null, 2)
       }]
@@ -1480,11 +1521,19 @@ export function calculateAvailableTransitions(card) {
     }
 
     if (targetStatus === 'To Validate') {
-      requiredFields = [...REQUIRED_FIELDS_TO_LEAVE_TODO, ...REQUIRED_FIELDS_FOR_TO_VALIDATE];
-      // Check pipelineStatus.prCreated separately (nested field)
-      const ps = card.pipelineStatus;
-      if (!ps?.prCreated || !ps.prCreated.prUrl || !ps.prCreated.prNumber) {
-        transition.missing.push('pipelineStatus.prCreated');
+      const category = getTaskCategory(card);
+      transition.taskCategory = category;
+      if (category === TASK_CATEGORY_NOCODE) {
+        requiredFields = [...REQUIRED_FIELDS_TO_LEAVE_TODO, 'startDate', 'endDate'];
+        if (!isValidCompletionNote(card.completionNote)) {
+          transition.missing.push('completionNote (min ' + COMPLETION_NOTE_MIN_LENGTH + ' chars)');
+        }
+      } else {
+        requiredFields = [...REQUIRED_FIELDS_TO_LEAVE_TODO, ...REQUIRED_FIELDS_FOR_TO_VALIDATE];
+        const ps = card.pipelineStatus;
+        if (!ps?.prCreated || !ps.prCreated.prUrl || !ps.prCreated.prNumber) {
+          transition.missing.push('pipelineStatus.prCreated');
+        }
       }
     }
 

@@ -1140,6 +1140,27 @@ export const TaskTheme = css/*css*/`
     min-width: 0;
   }
 
+  /* nocode badge — neutral style, deliberately not a status color (PLN-TSK-0354) */
+  .nocode-badge {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary, #e2e8f0);
+    color: var(--text-secondary, #475569);
+    border: 1px solid var(--border-default, #cbd5e1);
+    font-size: 0.7em;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: lowercase;
+    white-space: nowrap;
+  }
+
+  :host([expanded]) .nocode-badge {
+    font-size: 0.75em;
+  }
+
   /* Implementation plan status badge */
   .plan-badge {
     display: inline-block;

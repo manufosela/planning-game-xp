@@ -60,6 +60,24 @@ export const REQUIRED_FIELDS_FOR_TO_VALIDATE = [
 ];
 
 // ──────────────────────────────────────────────
+// Task categorisation (PLN-TSK-0354)
+// Tasks flagged as 'nocode' transition to "To Validate" without commits/PR.
+// The audit trail is the completionNote text (min chars enforced).
+// Legacy tasks without the field are treated as 'code'.
+// ──────────────────────────────────────────────
+export const TASK_CATEGORY_CODE = 'code';
+export const TASK_CATEGORY_NOCODE = 'nocode';
+export const TASK_CATEGORY_VALUES = [TASK_CATEGORY_CODE, TASK_CATEGORY_NOCODE];
+export const TASK_CATEGORY_DEFAULT = TASK_CATEGORY_CODE;
+export const COMPLETION_NOTE_MIN_LENGTH = 20;
+
+export const REQUIRED_FIELDS_FOR_TO_VALIDATE_NOCODE = [
+  'startDate',
+  'endDate',
+  'completionNote'
+];
+
+// ──────────────────────────────────────────────
 // pipelineStatus.prCreated contract (single source of truth)
 // Required to move a task to "To Validate" or a bug to "Fixed".
 // ──────────────────────────────────────────────
