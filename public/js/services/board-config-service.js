@@ -16,7 +16,7 @@ import {
   generateDefaultColumns,
   normalizeColumns,
   moveColumn
-} from '/js/utils/board-columns.js';
+} from '../utils/board-columns.js';
 
 const COLUMNS_PATH = (projectId) => `/projects/${projectId}/board/columns`;
 const ENFORCE_WIP_PATH = (projectId) => `/projects/${projectId}/board/enforceWip`;
@@ -54,6 +54,12 @@ export async function setEnforceWip(projectId, enabled) {
  * the defaults from DEFAULT_TASK_STATUSES and persist them so subsequent
  * reads are stable across users.
  *
+ * If the project itself does not exist under /projects/{projectId}, defaults
+ * are returned in-memory but NOT persisted — writing them would create a
+ * ghost /projects/{projectId} entry that later appears as a phantom project
+ * in the UI (see PLN-BUG-0110). This can happen when the URL still carries
+ * a stale projectId (renamed / deleted project, typo, old bookmark).
+ *
  * @param {string} projectId
  * @returns {Promise<Object[]>}
  */
@@ -68,6 +74,10 @@ export async function loadColumnsForProject(projectId) {
     // state.
   }
   const defaults = generateDefaultColumns(DEFAULT_TASK_STATUSES);
+  const projectSnap = await get(ref(database, `/projects/${projectId}`));
+  if (!projectSnap.exists()) {
+    return defaults;
+  }
   await saveColumns(projectId, defaults);
   return defaults;
 }
