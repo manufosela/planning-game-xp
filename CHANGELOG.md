@@ -5,6 +5,12 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Added
+
+- TaskCategory 'code' | 'nocode' con completionNote (PLN-TSK-0354) (#228)
+
+## [1.191.3] - 2026-07-08
+
 ### Fixed
 
 - Stop creating ghost projects for stale projectIds (PLN-BUG-0110) (#227)
