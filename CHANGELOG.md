@@ -5,6 +5,12 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Fixed
+
+- Resolve default team from MCP user config (PMC-BUG-0007) (#225)
+
+## [1.191.0] - 2026-06-28
+
 ### Added
 
 - Respect explicit sprint dates while keeping 1-day default (PLN-TSK-0346) (#224)
