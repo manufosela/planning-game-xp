@@ -1539,25 +1539,19 @@ async function updateProject(projectForm, originalProjectName, originalData) {
       projectData.createdBy = originalData.createdBy;
     }
 
-    if (formData.projectName !== originalProjectName) {
-      await set(ref(database, `/projects/${formData.projectName}`), projectData);
-      await set(ref(database, `/projects/${originalProjectName}`), null);
-    } else {
-      await set(ref(database, `/projects/${originalProjectName}`), projectData);
-    }
+    // Do NOT rename the RTDB key when the display name changes.
+    // The key is the projectId used across /projects, /cards, /projectCounters,
+    // /publicViews, /developerBacklogs, etc. Changing it here without moving
+    // all those references orphans the project (see PLN-BUG-0109).
+    // The visible `name` field is updated normally; the projectId stays fixed.
+    await set(ref(database, `/projects/${originalProjectName}`), projectData);
 
     // Sync team assignments to /users/ for entityDirectoryService consistency
-    const targetProjectName = formData.projectName || originalProjectName;
-    await syncProjectTeamToUsers(targetProjectName, formData.developers || [], formData.stakeholders || []);
+    await syncProjectTeamToUsers(originalProjectName, formData.developers || [], formData.stakeholders || []);
 
     document.dispatchEvent(new CustomEvent('show-slide-notification', {
       detail: { options: { message: 'Proyecto actualizado exitosamente!' } }
     }));
-
-    // Reload page if name changed
-    if (formData.projectName !== originalProjectName) {
-      window.location.href = `/adminproject?projectId=${encodeURIComponent(formData.projectName)}`;
-    }
 
   } catch (error) {
     console.error('Error updating project:', error);
