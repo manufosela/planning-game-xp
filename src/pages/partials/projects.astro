@@ -913,31 +913,22 @@
         projectData.createdBy = originalData.createdBy;
       }
 
-      // If name changed, we need to move the project
-      if (formData.projectName !== originalProjectName) {
-        // Create new project with new name
-        await set(ref(database, `/projects/${formData.projectName}`), projectData);
-        // Delete project with old name
-        await set(ref(database, `/projects/${originalProjectName}`), null);
-      } else {
-        // Only update existing project
-        await set(ref(database, `/projects/${originalProjectName}`), projectData);
-      }
+      // Do NOT rename the RTDB key when the display name changes.
+      // The key is the projectId used across /projects, /cards, /projectCounters,
+      // /publicViews, /developerBacklogs, etc. Renaming it here without moving
+      // all those references orphans the project (see PLN-BUG-0109).
+      // The visible `name` field is updated normally; the projectId stays fixed.
+      await set(ref(database, `/projects/${originalProjectName}`), projectData);
 
       document.dispatchEvent(new CustomEvent('show-slide-notification', {
         detail: { options: { message: 'Proyecto actualizado exitosamente!' } }
       }));
 
-      // If scoring system changed, recalculate points
+      // If scoring system changed, recalculate points on the same projectId.
       if (scoringSystemChanged) {
-
-        // Use final project name (in case it was renamed)
-        const finalProjectName = formData.projectName;
-
-        // Execute recalculation in background
         setTimeout(async () => {
-          await recalculateProjectPoints(finalProjectName, originalScoringSystem, newScoringSystem);
-        }, 500); // Small delay to let project update complete
+          await recalculateProjectPoints(originalProjectName, originalScoringSystem, newScoringSystem);
+        }, 500);
       }
 
       // Refresh projects list
