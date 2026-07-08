@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Fixed
 
+- Stop renaming RTDB key when the project name changes (PLN-BUG-0109) (#226)
+
+## [1.191.1] - 2026-07-08
+
+### Fixed
+
 - Resolve default team from MCP user config (PMC-BUG-0007) (#225)
 
 ## [1.191.0] - 2026-06-28
