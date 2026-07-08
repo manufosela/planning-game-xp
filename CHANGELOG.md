@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Fixed
 
+- Stop creating ghost projects for stale projectIds (PLN-BUG-0110) (#227)
+
+## [1.191.2] - 2026-07-08
+
+### Fixed
+
 - Stop renaming RTDB key when the project name changes (PLN-BUG-0109) (#226)
 
 ## [1.191.1] - 2026-07-08
