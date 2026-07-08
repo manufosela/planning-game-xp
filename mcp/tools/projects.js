@@ -258,32 +258,64 @@ async function syncProjectRolesToUsers(db, projectId, developers, stakeholders) 
   }
 }
 
-const DEFAULT_DEVELOPERS = ['dev_010', 'dev_016'];
-const DEFAULT_STAKEHOLDERS = ['stk_014'];
-
+/**
+ * Resolve the default developer + stakeholder for a new project from the
+ * MCP user config (pg.config.yml or mcp.user.json in the instance dir).
+ *
+ * Previously this used hardcoded IDs (dev_010, dev_016, stk_014) that only
+ * existed in the legacy geniova instance. In any other instance they failed
+ * silently and the new project ended up without developers or stakeholders,
+ * blocking task creation.
+ *
+ * New behaviour:
+ *   - developerId in config → resolve from /data/developers (or synthesize
+ *     from config fields) and push as { id, name, email }.
+ *   - stakeholderId in config → same treatment. Pushed as an object, NOT as
+ *     a plain string, to match the developers shape and what the UI expects.
+ *   - Missing either ID emits an explicit warning instead of failing silent.
+ */
 async function resolveDefaultTeam(db) {
   const warnings = [];
-
   const developers = [];
-  for (const devId of DEFAULT_DEVELOPERS) {
-    const devSnapshot = await db.ref(`/data/developers/${devId}`).once('value');
-    const devData = devSnapshot.val();
-    if (devData) {
-      developers.push({ id: devId, name: devData.name || '', email: devData.email || '' });
-    } else {
-      warnings.push({ code: 'DEFAULT_MEMBER_NOT_FOUND', message: `Default developer "${devId}" not found in /data/developers` });
-    }
+  const stakeholders = [];
+  const mcpUser = getMcpUser();
+
+  if (!mcpUser) {
+    warnings.push({
+      code: 'MCP_USER_NOT_CONFIGURED',
+      message: 'No MCP user configured (pg.config.yml or mcp.user.json). New project will have no default developer or stakeholder.'
+    });
+    return { developers, stakeholders, warnings };
   }
 
-  const stakeholders = [];
-  for (const stkId of DEFAULT_STAKEHOLDERS) {
-    const stkSnapshot = await db.ref(`/data/stakeholders/${stkId}`).once('value');
+  if (mcpUser.developerId && mcpUser.developerId.startsWith('dev_')) {
+    const devSnapshot = await db.ref(`/data/developers/${mcpUser.developerId}`).once('value');
+    const devData = devSnapshot.val();
+    developers.push({
+      id: mcpUser.developerId,
+      name: (devData && devData.name) || mcpUser.name || '',
+      email: (devData && devData.email) || mcpUser.email || ''
+    });
+  } else {
+    warnings.push({
+      code: 'DEFAULT_DEVELOPER_MISSING',
+      message: 'MCP user has no developerId configured. New project will have no default developer.'
+    });
+  }
+
+  if (mcpUser.stakeholderId && mcpUser.stakeholderId.startsWith('stk_')) {
+    const stkSnapshot = await db.ref(`/data/stakeholders/${mcpUser.stakeholderId}`).once('value');
     const stkData = stkSnapshot.val();
-    if (stkData) {
-      stakeholders.push(stkId);
-    } else {
-      warnings.push({ code: 'DEFAULT_MEMBER_NOT_FOUND', message: `Default stakeholder "${stkId}" not found in /data/stakeholders` });
-    }
+    stakeholders.push({
+      id: mcpUser.stakeholderId,
+      name: (stkData && stkData.name) || mcpUser.name || '',
+      email: (stkData && stkData.email) || mcpUser.email || ''
+    });
+  } else {
+    warnings.push({
+      code: 'DEFAULT_STAKEHOLDER_MISSING',
+      message: 'MCP user has no stakeholderId configured. New project will have no default stakeholder — tasks cannot be created until one is added via update_project.'
+    });
   }
 
   return { developers, stakeholders, warnings };
@@ -301,20 +333,6 @@ export async function createProject({ projectId, name, abbreviation, description
   }
 
   const { developers, stakeholders, warnings } = await resolveDefaultTeam(db);
-
-  const mcpUser = getMcpUser();
-  if (mcpUser && mcpUser.developerId) {
-    const alreadyInList = developers.some(d => d.id === mcpUser.developerId);
-    if (!alreadyInList) {
-      const devSnapshot = await db.ref(`/data/developers/${mcpUser.developerId}`).once('value');
-      const devData = devSnapshot.val();
-      if (devData) {
-        developers.push({ id: mcpUser.developerId, name: devData.name || mcpUser.name || '', email: devData.email || mcpUser.email || '' });
-      } else {
-        developers.push({ id: mcpUser.developerId, name: mcpUser.name || '', email: mcpUser.email || '' });
-      }
-    }
-  }
 
   const project = {
     name,
