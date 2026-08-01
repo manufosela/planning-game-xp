@@ -320,18 +320,23 @@ async function handleSyncAppAdminClaim(eventParams, beforeValue, afterValue, dep
     // Find user by email
     const userRecord = await admin.auth().getUserByEmail(email);
 
-    // Get current claims and update isAppAdmin
+    // Get current claims and update isAppAdmin + allowed (app admins are
+    // always allowed even without an active project — see PLN-BUG-0111).
     const currentClaims = userRecord.customClaims || {};
     const newClaims = {
       ...currentClaims,
       isAppAdmin: shouldBeAppAdmin
     };
+    if (shouldBeAppAdmin) {
+      newClaims.allowed = true;
+    }
 
     await admin.auth().setCustomUserClaims(userRecord.uid, newClaims);
 
     logger.info(`Updated isAppAdmin claim for ${email}`, {
       uid: userRecord.uid,
-      isAppAdmin: shouldBeAppAdmin
+      isAppAdmin: shouldBeAppAdmin,
+      allowed: newClaims.allowed
     });
 
     return { success: true, email, isAppAdmin: shouldBeAppAdmin };
@@ -371,10 +376,17 @@ async function handleSyncUserAllowedClaim(eventParams, beforeValue, afterValue, 
   try {
     // Read all projects for this user to determine allowed status
     const projectsSnap = await db.ref(`/users/${encodedEmail}/projects`).once('value');
-    const shouldBeAllowed = hasActiveProject(projectsSnap.val());
+    const hasProject = hasActiveProject(projectsSnap.val());
 
     const userRecord = await admin.auth().getUserByEmail(email);
     const currentClaims = userRecord.customClaims || {};
+
+    // App admins (SuperAdmin, appAdmin) always get allowed=true even without
+    // an active project — otherwise a freshly bootstrapped instance blocks
+    // its own SuperAdmin from reading /projects to create the first one
+    // (PLN-BUG-0111 root cause).
+    const isAppAdmin = currentClaims.isAppAdmin === true;
+    const shouldBeAllowed = hasProject || isAppAdmin;
 
     if (currentClaims.allowed === shouldBeAllowed) {
       return null; // No change needed
@@ -385,7 +397,8 @@ async function handleSyncUserAllowedClaim(eventParams, beforeValue, afterValue, 
 
     logger.info(`Updated allowed claim for ${email}`, {
       uid: userRecord.uid,
-      allowed: shouldBeAllowed
+      allowed: shouldBeAllowed,
+      reason: hasProject ? 'active-project' : (isAppAdmin ? 'app-admin' : 'none')
     });
 
     return { success: true, email, allowed: shouldBeAllowed };

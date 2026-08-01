@@ -415,6 +415,10 @@ See [docs/DOM_BEST_PRACTICES.md](./docs/DOM_BEST_PRACTICES.md) for the full DOM 
 
 See [SYSTEM_REQUIREMENTS.md](./SYSTEM_REQUIREMENTS.md) for full details (browser, hardware, network, APIs).
 
+## Creating a New Instance
+
+When the user says "crea nueva instancia del PG" (or equivalent), follow [docs/CREATE_NEW_INSTANCE.md](./docs/CREATE_NEW_INSTANCE.md) step by step. It's a wizard that separates HUMAN-only steps (Firebase Console clicks, OAuth) from IA-executable steps, includes all the gotchas discovered in production (Storage Get Started, Identity Platform, Secret Manager, IAM bindings for Cloud Functions, `MS_EMAIL_ENABLED=false`, dummy IA secrets, bootstrap of `allowed` claim for the SuperAdmin), and lists common errors with their fixes. Do NOT reinvent the flow from memory each time — read the wizard.
+
 Key files: `system-requirements-service.js`, `SystemRequirementsChecker.js`, `system-requirements-config.js`
 
 ## Common Troubleshooting
