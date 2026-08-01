@@ -5,6 +5,12 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Added
+
+- BeforeUserCreated blocking function for per-instance domain filter (#231)
+
+## [1.192.1] - 2026-08-01
+
 ### Fixed
 
 - Preserve orphan developer/validator in select options (PLN-BUG-0107) (#230)
