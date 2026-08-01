@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Fixed
 
+- Register beforeCreate unconditionally (GCIP required on all instances) (#233)
+
+## [1.193.1] - 2026-08-01
+
+### Fixed
+
 - Register beforeCreate only when PUBLIC_ALLOWED_EMAIL_DOMAINS is set (#232)
 
 ## [1.193.0] - 2026-08-01
