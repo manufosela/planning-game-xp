@@ -5,6 +5,12 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Other
+
+- Remove beforeCreate blocking function (GCIP upgrade incomplete) (#234)
+
+## [1.193.2] - 2026-08-01
+
 ### Fixed
 
 - Register beforeCreate unconditionally (GCIP required on all instances) (#233)
