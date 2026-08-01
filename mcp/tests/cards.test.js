@@ -249,7 +249,7 @@ describe('cards.js', () => {
       // Setup stakeholders and developers for validator auto-assignment
       setMockRtdbData('/data/stakeholders', {
         'stk_001': { name: 'Dev User', email: 'dev@test.com', active: true },
-        'stk_002': { name: 'Mánu Fosela', email: 'mfosela@geniova.com', active: true },
+        'stk_002': { name: 'Mánu Fosela', email: 'dev@company.com', active: true },
         'stk_003': { name: 'Other Stk', email: 'other@test.com', active: true }
       });
       setMockRtdbData('/projects/TestProject/stakeholders', ['stk_001', 'stk_002', 'stk_003']);
@@ -1163,7 +1163,7 @@ describe('cards.js', () => {
       });
       // Stakeholders needed for validator auto-assignment
       setMockRtdbData('/data/stakeholders', {
-        'stk_002': { name: 'Mánu Fosela', email: 'mfosela@geniova.com', active: true }
+        'stk_002': { name: 'Mánu Fosela', email: 'dev@company.com', active: true }
       });
       setMockRtdbData('/projects/TestProject/stakeholders', ['stk_002']);
     });
@@ -1323,7 +1323,7 @@ describe('cards.js', () => {
       });
       setMockRtdbData('/data/stakeholders', {
         'stk_001': { name: 'Dev User', email: 'dev@test.com', active: true },
-        'stk_002': { name: 'Mánu Fosela', email: 'mfosela@geniova.com', active: true }
+        'stk_002': { name: 'Mánu Fosela', email: 'dev@company.com', active: true }
       });
       setMockRtdbData('/projects/TestProject/stakeholders', ['stk_001', 'stk_002']);
     });
@@ -1383,7 +1383,7 @@ describe('cards.js', () => {
       });
       setMockRtdbData('/data/stakeholders', {
         'stk_001': { name: 'Dev User', email: 'dev@test.com', active: true },
-        'stk_002': { name: 'Mánu Fosela', email: 'mfosela@geniova.com', active: true }
+        'stk_002': { name: 'Mánu Fosela', email: 'dev@company.com', active: true }
       });
       setMockRtdbData('/projects/TestProject/stakeholders', ['stk_001', 'stk_002']);
     });

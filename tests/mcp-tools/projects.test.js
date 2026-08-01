@@ -91,11 +91,11 @@ describe('MCP createProject — default team from MCP user (PMC-BUG-0007)', () =
       developerId: 'dev_001',
       stakeholderId: 'stk_001',
       name: 'Mánu Fosela',
-      email: 'mjfosela@gmail.com'
+      email: 'dev@example.com'
     };
     setupRefs({
-      existingDev: { name: 'Mánu Fosela', email: 'mjfosela@gmail.com', active: true },
-      existingStk: { name: 'Mánu Fosela', email: 'mjfosela@gmail.com', active: true }
+      existingDev: { name: 'Mánu Fosela', email: 'dev@example.com', active: true },
+      existingStk: { name: 'Mánu Fosela', email: 'dev@example.com', active: true }
     });
 
     await createProject({
@@ -107,10 +107,10 @@ describe('MCP createProject — default team from MCP user (PMC-BUG-0007)', () =
     const persisted = mockSet.mock.calls.find(c => c[0] && c[0].developers)?.[0];
     expect(persisted).toBeDefined();
     expect(persisted.developers).toEqual([
-      { id: 'dev_001', name: 'Mánu Fosela', email: 'mjfosela@gmail.com' }
+      { id: 'dev_001', name: 'Mánu Fosela', email: 'dev@example.com' }
     ]);
     expect(persisted.stakeholders).toEqual([
-      { id: 'stk_001', name: 'Mánu Fosela', email: 'mjfosela@gmail.com' }
+      { id: 'stk_001', name: 'Mánu Fosela', email: 'dev@example.com' }
     ]);
   });
 

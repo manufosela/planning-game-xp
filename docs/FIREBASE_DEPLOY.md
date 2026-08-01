@@ -10,8 +10,17 @@ El CLI de Firebase tiene multiples cuentas logadas. Cada proyecto Firebase requi
 
 | Instancia | Project ID | Account | Project Number |
 |-----------|-----------|---------|----------------|
-| **Personal (manufosela)** | `planning-game-xp` | `mjfosela@gmail.com` | 755162173855 |
-| **Geniova (congelado)** | `planning-gamexp` | `mfosela@geniova.com` | 868883195229 |
+| **Personal (manufosela)** | `planning-game-xp` | *(ver nota)* | 755162173855 |
+| **Geniova (congelado)** | `planning-gamexp` | *(ver nota)* | 868883195229 |
+
+> **Cuentas reales**: no se publican en este repositorio. La cuenta de cada instancia está en su
+> fichero `.firebase-account` (dentro de `planning-game-instances/<instancia>/`, ignorado por git).
+> Para ver las cuentas disponibles en tu CLI: `firebase login:list`.
+>
+> ```bash
+> ACCOUNT=$(cat planning-game-instances/<instancia>/.firebase-account)
+> firebase deploy --project <project-id> --account "$ACCOUNT"
+> ```
 
 > **ATENCION**: `planning-game-xp` (con guion) y `planning-gamexp` (sin guion) son proyectos DISTINTOS.
 > Confundirlos puede sobreescribir reglas de seguridad de un proyecto con las del otro.
@@ -51,12 +60,12 @@ cp planning-game-instances/manufosela/database.rules.json database.rules.json
 
 # 3. Configurar target (solo la primera vez)
 firebase target:apply database main planning-game-xp-default-rtdb \
-  --project planning-game-xp --account mjfosela@gmail.com
+  --project planning-game-xp --account "$ACCOUNT"   # cuenta personal — ver .firebase-account
 
 # 4. Deploy
 firebase deploy --only database:main \
   --project planning-game-xp \
-  --account mjfosela@gmail.com
+  --account "$ACCOUNT"   # cuenta personal — ver .firebase-account
 
 # 5. Restaurar reglas Geniova
 cp database.rules.json.bak database.rules.json
@@ -72,12 +81,12 @@ cd /ruta/planning-game-xp
 
 # 1. Configurar target (solo la primera vez)
 firebase target:apply database main planning-gamexp-default-rtdb \
-  --project planning-gamexp --account mfosela@geniova.com
+  --project planning-gamexp --account "$ACCOUNT"   # cuenta corporativa — ver .firebase-account
 
 # 2. Deploy
 firebase deploy --only database:main \
   --project planning-gamexp \
-  --account mfosela@geniova.com
+  --account "$ACCOUNT"   # cuenta corporativa — ver .firebase-account
 ```
 
 ## Deploy de Hosting
@@ -87,7 +96,7 @@ firebase deploy --only database:main \
 ```bash
 firebase deploy --only hosting \
   --project planning-game-xp \
-  --account mjfosela@gmail.com
+  --account "$ACCOUNT"   # cuenta personal — ver .firebase-account
 ```
 
 ### Geniova
@@ -95,7 +104,7 @@ firebase deploy --only hosting \
 ```bash
 firebase deploy --only hosting \
   --project planning-gamexp \
-  --account mfosela@geniova.com
+  --account "$ACCOUNT"   # cuenta corporativa — ver .firebase-account
 ```
 
 ## Deploy de Functions
@@ -105,7 +114,7 @@ firebase deploy --only hosting \
 ```bash
 firebase deploy --only functions \
   --project planning-game-xp \
-  --account mjfosela@gmail.com
+  --account "$ACCOUNT"   # cuenta personal — ver .firebase-account
 ```
 
 ### Geniova
@@ -113,7 +122,7 @@ firebase deploy --only functions \
 ```bash
 firebase deploy --only functions \
   --project planning-gamexp \
-  --account mfosela@geniova.com
+  --account "$ACCOUNT"   # cuenta corporativa — ver .firebase-account
 ```
 
 ## Targets configurados en .firebaserc

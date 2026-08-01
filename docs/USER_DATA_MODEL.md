@@ -31,7 +31,7 @@ Email encoded for Firebase RTDB keys:
 - `.` → `!`
 - `#` → `-`
 
-Example: `mfosela@geniova.com` → `mfosela|geniova!com`
+Example: `dev@company.com` → `mfosela|geniova!com`
 
 ## ID Generation
 
@@ -89,7 +89,7 @@ Example: `mfosela@geniova.com` → `mfosela|geniova!com`
 
 For Gmail/Googlemail addresses, dots in the local part are ignored by Google (the "dot trick"). When looking up users:
 
-- `jorge.casar@gmail.com` and `jorgecasar@gmail.com` are the same person.
+- `john.doe@gmail.com` and `johndoe@gmail.com` are the same person.
 - The `onAuthUserCreated` Cloud Function normalizes Gmail addresses before lookup.
 - The `/users/` key should use the **normalized** form for Gmail addresses.
 
@@ -114,7 +114,7 @@ For Gmail/Googlemail addresses, dots in the local part are ignored by Google (th
   "users": {
     "mfosela|geniova!com": {
       "name": "Mánu Fosela",
-      "email": "mfosela@geniova.com",
+      "email": "dev@company.com",
       "developerId": "dev_009",
       "stakeholderId": "stk_014",
       "active": true,

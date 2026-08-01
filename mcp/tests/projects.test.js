@@ -33,9 +33,9 @@ describe('projects.js', () => {
 
   describe('createProject - Default team assignment', () => {
     beforeEach(() => {
-      setMockRtdbData('/data/developers/dev_010', { name: 'Mánu Fosela', email: 'mfosela@geniova.com' });
+      setMockRtdbData('/data/developers/dev_010', { name: 'Mánu Fosela', email: 'dev@company.com' });
       setMockRtdbData('/data/developers/dev_016', { name: 'BecarIA', email: 'becaria@ia.local' });
-      setMockRtdbData('/data/stakeholders/stk_014', { name: 'Mánu Fosela', email: 'mfosela@geniova.com', active: true });
+      setMockRtdbData('/data/stakeholders/stk_014', { name: 'Mánu Fosela', email: 'dev@company.com', active: true });
       setMockFirestoreData('projectCounters', 'NP-PCS', { lastId: 0 });
     });
 
@@ -48,7 +48,7 @@ describe('projects.js', () => {
 
       const response = JSON.parse(result.content[0].text);
       expect(response.project.developers).toHaveLength(2);
-      expect(response.project.developers[0]).toEqual({ id: 'dev_010', name: 'Mánu Fosela', email: 'mfosela@geniova.com' });
+      expect(response.project.developers[0]).toEqual({ id: 'dev_010', name: 'Mánu Fosela', email: 'dev@company.com' });
       expect(response.project.developers[1]).toEqual({ id: 'dev_016', name: 'BecarIA', email: 'becaria@ia.local' });
       expect(response.project.stakeholders).toEqual(['stk_014']);
     });
@@ -99,9 +99,9 @@ describe('projects.js', () => {
 
   describe('createProject - Default MANTENIMIENTO epic', () => {
     beforeEach(() => {
-      setMockRtdbData('/data/developers/dev_010', { name: 'Mánu Fosela', email: 'mfosela@geniova.com' });
+      setMockRtdbData('/data/developers/dev_010', { name: 'Mánu Fosela', email: 'dev@company.com' });
       setMockRtdbData('/data/developers/dev_016', { name: 'BecarIA', email: 'becaria@ia.local' });
-      setMockRtdbData('/data/stakeholders/stk_014', { name: 'Mánu Fosela', email: 'mfosela@geniova.com', active: true });
+      setMockRtdbData('/data/stakeholders/stk_014', { name: 'Mánu Fosela', email: 'dev@company.com', active: true });
       setMockFirestoreData('projectCounters', 'NP-PCS', { lastId: 0 });
     });
 
@@ -121,9 +121,9 @@ describe('projects.js', () => {
 
   describe('createProject - MCP user integration', () => {
     beforeEach(() => {
-      setMockRtdbData('/data/developers/dev_010', { name: 'Mánu Fosela', email: 'mfosela@geniova.com' });
+      setMockRtdbData('/data/developers/dev_010', { name: 'Mánu Fosela', email: 'dev@company.com' });
       setMockRtdbData('/data/developers/dev_016', { name: 'BecarIA', email: 'becaria@ia.local' });
-      setMockRtdbData('/data/stakeholders/stk_014', { name: 'Mánu Fosela', email: 'mfosela@geniova.com', active: true });
+      setMockRtdbData('/data/stakeholders/stk_014', { name: 'Mánu Fosela', email: 'dev@company.com', active: true });
       setMockFirestoreData('projectCounters', 'NP-PCS', { lastId: 0 });
     });
 
@@ -142,7 +142,7 @@ describe('projects.js', () => {
     });
 
     it('should not duplicate MCP user when already in defaults', async () => {
-      mockMcpUser = { developerId: 'dev_010', name: 'Mánu Fosela', email: 'mfosela@geniova.com' };
+      mockMcpUser = { developerId: 'dev_010', name: 'Mánu Fosela', email: 'dev@company.com' };
 
       const result = await createProject({
         projectId: 'NewProject',

@@ -382,7 +382,7 @@ async function handleProvisionDemoData(email, encodedEmail, deps) {
  * Auto-provisions new users on Firebase Auth account creation.
  * - Sets `encodedEmail` custom claim (for security rules)
  * - Checks /data/allowedUsers and sets `allowed: true` if pre-authorized
- * - Gmail normalization: treats jorge.casar@gmail.com = jorgecasar@gmail.com
+ * - Gmail normalization: treats john.doe@gmail.com = johndoe@gmail.com
  * - In DEMO_MODE: auto-allows all users with role=demo claim
  *
  * @param {object} user - Firebase Auth UserRecord

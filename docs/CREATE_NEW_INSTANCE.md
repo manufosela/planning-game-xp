@@ -26,7 +26,7 @@ Antes de tocar nada, la IA pide al humano los 6 datos siguientes. Presenta la li
 
 1. **Nombre de la instancia local** (kebab-case, ej. `tribbu`, `hoop`, `acme`). Es el directorio bajo `planning-game-instances/`.
 2. **Firebase Project ID** (ej. `planning-game-hoop`). El humano lo elige al crear el proyecto en la Console.
-3. **Cuenta Firebase / Google que administra el proyecto** (ej. `manufosela@tribbuapp.com`). Es la cuenta con la que se hizo el proyecto en la Console. **Debe estar en `firebase login:list`** — si no está, pedirle que ejecute `firebase login:add`.
+3. **Cuenta Firebase / Google que administra el proyecto** (ej. `admin@yourdomain.com`). Es la cuenta con la que se hizo el proyecto en la Console. **Debe estar en `firebase login:list`** — si no está, pedirle que ejecute `firebase login:add`.
 4. **Email del SuperAdmin de la nueva instancia** (normalmente la misma que la 3).
 5. **Dominio(s) permitido(s)** para el filtro `beforeCreate` (ej. `tribbuapp.com`). Solo si se va a aplicar la Fase 4.
 6. **Colores de marca**: primary + secondary (ej. `#FAB5ED` / `#F7F7F7`). Si el humano no los tiene claros, la IA propone la paleta neutra por defecto y se pueden ajustar después editando `theme-config.json`.
@@ -229,7 +229,7 @@ Sin Fase 4 el PG funciona igual: `/data/allowedUsers` filtra en runtime (peor UX
 Después del deploy la IA restaura el env del desarrollador:
 
 ```bash
-firebase login:use <cuenta-anterior>              # típicamente mjfosela@gmail.com
+firebase login:use <cuenta-anterior>              # típicamente dev@example.com
 node scripts/instance-manager.cjs use manufosela  # o la instancia anterior
 ```
 
