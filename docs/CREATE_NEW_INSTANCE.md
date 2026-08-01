@@ -221,7 +221,9 @@ Al hacer login por primera vez, las Cloud Functions se encargan del resto autom�
 
 **Hardening: rechaza el registro en Firebase Auth cuando el email no pertenece al dominio autorizado. Aplica a TODOS los métodos (Google OAuth, email/password, etc.).**
 
-**Prerequisito 🧑**: Identity Platform activado en Fase 0.2 (obligatorio para blocking functions).
+**Prerequisito 🧑**: Identity Platform activado en Fase 0.2 (obligatorio para blocking functions). Sin GCIP habilitado, el deploy de la función `beforeCreate` falla con `OPERATION_NOT_ALLOWED : Blocking Functions may only be configured for GCIP projects`.
+
+**El registro del trigger es condicional** en el código (`functions/index.js`): solo si `PUBLIC_ALLOWED_EMAIL_DOMAINS` está definida en el `.env` de la instancia, el export `beforeCreate` existe en el bundle. Instancias sin la variable NO despliegan la función, así que no necesitan GCIP.
 
 Desde 1.192.x el código ya trae el trigger `beforeUserCreated` implementado (`functions/handlers/before-user-created.js` + exports.beforeCreate en `functions/index.js`). Activarlo para una instancia se reduce a **una línea en el `.env`**:
 
