@@ -207,20 +207,40 @@ Semillas mínimas:
 - `/data/allowedUsers/<encodedEmail>` = `true`
 - `/users/<encodedEmail>` = `{ name, email, developerId: 'dev_001', stakeholderId: 'stk_001', createdAt, createdBy }`
 
-Al hacer login por primera vez, las Cloud Functions `createOrUpdateUser` y `syncAppAdminClaim` propagan el custom claim `isAppAdmin=true` a Firebase Auth.
+Al hacer login por primera vez, las Cloud Functions se encargan del resto automáticamente:
+
+- `createOrUpdateUser` — registra al user en `/users` si no existe.
+- `syncAppAdminClaim` — propaga `isAppAdmin=true` como custom claim (porque el encodedEmail ya está en `/data/appAdmins`). Desde 1.192.1 este trigger también fuerza `allowed=true`, lo que desbloquea la lectura de `/projects` para el SuperAdmin recién bootstrapeado (fix PLN-BUG-0111).
+- `syncUserAllowedClaim` — sincroniza `allowed=true` cuando el user tiene proyectos O es appAdmin.
+
+**Nota histórica**: antes de 1.192.1 había que setear `allowed=true` manualmente vía `admin.auth().setCustomUserClaims(uid, {allowed: true, isAppAdmin: true})` como paso extra en esta fase, porque `syncUserAllowedClaim` solo miraba proyectos y el SuperAdmin recién creado no tenía ninguno. Ese paso ya NO es necesario — el trigger lo hace solo. Si por alguna razón el user recién registrado ve "Error al cargar los proyectos", el workaround es forzar refresh del token (logout + login) para que el nuevo claim se propague al cliente.
 
 ---
 
-## Fase 4 — Filtro por dominio (🤖 IA — PR SEPARADO)
+## Fase 4 — Filtro por dominio (🤖 IA)
 
-**Esta fase no forma parte del "crear instancia" per se — es hardening opcional.** Si el humano lo quiere, la IA:
+**Hardening: rechaza el registro en Firebase Auth cuando el email no pertenece al dominio autorizado. Aplica a TODOS los métodos (Google OAuth, email/password, etc.).**
 
-1. Crea rama `feat/<name>-domain-filter`.
-2. Añade Cloud Function `beforeCreate` (blocking function) parametrizada por env var `ALLOWED_EMAIL_DOMAINS`.
-3. Actualiza `planning-game-instances/<name>/functions/.env` con `ALLOWED_EMAIL_DOMAINS=<dominio>`.
-4. PR + tests + review + deploy.
+**Prerequisito 🧑**: Identity Platform activado en Fase 0.2 (obligatorio para blocking functions).
 
-Sin Fase 4 el PG funciona igual: `/data/allowedUsers` filtra en runtime (peor UX que rechazar en registro, pero seguro).
+Desde 1.192.x el código ya trae el trigger `beforeUserCreated` implementado (`functions/handlers/before-user-created.js` + exports.beforeCreate en `functions/index.js`). Activarlo para una instancia se reduce a **una línea en el `.env`**:
+
+```bash
+# En planning-game-instances/<name>/functions/.env
+PUBLIC_ALLOWED_EMAIL_DOMAINS=tribbuapp.com
+```
+
+Múltiples dominios se separan por comas: `PUBLIC_ALLOWED_EMAIL_DOMAINS=acme.io,acme.com`. Sin la variable (o vacía) → sin restricción (comportamiento legacy).
+
+**Bypass automático para bootstrap**: cualquier email ya presente en `/data/allowedUsers/<encodedEmail>` o `/data/appAdmins/<encodedEmail>` se acepta aunque su dominio no coincida. Esto permite que la Fase 3 (bootstrap del SuperAdmin) funcione aunque el SuperAdmin sea de otro dominio.
+
+Redeploy solo functions después de tocar el `.env`:
+
+```bash
+firebase deploy --only functions --project <projectId> --account <cuenta>
+```
+
+Tests unitarios: `tests/functions/before-user-created.test.js` (13/13). Cubre allow/reject por dominio, bypass por pre-autorización, RTDB caída (fail-closed), case-insensitive, multi-dominio.
 
 ---
 
