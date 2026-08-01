@@ -9,6 +9,7 @@ const functions = require("firebase-functions/v1");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {onRequest, onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onValueCreated, onValueUpdated, onValueWritten} = require("firebase-functions/v2/database");
+const {beforeUserCreated, HttpsError: IdentityHttpsError} = require("firebase-functions/v2/identity");
 const admin = require("firebase-admin");
 const {initializeApp} = require("firebase-admin/app");
 const {getDatabase} = require("firebase-admin/database");
@@ -36,6 +37,7 @@ const { handleTaskDoneValidated } = require("./handlers/on-task-done-validated")
 const { handlePushNotification } = require('./handlers/push-notification');
 const { handleDemoCleanup } = require('./handlers/demo-cleanup');
 const { handleRequestEmailAccess, handleProvisionDemoData, handleSetEncodedEmailClaim } = require('./handlers/auth-provisioning');
+const { handleBeforeUserCreated } = require('./handlers/before-user-created');
 const { handleWeeklyEmail } = require('./handlers/weekly-email');
 const { getGraphAccessToken: _getGraphAccessToken, sendEmail: _sendEmail } = require('./shared/ms-graph.cjs');
 
@@ -303,6 +305,19 @@ const provisionDemoData = (email, encodedEmail) =>
 exports.setEncodedEmailClaim = functions.region('europe-west1').auth.user().onCreate(async (user) => {
   return handleSetEncodedEmailClaim(user, {
     admin, db: admin.database(), logger, DEMO_MODE, provisionDemoData
+  });
+});
+
+// beforeUserCreated blocking function → handlers/before-user-created.js
+// Enforces PUBLIC_ALLOWED_EMAIL_DOMAINS at sign-up time for ALL auth providers
+// (Google OAuth, email/password, etc.). Empty env var → no restriction.
+// Requires Identity Platform enabled in the project (Fase 0 of the wizard).
+exports.beforeCreate = beforeUserCreated({ region: 'europe-west1' }, (event) => {
+  return handleBeforeUserCreated(event, {
+    allowedDomainsRaw: process.env.PUBLIC_ALLOWED_EMAIL_DOMAINS,
+    db: admin.database(),
+    HttpsError: IdentityHttpsError,
+    logger
   });
 });
 
