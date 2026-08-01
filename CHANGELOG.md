@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 Auto-generated from git commits on each build.
 
+## [Unreleased]
+
+### Fixed
+
+- Upsert team members into /data on create/update (PLN-BUG-0112) (#235)
+
 ## [1.193.3] - 2026-08-01
 
 ### Other
