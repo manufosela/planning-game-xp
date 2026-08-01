@@ -15,6 +15,7 @@ import { normalizeDeveloperEntries, normalizeDeveloperEntry, getDeveloperKey } f
 import { APP_CONSTANTS } from '../constants/app-constants.js';
 import { userDirectoryService } from '../services/user-directory-service.js';
 import { entityDirectoryService } from '../services/entity-directory-service.js';
+import { buildDeveloperOptions, buildStakeholderOptions } from '../utils/task-team-options.js';
 import { isCurrentUserSuperAdmin } from '../utils/super-admin-check.js';
 import { openScenarioModal } from '../utils/scenario-modal.js';
 import { getPriorityDisplay } from '../utils/priority-utils.js';
@@ -4861,33 +4862,20 @@ this._showNotification(`${developerName} ya tiene una tarea en progreso: ${taskI
    * Retorna objetos con {value: email, display: name}
    */
   getProcessedDeveloperList() {
-    const rawList = this.developers || [];
-    const unassignedOption = {
-      value: APP_CONSTANTS.DEVELOPER_UNASSIGNED.STORAGE_VALUE,
-      display: APP_CONSTANTS.DEVELOPER_UNASSIGNED.DISPLAY_ES
-    };
-
-    if (!rawList || rawList.length === 0) {
-      return [unassignedOption];
-    }
-
-    const resolvedIds = new Set();
-    rawList.forEach((entry) => {
-      const candidate = typeof entry === 'object'
-        ? (entry.id || entry.email || entry.name || entry.value || '')
-        : entry;
-      const resolvedId = entityDirectoryService.resolveDeveloperId(candidate);
-      if (resolvedId) {
-        resolvedIds.add(resolvedId);
+    // Delegates to a pure helper so the orphan-preservation logic (PLN-BUG-0107)
+    // is unit-tested without spinning up the whole component.
+    return buildDeveloperOptions(
+      this.developers || [],
+      this.developer,
+      (candidate) => entityDirectoryService.resolveDeveloperId(candidate),
+      (id) => entityDirectoryService.getDeveloperDisplayName(id),
+      {
+        unassignedOption: {
+          value: APP_CONSTANTS.DEVELOPER_UNASSIGNED.STORAGE_VALUE,
+          display: APP_CONSTANTS.DEVELOPER_UNASSIGNED.DISPLAY_ES
+        }
       }
-    });
-
-    const options = Array.from(resolvedIds).map((id) => ({
-      value: id,
-      display: entityDirectoryService.getDeveloperDisplayName(id) || id
-    }));
-
-    return [unassignedOption, ...options];
+    );
   }
 
   /**
@@ -4895,28 +4883,12 @@ this._showNotification(`${developerName} ya tiene una tarea en progreso: ${taskI
    * Retorna objetos con {value: id|email, display: name}
    */
   getProcessedStakeholderList() {
-    const rawStakeholders = this.stakeholders || [];
-    if (!rawStakeholders || rawStakeholders.length === 0) {
-      return [{ value: '', display: '' }];
-    }
-
-    const resolvedIds = new Set();
-    rawStakeholders.forEach((entry) => {
-      const candidate = typeof entry === 'object'
-        ? (entry.id || entry.email || entry.name || entry.value || '')
-        : entry;
-      const resolvedId = entityDirectoryService.resolveStakeholderId(candidate);
-      if (resolvedId) {
-        resolvedIds.add(resolvedId);
-      }
-    });
-
-    const options = Array.from(resolvedIds).map((id) => ({
-      value: id,
-      display: entityDirectoryService.getStakeholderDisplayName(id) || id
-    }));
-
-    return [{ value: '', display: '' }, ...options];
+    return buildStakeholderOptions(
+      this.stakeholders || [],
+      [this.validator, this.coValidator],
+      (candidate) => entityDirectoryService.resolveStakeholderId(candidate),
+      (id) => entityDirectoryService.getStakeholderDisplayName(id)
+    );
   }
 
   /**
