@@ -310,24 +310,21 @@ exports.setEncodedEmailClaim = functions.region('europe-west1').auth.user().onCr
 
 // beforeUserCreated blocking function → handlers/before-user-created.js
 // Enforces PUBLIC_ALLOWED_EMAIL_DOMAINS at sign-up time for ALL auth providers
-// (Google OAuth, email/password, etc.).
+// (Google OAuth, email/password, etc.). Empty env var → no restriction (the
+// handler short-circuits and lets everything through).
 //
-// Registration is CONDITIONAL on the env var being set: blocking functions
-// require Identity Platform (GCIP) to be enabled in the Firebase project,
-// and firebase deploy fails if you try to register a blocking function on
-// a project without GCIP. Instances that don't need the filter simply omit
-// the env var and this export doesn't exist in their bundle.
-const ALLOWED_EMAIL_DOMAINS_RAW = (process.env.PUBLIC_ALLOWED_EMAIL_DOMAINS || '').trim();
-if (ALLOWED_EMAIL_DOMAINS_RAW) {
-  exports.beforeCreate = beforeUserCreated({ region: 'europe-west1' }, (event) => {
-    return handleBeforeUserCreated(event, {
-      allowedDomainsRaw: ALLOWED_EMAIL_DOMAINS_RAW,
-      db: admin.database(),
-      HttpsError: IdentityHttpsError,
-      logger
-    });
+// Prerequisite: Identity Platform (GCIP) enabled in ALL instances that ship
+// this bundle. Firebase Functions Gen 2 analyzes exports statically, so a
+// conditional `if (env) { exports.beforeCreate = ... }` doesn't work — the
+// analyzer never sees the export.
+exports.beforeCreate = beforeUserCreated({ region: 'europe-west1' }, (event) => {
+  return handleBeforeUserCreated(event, {
+    allowedDomainsRaw: process.env.PUBLIC_ALLOWED_EMAIL_DOMAINS,
+    db: admin.database(),
+    HttpsError: IdentityHttpsError,
+    logger
   });
-}
+});
 
 /**
  * Verify IA availability and get API key
