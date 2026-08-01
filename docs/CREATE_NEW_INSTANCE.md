@@ -217,32 +217,28 @@ Al hacer login por primera vez, las Cloud Functions se encargan del resto autom�
 
 ---
 
-## Fase 4 — Filtro por dominio (🤖 IA)
+## Fase 4 — Filtro por dominio (⚠️ DESACTIVADO en 1.192.x)
 
-**Hardening: rechaza el registro en Firebase Auth cuando el email no pertenece al dominio autorizado. Aplica a TODOS los métodos (Google OAuth, email/password, etc.).**
+Se intentó (PRs #231/#232/#233) y se revirtió (#234). El trigger `beforeUserCreated` requiere Identity Platform (GCIP) activo en cada Firebase project con `subtype: IDENTITY_PLATFORM`. La activación desde `console.cloud.google.com/customer-identity` **no basta con un click** — hace falta aceptar un modal de upgrade que cambia el subtype desde FIREBASE_AUTH. Sin ese upgrade completo, cada re-deploy falla con:
 
-**Prerequisito 🧑 obligatorio en TODAS las instancias**: Identity Platform activado (Fase 0.2). El export `beforeCreate` se registra siempre en el bundle (Firebase Functions Gen 2 no soporta exports condicionales por env var), así que cualquier instancia sin GCIP fallará al desplegar con `OPERATION_NOT_ALLOWED : Blocking Functions may only be configured for GCIP projects`.
-
-**El filtro es opcional por instancia** vía env var. Sin `PUBLIC_ALLOWED_EMAIL_DOMAINS` definida (o vacía), la función acepta cualquier email — el trigger existe pero no filtra nada.
-
-Desde 1.192.x el código ya trae el trigger `beforeUserCreated` implementado (`functions/handlers/before-user-created.js` + exports.beforeCreate en `functions/index.js`). Activarlo para una instancia se reduce a **una línea en el `.env`**:
-
-```bash
-# En planning-game-instances/<name>/functions/.env
-PUBLIC_ALLOWED_EMAIL_DOMAINS=tribbuapp.com
+```
+Request to identitytoolkit.googleapis.com/admin/v2/projects/<proj>/config?updateMask=blockingFunctions had HTTP Error: 400, OPERATION_NOT_ALLOWED : Blocking Functions may only be configured for GCIP projects.
 ```
 
-Múltiples dominios se separan por comas: `PUBLIC_ALLOWED_EMAIL_DOMAINS=acme.io,acme.com`. Sin la variable (o vacía) → sin restricción (comportamiento legacy).
+El código del handler (`functions/handlers/before-user-created.js`) y sus 13 tests siguen en el repo para cuando se retome. Para reactivarlo:
 
-**Bypass automático para bootstrap**: cualquier email ya presente en `/data/allowedUsers/<encodedEmail>` o `/data/appAdmins/<encodedEmail>` se acepta aunque su dominio no coincida. Esto permite que la Fase 3 (bootstrap del SuperAdmin) funcione aunque el SuperAdmin sea de otro dominio.
+1. 🧑 Confirmar upgrade a GCIP en las 3 instancias. Verificar con:
+   ```bash
+   TOKEN=$(gcloud auth print-access-token)
+   curl -H "Authorization: Bearer $TOKEN" -H "x-goog-user-project: <projectId>" \
+     "https://identitytoolkit.googleapis.com/admin/v2/projects/<projectId>/config" | grep subtype
+   ```
+   Debe decir `"subtype": "IDENTITY_PLATFORM"` — si sale `"FIREBASE_AUTH"`, el upgrade no está completo.
+2. 🤖 Re-añadir el export `beforeCreate` en `functions/index.js` (ver bloque comentado allí).
+3. 🤖 Añadir `PUBLIC_ALLOWED_EMAIL_DOMAINS=<dominio>` al `functions/.env` de la instancia con filtro.
+4. Deploy.
 
-Redeploy solo functions después de tocar el `.env`:
-
-```bash
-firebase deploy --only functions --project <projectId> --account <cuenta>
-```
-
-Tests unitarios: `tests/functions/before-user-created.test.js` (13/13). Cubre allow/reject por dominio, bypass por pre-autorización, RTDB caída (fail-closed), case-insensitive, multi-dominio.
+**Protección efectiva HOY** (sin Fase 4): `/data/allowedUsers` en RTDB rechaza en runtime a cualquier email no autorizado. El bootstrap del SuperAdmin (Fase 3) es la única entrada blanca inicial. Un email externo puede llegar a autenticarse en Firebase Auth pero no podrá leer nada del PG — verá `Error al cargar los proyectos` sin poder actuar. UX menos elegante que un rechazo en registro, pero **funcionalmente seguro**.
 
 ---
 

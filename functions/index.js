@@ -9,7 +9,6 @@ const functions = require("firebase-functions/v1");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {onRequest, onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onValueCreated, onValueUpdated, onValueWritten} = require("firebase-functions/v2/database");
-const {beforeUserCreated, HttpsError: IdentityHttpsError} = require("firebase-functions/v2/identity");
 const admin = require("firebase-admin");
 const {initializeApp} = require("firebase-admin/app");
 const {getDatabase} = require("firebase-admin/database");
@@ -37,7 +36,6 @@ const { handleTaskDoneValidated } = require("./handlers/on-task-done-validated")
 const { handlePushNotification } = require('./handlers/push-notification');
 const { handleDemoCleanup } = require('./handlers/demo-cleanup');
 const { handleRequestEmailAccess, handleProvisionDemoData, handleSetEncodedEmailClaim } = require('./handlers/auth-provisioning');
-const { handleBeforeUserCreated } = require('./handlers/before-user-created');
 const { handleWeeklyEmail } = require('./handlers/weekly-email');
 const { getGraphAccessToken: _getGraphAccessToken, sendEmail: _sendEmail } = require('./shared/ms-graph.cjs');
 
@@ -308,23 +306,21 @@ exports.setEncodedEmailClaim = functions.region('europe-west1').auth.user().onCr
   });
 });
 
-// beforeUserCreated blocking function → handlers/before-user-created.js
-// Enforces PUBLIC_ALLOWED_EMAIL_DOMAINS at sign-up time for ALL auth providers
-// (Google OAuth, email/password, etc.). Empty env var → no restriction (the
-// handler short-circuits and lets everything through).
+// NOTE: la blocking function beforeUserCreated (filtro por dominio en registro)
+// se intentó en PRs #231/#232/#233 y se revirtió: requiere Identity Platform
+// (GCIP) activo en cada Firebase project, y la activación desde consola no se
+// completa con un solo click — hace falta aceptar un upgrade que cambia el
+// subtype de FIREBASE_AUTH a IDENTITY_PLATFORM. Cada re-deploy intenta actualizar
+// la config de blocking functions y falla con OPERATION_NOT_ALLOWED mientras
+// el subtype siga siendo FIREBASE_AUTH.
 //
-// Prerequisite: Identity Platform (GCIP) enabled in ALL instances that ship
-// this bundle. Firebase Functions Gen 2 analyzes exports statically, so a
-// conditional `if (env) { exports.beforeCreate = ... }` doesn't work — the
-// analyzer never sees the export.
-exports.beforeCreate = beforeUserCreated({ region: 'europe-west1' }, (event) => {
-  return handleBeforeUserCreated(event, {
-    allowedDomainsRaw: process.env.PUBLIC_ALLOWED_EMAIL_DOMAINS,
-    db: admin.database(),
-    HttpsError: IdentityHttpsError,
-    logger
-  });
-});
+// El handler y sus tests siguen en el repo (functions/handlers/before-user-created.js,
+// tests/functions/before-user-created.test.js) para cuando se retome. Ver
+// docs/CREATE_NEW_INSTANCE.md § Fase 4 para el flujo correcto de activación.
+//
+// Protección efectiva HOY: /data/allowedUsers en RTDB rechaza en runtime a
+// cualquier email no autorizado (custom claim `allowed=false` → RTDB rechaza
+// todas las lecturas). El SuperAdmin del wizard se auto-provisiona en Fase 3.
 
 /**
  * Verify IA availability and get API key
