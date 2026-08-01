@@ -5,6 +5,13 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve orphan developer/validator in select options (PLN-BUG-0107) (#230)
+- Grant allowed=true to app admins even without projects (PLN-BUG-0111) (#229)
+
+## [1.192.0] - 2026-07-08
+
 ### Added
 
 - TaskCategory 'code' | 'nocode' con completionNote (PLN-TSK-0354) (#228)
