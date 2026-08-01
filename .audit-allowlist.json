@@ -6,20 +6,28 @@
     "@vitest/coverage-v8",
     "@vitest/ui",
     "astro",
+    "body-parser",
+    "brace-expansion",
+    "esbuild",
     "fast-xml-parser",
     "firebase-admin",
     "gaxios",
     "google-gax",
     "http-proxy-agent",
+    "js-yaml",
+    "postcss",
     "protobufjs",
     "protobufjs-cli",
     "retry-request",
+    "sharp",
+    "svgo",
     "teeny-request",
     "uuid",
-    "vitest"
+    "vitest",
+    "websocket-driver"
   ],
   "allowedAdvisories": [],
-  "reason": "Pre-existing vulns in main. Transitive deps of firebase-admin v12 (gaxios, retry-request, uuid, google-gax, protobufjs, teeny-request, @google-cloud/*) tracked in PLN-TSK-0331 (v12→v13 bump). astro XSS (define:vars + server island replay) tracked in PLN-TSK-0332 (v5→v6 bump). vitest/@vitest/ui/@vitest/coverage-v8 critical (UI server arbitrary file read/exec) tracked in PLN-TSK-0335 (v3→v4 bump, semver-major).",
-  "lastReviewed": "2026-06-02",
-  "reviewedBy": "Team"
+  "reason": "Pre-existing vulns in main. Transitive deps of firebase-admin v12 (gaxios, retry-request, uuid, google-gax, protobufjs, teeny-request, @google-cloud/*, body-parser) tracked in PLN-TSK-0331 (v12→v13 bump). astro XSS (define:vars + server island replay) + transitive esbuild/postcss/svgo/sharp tracked in PLN-TSK-0332 (v5→v6 bump). vitest/@vitest/ui/@vitest/coverage-v8 critical (UI server arbitrary file read/exec) tracked in PLN-TSK-0335 (v3→v4 bump, semver-major). websocket-driver critical + js-yaml + brace-expansion HIGH discovered 2026-07-12 during tribbu instance provisioning — added to allowlist to unblock deploy; will be tracked in a new maintenance card.",
+  "lastReviewed": "2026-07-12",
+  "reviewedBy": "manu (during tribbu bootstrap)"
 }
