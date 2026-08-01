@@ -206,6 +206,18 @@ Semillas mínimas:
 - `/data/appAdmins/<encodedEmail>` = `true` (encodedEmail = email con `.` `#` `$` `[` `]` reemplazados por `_`)
 - `/data/allowedUsers/<encodedEmail>` = `true`
 - `/users/<encodedEmail>` = `{ name, email, developerId: 'dev_001', stakeholderId: 'stk_001', createdAt, createdBy }`
+- **`/data/statusList/task-card`** y **`/data/statusList/bug-card`** — se copian tal cual desde otra instancia (canónica: manufosela). Sin estos, el select de estado en task/bug cards aparece vacío y no se puede editar. Ejemplo de contenido: `{ "To Do": 0, "In Progress": 1, "To Validate": 2, "Blocked": 3, "Done&Validated": 4 }` para tasks; equivalente con `Created, Assigned, Fixed, Verified, Closed, ...` para bugs.
+- `/data/bugPriorityList` — opcional pero recomendado, se copia igual desde manufosela.
+
+Comando one-liner para copiar las listas desde manufosela a la nueva instancia (Node + firebase-admin):
+
+```js
+const paths = ['/data/statusList/task-card', '/data/statusList/bug-card', '/data/bugPriorityList'];
+for (const p of paths) {
+  const val = (await manufoselaDb.ref(p).once('value')).val();
+  if (val) await newInstanceDb.ref(p).set(val);
+}
+```
 
 Al hacer login por primera vez, las Cloud Functions se encargan del resto automáticamente:
 
