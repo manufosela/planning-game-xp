@@ -5,6 +5,12 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Fixed
+
+- Register beforeCreate only when PUBLIC_ALLOWED_EMAIL_DOMAINS is set (#232)
+
+## [1.193.0] - 2026-08-01
+
 ### Added
 
 - BeforeUserCreated blocking function for per-instance domain filter (#231)
