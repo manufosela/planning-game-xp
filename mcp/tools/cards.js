@@ -1086,11 +1086,18 @@ export async function updateCard({ projectId, type, firebaseId, updates, validat
         if (sprintEntry) {
           const [sprintFbId, sprint] = sprintEntry;
           if (sprint.startDate && sprint.endDate) {
-            const today = new Date().toISOString().split('T')[0];
-            if (today < sprint.startDate || today > sprint.endDate) {
+            // Normalize to YYYY-MM-DD before comparing. Sprint dates were
+            // widened to full ISO ("2026-08-02T00:00:00.000Z") in PLN-TSK-0346;
+            // the old string compare against "today" (YYYY-MM-DD) then
+            // produced a false negative because "2026-08-02" < "2026-08-02T..."
+            // as strings — same-day tasks were rejected. Fix: PLN-TSK-0355.
+            const today = new Date().toISOString().slice(0, 10);
+            const sprintStartDay = String(sprint.startDate).slice(0, 10);
+            const sprintEndDay = String(sprint.endDate).slice(0, 10);
+            if (today < sprintStartDay || today > sprintEndDay) {
               throw new Error(
                 `Cannot move task to "In Progress": today (${today}) is outside sprint "${sprintCardId}" date range ` +
-                `(${sprint.startDate} to ${sprint.endDate}). Update the sprint dates first using update_sprint.`
+                `(${sprintStartDay} to ${sprintEndDay}). Update the sprint dates first using update_sprint.`
               );
             }
           }

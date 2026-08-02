@@ -203,7 +203,7 @@ Semillas mínimas:
 
 - `/data/developers/dev_001` = `{ name, email: <superadmin>, active: true }`
 - `/data/stakeholders/stk_001` = idem
-- `/data/appAdmins/<encodedEmail>` = `true` (encodedEmail = email con `.` `#` `$` `[` `]` reemplazados por `_`)
+- `/data/appAdmins/<encodedEmail>` = `true` (⚠️ encodedEmail correcto: `@` → `|`, `.` → `!`, `#` → `-`. Ejemplo: `manufosela@tribbuapp.com` → `manufosela|tribbuapp!com`. NO usar `_` como separador — es lo que hace la función legacy `encodeEmailForFirebase` en `public/js/utils/email-sanitizer.js` y es lo que el frontend espera al leer)
 - `/data/allowedUsers/<encodedEmail>` = `true`
 - `/users/<encodedEmail>` = `{ name, email, developerId: 'dev_001', stakeholderId: 'stk_001', createdAt, createdBy }`
 - **`/data/statusList/task-card`** y **`/data/statusList/bug-card`** — se copian tal cual desde otra instancia (canónica: manufosela). Sin estos, el select de estado en task/bug cards aparece vacío y no se puede editar. Ejemplo de contenido: `{ "To Do": 0, "In Progress": 1, "To Validate": 2, "Blocked": 3, "Done&Validated": 4 }` para tasks; equivalente con `Created, Assigned, Fixed, Verified, Closed, ...` para bugs.
