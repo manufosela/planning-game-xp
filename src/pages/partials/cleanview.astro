@@ -449,10 +449,14 @@
       return;
     }
 
-    projectNames.forEach(name => {
+    // Variable `name` here is the RTDB key = projectId; the human-readable
+    // name may be different since the rename decoupling in PLN-BUG-0109.
+    // Show `.name` as label but keep the projectId as value (all internal
+    // references depend on it). PLN-BUG-0114.
+    projectNames.forEach(projectId => {
       const opt = document.createElement('option');
-      opt.value = name;
-      opt.textContent = name;
+      opt.value = projectId;
+      opt.textContent = allProjects[projectId]?.name || projectId;
       projectSelector.append(opt);
     });
 
