@@ -5,6 +5,16 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Added
+
+- Enforce sprint duration policy + fix TZ quirk (PLN-TSK-0355) (#238)
+
+### Fixed
+
+- Project select shows name instead of projectId (PLN-BUG-0114) (#239)
+
+## [1.193.4] - 2026-08-01
+
 ### Fixed
 
 - Upsert team members into /data on create/update (PLN-BUG-0112) (#235)
