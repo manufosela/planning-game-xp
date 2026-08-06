@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Fixed
 
+- Manifest-based org-logo loader (PLN-BUG-0116) (#242)
+
+## [1.194.1] - 2026-08-06
+
+### Fixed
+
 - Shared hydration helper for TaskCard from RTDB snapshot (PLN-BUG-0115) (#241)
 
 ### Other
