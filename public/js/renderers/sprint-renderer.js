@@ -1,5 +1,6 @@
 import { UIUtils } from '../utils/ui-utils.js';
 import { showExpandedCardInModal } from '../utils/common-functions.js';
+import { hydrateTaskCard } from '../utils/task-card-hydrate.js';
 
 export class SprintRenderer {
   constructor() {
@@ -134,10 +135,10 @@ export class SprintRenderer {
   createSprintTask(taskData, config) {
     const task = document.createElement(taskData.cardType);
 
-    // Configure task properties - assign individually to trigger Lit setters
-    Object.keys(taskData).forEach(key => {
-      task[key] = taskData[key];
-    });
+    // Hydrate through the shared allowlist helper — a blind spread here
+    // used to throw when the snapshot carried derived getters like
+    // `priority` (PLN-BUG-0115, same root cause as PLN-BUG-0105 in PgBoard).
+    hydrateTaskCard(task, taskData);
 
     // Ensure firebaseId is set (id from Firebase)
     task.firebaseId = taskData.id;

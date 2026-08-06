@@ -32,6 +32,7 @@ import {
   writeBoardSnapshot,
   RANK_STEP
 } from '../services/board-move-service.js';
+import { hydrateTaskCard } from '../utils/task-card-hydrate.js';
 import {
   computeWipStatus,
   shouldBlockDrop,
@@ -318,28 +319,11 @@ export class PgBoard extends LitElement {
 
       const taskCardEl = document.createElement('task-card');
 
-      // TaskCard exposes a few derived getters (priority is computed
-      // from businessPoints/devPoints) and reflected properties that
-      // don't tolerate a blind spread of the persisted card. Assign
-      // only the fields TaskCard actually drives from props.
-      const SAFE_FIELDS = [
-        'cardId', 'title', 'description', 'descriptionStructured',
-        'acceptanceCriteria', 'acceptanceCriteriaStructured',
-        'status', 'developer', 'coDeveloper', 'codeveloper', 'validator', 'coValidator',
-        'epic', 'sprint', 'devPoints', 'businessPoints', 'realDevPoints', 'realBusinessPoints',
-        'startDate', 'endDate', 'year', 'spike', 'expedited',
-        'taskCategory', 'completionNote',
-        'blockedByBusiness', 'blockedByDevelopment',
-        'bbbWhy', 'bbbWho', 'bbdWhy', 'bbdWho',
-        'notes', 'attachment', 'commits',
-        'reopenCount', 'reopenCycles',
-        'createdBy', 'createdAt', 'updatedAt'
-      ];
-      for (const key of SAFE_FIELDS) {
-        if (fullCard[key] !== undefined) {
-          try { taskCardEl[key] = fullCard[key]; } catch { /* getter-only prop */ }
-        }
-      }
+      // Hydrate via shared helper (single source of truth for which
+      // RTDB fields renderers may push into a TaskCard). See
+      // public/js/utils/task-card-hydrate.js — PLN-BUG-0105 (this file)
+      // and PLN-BUG-0115 (sprint-renderer.js) share the same root cause.
+      hydrateTaskCard(taskCardEl, fullCard);
       Object.assign(taskCardEl, {
         firebaseId: card.firebaseId,
         id: card.firebaseId,
