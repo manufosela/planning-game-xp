@@ -5,6 +5,16 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Fixed
+
+- Shared hydration helper for TaskCard from RTDB snapshot (PLN-BUG-0115) (#241)
+
+### Other
+
+- Add import-docs.cjs for bulk markdown wiki import (#240)
+
+## [1.194.0] - 2026-08-03
+
 ### Added
 
 - Enforce sprint duration policy + fix TZ quirk (PLN-TSK-0355) (#238)
