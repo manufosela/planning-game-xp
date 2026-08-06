@@ -751,7 +751,7 @@ let user = null;
         menuNav = document.getElementById('menunav');
       }
 
-      function applyOrganizationBranding() {
+      async function applyOrganizationBranding() {
         const container = document.getElementById('orgBranding');
         if (!container) return;
 
@@ -762,28 +762,21 @@ let user = null;
         const imageExtensions = ['.png', '.jpg', '.jpeg', '.svg', '.webp'];
         const isImagePath = imageExtensions.some(ext => orgName.toLowerCase().endsWith(ext));
 
-        // Try to load org logo image (symlinked from instance to /images/org-logo.*)
-        // We try common extensions since the instance may have any format
-        const extensionsToTry = isImagePath
-          ? [orgName.substring(orgName.lastIndexOf('.'))]
-          : [...imageExtensions];
-
-        function tryLoadImage(exts, index = 0) {
-          if (index >= exts.length) {
-            // No image found — fall back to text h1 if orgName is plain text
-            if (orgName && !isImagePath) {
-              const heading = document.createElement('h1');
-              heading.className = 'org-name-heading';
-              heading.textContent = orgName;
-              container.innerHTML = '';
-              container.append(heading);
-              container.classList.remove('hidden');
-              container.setAttribute('aria-label', `Organización: ${orgName}`);
-            }
-            return;
+        function showTextFallback() {
+          if (orgName && !isImagePath) {
+            const heading = document.createElement('h1');
+            heading.className = 'org-name-heading';
+            heading.textContent = orgName;
+            container.innerHTML = '';
+            container.append(heading);
+            container.classList.remove('hidden');
+            container.setAttribute('aria-label', `Organización: ${orgName}`);
           }
+        }
+
+        function showLogo(ext) {
           const img = new Image();
-          img.src = `/images/org-logo${exts[index]}`;
+          img.src = `/images/org-logo${ext}`;
           img.onload = () => {
             img.alt = (isImagePath ? '' : orgName) || 'Organization logo';
             img.className = 'org-logo';
@@ -791,10 +784,51 @@ let user = null;
             container.append(img);
             container.classList.remove('hidden');
           };
-          img.onerror = () => tryLoadImage(exts, index + 1);
+          img.onerror = showTextFallback;
         }
 
-        tryLoadImage(extensionsToTry);
+        // If orgName is itself an image path, honor it and skip the manifest.
+        if (isImagePath) {
+          showLogo(orgName.substring(orgName.lastIndexOf('.')));
+          return;
+        }
+
+        // instance-manager.cjs writes /images/org-logo-manifest.json when it
+        // symlinks the logo. Single fetch instead of 4-5 x 404 in the console
+        // trying every extension. PLN-BUG-0116.
+        try {
+          const res = await fetch('/images/org-logo-manifest.json', { cache: 'no-cache' });
+          if (res.ok) {
+            const manifest = await res.json();
+            if (manifest && typeof manifest.ext === 'string' && manifest.ext.length > 0) {
+              showLogo(manifest.ext);
+              return;
+            }
+            // Manifest exists but ext is null (instance without logo).
+            showTextFallback();
+            return;
+          }
+        } catch { /* fall through to legacy probe */ }
+
+        // Legacy fallback for deployed hosts that ship without the manifest
+        // (older builds). Still generates 404s but only until the next redeploy.
+        function tryLoadImage(exts, index = 0) {
+          if (index >= exts.length) {
+            showTextFallback();
+            return;
+          }
+          const img = new Image();
+          img.src = `/images/org-logo${exts[index]}`;
+          img.onload = () => {
+            img.alt = orgName || 'Organization logo';
+            img.className = 'org-logo';
+            container.innerHTML = '';
+            container.append(img);
+            container.classList.remove('hidden');
+          };
+          img.onerror = () => tryLoadImage(exts, index + 1);
+        }
+        tryLoadImage(imageExtensions);
       }
 
       async function DOMContentLoadedActions() {
