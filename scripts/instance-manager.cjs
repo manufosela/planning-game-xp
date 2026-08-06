@@ -261,14 +261,20 @@ function activateInstance(name, { verbose = true } = {}) {
     try { fs.lstatSync(otherDest); fs.unlinkSync(otherDest); } catch { /* does not exist */ }
   }
   const orgLogoFile = findOrgLogo(instanceDir);
+  // Manifest publicado en /images/org-logo-manifest.json so Layout.astro
+  // does a single fetch instead of trying 5 extensions and generating
+  // 4-5 x 404 in the console on every page load (PLN-BUG-0116).
+  const manifestDest = path.join(ROOT_DIR, 'public', 'images', 'org-logo-manifest.json');
   if (orgLogoFile) {
     const ext = path.extname(orgLogoFile);
     const destPath = path.join(ROOT_DIR, ORG_LOGO_DEST + ext);
     createLink(path.join(instanceDir, orgLogoFile), destPath);
     if (verbose) console.log(`  Linked: public/images/org-logo${ext}`);
     linked++;
+    fs.writeFileSync(manifestDest, JSON.stringify({ ext }) + '\n');
   } else {
     if (verbose) console.log('  No org logo found — cleared previous symlinks');
+    fs.writeFileSync(manifestDest, JSON.stringify({ ext: null }) + '\n');
   }
 
   // Symlink emulator-data directory

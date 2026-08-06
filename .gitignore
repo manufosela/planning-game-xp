@@ -40,6 +40,7 @@ public/js/config/developer-directory.js
 
 # Instance-symlinked files (org branding)
 public/images/org-logo.*
+public/images/org-logo-manifest.json
 
 #firebase
 .firebase/
