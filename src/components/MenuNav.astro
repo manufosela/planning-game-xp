@@ -60,6 +60,8 @@ function isActiveLink(href: string, currentPath: string): boolean {
 </nav>
 
 <script>
+  import { isProjectScopedHref, rewriteHrefWithProject } from '../lib/nav-project-link.js';
+
   // Helper function to get super admin email from firebase-config
   let cachedSuperAdminEmail = null;
 
@@ -371,20 +373,23 @@ function isActiveLink(href: string, currentPath: string): boolean {
 
   // Propagate current projectId to nav links on click so project context
   // persists when navigating between pages (/cleanview → /adminproject, etc.)
-  const PROJECT_SCOPED_PATHS = ['/adminproject', '/cleanview', '/dashboard', '/sprintview', '/development', '/wip', '/proposals', '/board'];
+  // Click-time projectId propagator (capture phase, runs BEFORE the
+  // per-link navigate handler). Rewrites project-scoped hrefs with the
+  // projectId of the CURRENT URL at the moment of the click, so stale
+  // seals from addProjectToLinks (Layout.astro) or in-page replaceState
+  // project switches are always corrected. Href matching/rewriting is
+  // delegated to src/lib/nav-project-link.js which parses the href as a
+  // URL — the old string-prefix guard here died on trailing-slash+query
+  // and absolutized hrefs (PLN-BUG-0118).
   document.addEventListener('click', (e) => {
     const link = e.target && e.target.closest ? e.target.closest('a.nav-link') : null;
     if (!link) return;
     const href = link.getAttribute('href');
-    if (!href) return;
-    // Only rewrite protected/project-scoped routes
-    const isProjectScoped = PROJECT_SCOPED_PATHS.some(p => href === p || href === p + '/' || href.startsWith(p + '?'));
-    if (!isProjectScoped) return;
+    if (!isProjectScopedHref(href)) return;
     const currentProjectId = new URLSearchParams(window.location.search).get('projectId');
     if (!currentProjectId) return;
-    // Inject projectId query param
-    const [basePath] = href.split('?');
-    link.setAttribute('href', `${basePath}?projectId=${encodeURIComponent(currentProjectId)}`);
+    const next = rewriteHrefWithProject(href, currentProjectId);
+    if (next) link.setAttribute('href', next);
   }, true);
 </script>
 
