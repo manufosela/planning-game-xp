@@ -607,12 +607,24 @@ let user = null;
       }
 
       function addProjectToLinks(projectId) {
+        // PLN-BUG-0118: never seal an empty projectId — it used to write
+        // '?projectId=' into every menu link, which made cleanview fall
+        // back to localStorage ("random project") and adminproject land
+        // on no-project-selected ("param lost"). Title update stays
+        // unconditional to preserve the empty-project title reset.
+        if (!projectId) {
+          updatePageTitle(projectId);
+          return;
+        }
         const links = [...document.querySelectorAll('.menu-nav .nav-link')].slice(1);
         links.forEach((link) => {
           try {
-            const url = new URL(link.href, window.location.origin);
+            const url = new URL(link.getAttribute('href'), window.location.origin);
             url.searchParams.set('projectId', projectId);
-            link.href = url.toString();
+            // Write a RELATIVE href (pathname + search): an absolute URL
+            // here used to stop MenuNav's click-time propagator from
+            // recognizing its own links (PLN-BUG-0118).
+            link.setAttribute('href', url.pathname + url.search);
           } catch (e) {
             // Si algo falla, no romper la navegación
           }
