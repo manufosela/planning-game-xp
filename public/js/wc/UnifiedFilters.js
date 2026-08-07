@@ -314,7 +314,7 @@ export class UnifiedFilters extends LitElement {
           .selectedValues=${selectedValues}
           placeholder="${config.placeholder || `Filtrar por ${config.label}`}"
           searchable
-          @selection-changed=${(e) => this._handleFilterChange(filterId, e)}
+          @change=${(e) => this._handleFilterChange(filterId, e)}
         ></multi-select>
       </div>
     `;
