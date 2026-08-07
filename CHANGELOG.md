@@ -7,6 +7,13 @@ Auto-generated from git commits on each build.
 
 ### Fixed
 
+- Propagate ?projectId= reliably through menu links (PLN-BUG-0118) (#244)
+- Listen for multi-select 'change' event (PLN-BUG-0117) (#243)
+
+## [1.194.2] - 2026-08-06
+
+### Fixed
+
 - Manifest-based org-logo loader (PLN-BUG-0116) (#242)
 
 ## [1.194.1] - 2026-08-06
