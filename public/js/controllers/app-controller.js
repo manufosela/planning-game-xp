@@ -217,13 +217,15 @@ export class AppController {
   _restoreFiltersFromUrl(filters) {
     if (!this.projectId || !filters) return;
 
+    // Restore through the SERVICE, not the component: the old code called
+    // filterComponent.applyFilters(), a method UnifiedFilters never had
+    // (it belonged to the deprecated BaseFilters), so URL-shared filters
+    // silently never re-applied (PLN-BUG-0120). setFilters persists the
+    // state AND emits 'unified-filters-changed', which re-renders every
+    // active view; the unified-filters UI reads the same state on update.
     const currentSection = this.section || 'tasks';
-
-    // Apply filters via the unified-filters component
-    const filterComponent = document.querySelector('unified-filters');
-    if (filterComponent && typeof filterComponent.applyFilters === 'function') {
-      filterComponent.applyFilters(filters);
-    }
+    const cardType = currentSection === 'bugs' ? 'bug' : 'task';
+    getUnifiedFilterService().setFilters(this.projectId, cardType, filters);
   }
 
   /**
@@ -612,28 +614,11 @@ const appManager = document.getElementById('appManager');
     }
   }
 
-  _getPreservedFilters(section, preserveFilters) {
-    if (!preserveFilters) return {};
-
-    const filterComponent = document.querySelector(`${section}-filters`);
-    if (filterComponent?.getCurrentFilters) {
-      const filters = filterComponent.getCurrentFilters();
-return filters;
-    }
-    return {};
-  }
-
-  _restoreFiltersAfterRender(section, currentFilters) {
-    if (Object.keys(currentFilters).length === 0) return;
-
-    // Use requestAnimationFrame to wait for next render frame
-    requestAnimationFrame(() => {
-      const filterComponent = document.querySelector(`${section}-filters`);
-      if (filterComponent?.applyFilters) {
-        filterComponent.applyFilters(currentFilters);
-      }
-    });
-  }
+  // NOTE: the old _getPreservedFilters/_restoreFiltersAfterRender pair was
+  // removed in PLN-BUG-0120: they queried a '<section>-filters' element
+  // ('tasks-filters') that never existed, so both were silent no-ops.
+  // Filter state now lives in UnifiedFilterService + localStorage and
+  // survives re-renders without any preserve/restore dance.
 
   /**
    * Ensure card web component elements exist in the DOM for a section.
@@ -701,8 +686,6 @@ return filters;
         return;
       }
 
-      const currentFilters = this._getPreservedFilters(section, preserveFilters);
-
       // Load section-specific WCs before rendering cards
       await loadSectionWCs(section);
 
@@ -718,7 +701,6 @@ return filters;
         this.cardRenderer.renderCollapsedCards(cards, section, updatedConfig);
       }
 
-      this._restoreFiltersAfterRender(section, currentFilters);
       this.applyInitialView(section);
       this.sectionsLoaded[section] = true;
       this.sectionsNeedReload[section] = false;
