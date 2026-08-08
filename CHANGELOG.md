@@ -5,6 +5,18 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Added
+
+- TaskCategory + repositoryLabel visible en la UI (PLN-TSK-0356) (#247)
+
+### Fixed
+
+- Stamp per-instance label in version.json during build:all (PLN-BUG-0121) (#248)
+- Restore URL filters through the service (PLN-BUG-0120) (#246)
+- State key integrity — underscore projectIds + cold-start guards (PLN-BUG-0119) (#245)
+
+## [1.194.3] - 2026-08-07
+
 ### Fixed
 
 - Propagate ?projectId= reliably through menu links (PLN-BUG-0118) (#244)
