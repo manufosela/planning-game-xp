@@ -889,7 +889,15 @@ export class ViewFactory {
     if (!filtersContainer) return;
 
     const cardType = section === 'tasks' ? 'task' : 'bug';
-    const projectId = this._lastConfig?.projectId || '';
+    // Cold-start config may not carry projectId yet — fall back to the URL.
+    // NEVER create the component with an empty project-id: its state would
+    // persist under a malformed key and re-renders get discarded by the
+    // project mismatch check (PLN-BUG-0119). Creation re-runs on the next
+    // TABLE_RENDERED, so deferring is safe.
+    const projectId = this._lastConfig?.projectId
+      || new URLSearchParams(window.location.search).get('projectId')
+      || '';
+    if (!projectId) return;
 
     // Check if unified-filters already exists with correct attributes
     const existing = filtersContainer.querySelector('unified-filters');
