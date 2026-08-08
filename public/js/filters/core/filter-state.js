@@ -130,6 +130,13 @@ export class FilterState {
    * @param {Array} values - Filter values
    */
   setFilter(projectId, cardType, filterType, values) {
+    // Guard: a filter stored without projectId/cardType lands under a
+    // malformed key (e.g. 'pgxp_filters__task') that no view ever reads
+    // back — silent state pollution from cold-start races (PLN-BUG-0119).
+    if (!projectId || !cardType) {
+      console.warn('FilterState.setFilter ignored: missing projectId or cardType', { projectId, cardType, filterType });
+      return;
+    }
     this._ensureStateStructure(projectId, cardType);
 
     const normalizedValues = Array.isArray(values) ? values : [values];
@@ -151,6 +158,10 @@ export class FilterState {
    * @param {Object} filters - Filters object { filterType: [values] }
    */
   setFilters(projectId, cardType, filters) {
+    if (!projectId || !cardType) {
+      console.warn('FilterState.setFilters ignored: missing projectId or cardType', { projectId, cardType });
+      return;
+    }
     this._ensureStateStructure(projectId, cardType);
 
     // Clear existing filters for this cardType
@@ -278,7 +289,14 @@ export class FilterState {
    */
   _notifyAllSubscribers() {
     for (const [key, callbacks] of this.subscribers.entries()) {
-      const [projectId, cardType] = key.split('_');
+      // The key is `${projectId}_${cardType}` and projectId may itself
+      // contain underscores — split on the LAST one, mirroring
+      // _restoreFromStorage. A plain split('_') notified 'MI_PRJ' as
+      // projectId='MI' with empty filters (PLN-BUG-0119).
+      const lastUnderscore = key.lastIndexOf('_');
+      if (lastUnderscore <= 0) continue;
+      const projectId = key.substring(0, lastUnderscore);
+      const cardType = key.substring(lastUnderscore + 1);
       const filters = this.getFilters(projectId, cardType);
       callbacks.forEach(callback => {
         try {

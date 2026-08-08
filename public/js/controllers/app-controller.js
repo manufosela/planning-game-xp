@@ -823,8 +823,9 @@ return filters;
     const bugsListBtn = document.getElementById('bugsListViewBtn');
 
     if (bugsListView && bugsListBtn?.classList.contains('active')) {
-      this.bugFiltersSetup = true;
-      this._createUnifiedFilters('bugs');
+      // Only latch the flag when the component actually mounted — a
+      // deferred creation (no projectId yet) must retry on the next call.
+      this.bugFiltersSetup = this._createUnifiedFilters('bugs');
     }
   }
 
@@ -847,8 +848,9 @@ return filters;
     const tasksListBtn = document.getElementById('listViewBtn');
 
     if (tasksListView && tasksListBtn?.classList.contains('active')) {
-      this.taskFiltersSetup = true;
-      this._createUnifiedFilters('tasks');
+      // Only latch the flag when the component actually mounted (see
+      // setupBugFilters).
+      this.taskFiltersSetup = this._createUnifiedFilters('tasks');
     }
   }
 
@@ -868,24 +870,32 @@ return filters;
   _createUnifiedFilters(section) {
     const containerId = section === 'tasks' ? 'tasksFilters' : 'bugsFilters';
     const filtersContainer = document.getElementById(containerId);
-    if (!filtersContainer) return;
+    if (!filtersContainer) return false;
 
     const cardType = section === 'tasks' ? 'task' : 'bug';
+    // Same cold-start guard as view-factory: never mount the component
+    // without a projectId (PLN-BUG-0119). Returns false so callers do not
+    // latch their setup flag and retry later.
+    const projectId = this.projectId
+      || new URLSearchParams(window.location.search).get('projectId')
+      || '';
+    if (!projectId) return false;
 
     // Check if unified-filters already exists
     const existing = filtersContainer.querySelector('unified-filters');
-    if (existing && existing.getAttribute('card-type') === cardType) return;
+    if (existing && existing.getAttribute('card-type') === cardType) return true;
 
     filtersContainer.innerHTML = '';
 
     const filterComponent = document.createElement('unified-filters');
     filterComponent.setAttribute('card-type', cardType);
-    filterComponent.setAttribute('project-id', this.projectId || '');
+    filterComponent.setAttribute('project-id', projectId);
 
     const savedYear = localStorage.getItem('selectedYear');
     filterComponent.setAttribute('year', savedYear || new Date().getFullYear());
 
     filtersContainer.appendChild(filterComponent);
+    return true;
   }
 
   showNotification(message, type = 'info') {
