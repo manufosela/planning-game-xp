@@ -24,6 +24,28 @@ log() {
   echo "  [$(timestamp)] $1"
 }
 
+# Stamp the given instance name into version.json (field "instance") and
+# public/js/version.js (export const instance). PLN-BUG-0121: keeps each
+# built dist labeled with ITS instance instead of whichever was active
+# when the pre-loop version bump ran.
+patch_instance_label() {
+  local INSTANCE_NAME="$1"
+  node -e "
+    const fs = require('fs');
+    const vPath = '$ROOT_DIR/version.json';
+    if (fs.existsSync(vPath)) {
+      const v = JSON.parse(fs.readFileSync(vPath, 'utf8'));
+      v.instance = '$INSTANCE_NAME';
+      fs.writeFileSync(vPath, JSON.stringify(v, null, 2));
+    }
+    const jsPath = '$ROOT_DIR/public/js/version.js';
+    if (fs.existsSync(jsPath)) {
+      const js = fs.readFileSync(jsPath, 'utf8');
+      fs.writeFileSync(jsPath, js.replace(/instance = '[^']*'/, \"instance = '$INSTANCE_NAME'\"));
+    }
+  " 2>/dev/null || echo "  ⚠️  Could not patch instance label for $INSTANCE_NAME"
+}
+
 # Save current instance to restore later
 ORIGINAL_INSTANCE=""
 if [ -f "$ROOT_DIR/.last-instance" ]; then
@@ -107,6 +129,13 @@ for INSTANCE in $INSTANCES; do
   node "$ROOT_DIR/scripts/instance-manager.cjs" use "$INSTANCE" >> "$LOGFILE" 2>&1
   log "Instance activated"
 
+  # 1b. Stamp the instance label into version.json + public/js/version.js
+  # BEFORE building. update-version runs once before this loop, so without
+  # this every dist shipped the label of whichever instance was active at
+  # that moment ('manufosela' in the 3 dists) — misleading when diagnosing
+  # via https://<host>/version.json (PLN-BUG-0121).
+  patch_instance_label "$INSTANCE"
+
   # 2. Clean dist/ before build
   rm -rf "$ROOT_DIR/dist"
 
@@ -141,10 +170,12 @@ for INSTANCE in $INSTANCES; do
   echo ""
 done
 
-# Restore original instance
+# Restore original instance (and its version label, so the working tree
+# doesn't stay stamped with the last-built instance)
 if [ -n "$ORIGINAL_INSTANCE" ]; then
   log "Restoring instance: $ORIGINAL_INSTANCE"
   node "$ROOT_DIR/scripts/instance-manager.cjs" use "$ORIGINAL_INSTANCE" > /dev/null 2>&1 || true
+  patch_instance_label "$ORIGINAL_INSTANCE"
 fi
 
 END_TIME=$(date +%s)
