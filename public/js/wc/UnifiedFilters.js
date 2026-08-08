@@ -313,7 +313,6 @@ export class UnifiedFilters extends LitElement {
           }))}
           .selectedValues=${selectedValues}
           placeholder="${config.placeholder || `Filtrar por ${config.label}`}"
-          searchable
           @change=${(e) => this._handleFilterChange(filterId, e)}
         ></multi-select>
       </div>

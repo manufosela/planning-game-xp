@@ -216,4 +216,9 @@ export class MultiSelect extends LitElement {
   }
 }
 
-customElements.define('multi-select', MultiSelect);
+// Guarded define: @manufosela/multi-select (npm/import map) registers the
+// same tag. If both modules load on one page, an unconditional second
+// define throws and aborts this module's load (PLN-TSK-0356 cleanup).
+if (!customElements.get('multi-select')) {
+  customElements.define('multi-select', MultiSelect);
+}

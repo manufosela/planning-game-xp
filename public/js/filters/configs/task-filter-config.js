@@ -8,7 +8,20 @@ import { developerMatcher, validatorMatcher } from '../matchers/developer-matche
 import { sprintMatcher } from '../matchers/sprint-matcher.js';
 import { epicMatcher } from '../matchers/epic-matcher.js';
 import { repositoryLabelMatcher } from '../matchers/repository-matcher.js';
+import { taskCategoryMatcher } from '../matchers/task-category-matcher.js';
 import { APP_CONSTANTS } from '../../constants/app-constants.js';
+
+/**
+ * Static options for the task category filter (PLN-TSK-0354/0356).
+ * Cards without the field count as 'code' (legacy default).
+ * @returns {Promise<Array<{value: string, label: string}>>}
+ */
+async function getTaskCategoryOptions() {
+  return [
+    { value: 'code', label: 'Con código' },
+    { value: 'nocode', label: 'Sin código' }
+  ];
+}
 
 /**
  * Get status options for tasks
@@ -165,11 +178,21 @@ export const taskFilterConfig = {
       matcher: repositoryLabelMatcher,
       optionsProvider: getRepositoryOptions,
       multiSelect: true
+    },
+    taskCategory: {
+      id: 'taskCategory',
+      label: 'Categoría',
+      placeholder: 'Filtrar por categoría',
+      matcher: taskCategoryMatcher,
+      optionsProvider: getTaskCategoryOptions,
+      multiSelect: true
     }
   },
 
-  // Default filters to display (order matters)
-  displayOrder: ['status', 'sprint', 'epic', 'developer', 'validator'],
+  // Default filters to display (order matters). Any filter missing here is
+  // configured-but-invisible — that desync hid repositoryLabel and
+  // taskCategory for months (PLN-TSK-0356).
+  displayOrder: ['status', 'sprint', 'epic', 'developer', 'validator', 'taskCategory', 'repositoryLabel'],
 
   // Default filter values (applied on first load)
   defaultValues: {
