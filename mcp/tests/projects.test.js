@@ -31,15 +31,18 @@ describe('projects.js', () => {
     mockMcpUser = null;
   });
 
-  describe('createProject - Default team assignment', () => {
+  // Contract since PMC-BUG-0007: the default team comes from the MCP user
+  // config (developerId/stakeholderId), NOT from hardcoded legacy IDs.
+  describe('createProject - Default team from MCP user config', () => {
     beforeEach(() => {
-      setMockRtdbData('/data/developers/dev_010', { name: 'Mánu Fosela', email: 'mfosela@geniova.com' });
-      setMockRtdbData('/data/developers/dev_016', { name: 'BecarIA', email: 'becaria@ia.local' });
-      setMockRtdbData('/data/stakeholders/stk_014', { name: 'Mánu Fosela', email: 'mfosela@geniova.com', active: true });
+      setMockRtdbData('/data/developers/dev_001', { name: 'Mánu Fosela', email: 'mjfosela@gmail.com' });
+      setMockRtdbData('/data/stakeholders/stk_001', { name: 'Mánu Fosela', email: 'mjfosela@gmail.com', active: true });
       setMockFirestoreData('projectCounters', 'NP-PCS', { lastId: 0 });
     });
 
-    it('should auto-assign default developers and stakeholders', async () => {
+    it('assigns the MCP user as default developer AND stakeholder (as objects)', async () => {
+      mockMcpUser = { developerId: 'dev_001', stakeholderId: 'stk_001', name: 'Mánu Fosela', email: 'mjfosela@gmail.com' };
+
       const result = await createProject({
         projectId: 'NewProject',
         name: 'New Project',
@@ -47,14 +50,17 @@ describe('projects.js', () => {
       });
 
       const response = JSON.parse(result.content[0].text);
-      expect(response.project.developers).toHaveLength(2);
-      expect(response.project.developers[0]).toEqual({ id: 'dev_010', name: 'Mánu Fosela', email: 'mfosela@geniova.com' });
-      expect(response.project.developers[1]).toEqual({ id: 'dev_016', name: 'BecarIA', email: 'becaria@ia.local' });
-      expect(response.project.stakeholders).toEqual(['stk_014']);
+      expect(response.project.developers).toEqual([
+        { id: 'dev_001', name: 'Mánu Fosela', email: 'mjfosela@gmail.com' }
+      ]);
+      // Stakeholders are objects too (not plain strings) since PMC-BUG-0007.
+      expect(response.project.stakeholders).toEqual([
+        { id: 'stk_001', name: 'Mánu Fosela', email: 'mjfosela@gmail.com' }
+      ]);
     });
 
-    it('should warn when default developer not found', async () => {
-      setMockRtdbData('/data/developers/dev_016', null);
+    it('warns and creates empty teams when no MCP user is configured', async () => {
+      mockMcpUser = null;
       setMockFirestoreData('projectCounters', 'NP2-PCS', { lastId: 0 });
 
       const result = await createProject({
@@ -64,14 +70,14 @@ describe('projects.js', () => {
       });
 
       const response = JSON.parse(result.content[0].text);
-      expect(response.project.developers).toHaveLength(1);
-      expect(response.project.developers[0].id).toBe('dev_010');
+      expect(response.project.developers ?? []).toHaveLength(0);
+      expect(response.project.stakeholders ?? []).toHaveLength(0);
       expect(response.warnings).toBeDefined();
-      expect(response.warnings.some(w => w.message.includes('dev_016'))).toBe(true);
+      expect(response.warnings.some(w => w.code === 'MCP_USER_NOT_CONFIGURED')).toBe(true);
     });
 
-    it('should warn when default stakeholder not found', async () => {
-      setMockRtdbData('/data/stakeholders/stk_014', null);
+    it('warns when the MCP user has no stakeholderId', async () => {
+      mockMcpUser = { developerId: 'dev_001', name: 'Solo Dev', email: 'dev@x.z' };
       setMockFirestoreData('projectCounters', 'NP3-PCS', { lastId: 0 });
 
       const result = await createProject({
@@ -81,9 +87,9 @@ describe('projects.js', () => {
       });
 
       const response = JSON.parse(result.content[0].text);
-      expect(response.project.stakeholders).toHaveLength(0);
+      expect(response.project.stakeholders ?? []).toHaveLength(0);
       expect(response.warnings).toBeDefined();
-      expect(response.warnings.some(w => w.message.includes('stk_014'))).toBe(true);
+      expect(response.warnings.some(w => w.code === 'DEFAULT_STAKEHOLDER_MISSING')).toBe(true);
     });
 
     it('should throw if project already exists', async () => {
@@ -99,9 +105,6 @@ describe('projects.js', () => {
 
   describe('createProject - Default MANTENIMIENTO epic', () => {
     beforeEach(() => {
-      setMockRtdbData('/data/developers/dev_010', { name: 'Mánu Fosela', email: 'mfosela@geniova.com' });
-      setMockRtdbData('/data/developers/dev_016', { name: 'BecarIA', email: 'becaria@ia.local' });
-      setMockRtdbData('/data/stakeholders/stk_014', { name: 'Mánu Fosela', email: 'mfosela@geniova.com', active: true });
       setMockFirestoreData('projectCounters', 'NP-PCS', { lastId: 0 });
     });
 
@@ -121,13 +124,12 @@ describe('projects.js', () => {
 
   describe('createProject - MCP user integration', () => {
     beforeEach(() => {
-      setMockRtdbData('/data/developers/dev_010', { name: 'Mánu Fosela', email: 'mfosela@geniova.com' });
-      setMockRtdbData('/data/developers/dev_016', { name: 'BecarIA', email: 'becaria@ia.local' });
-      setMockRtdbData('/data/stakeholders/stk_014', { name: 'Mánu Fosela', email: 'mfosela@geniova.com', active: true });
       setMockFirestoreData('projectCounters', 'NP-PCS', { lastId: 0 });
     });
 
-    it('should add MCP user as developer when not in defaults', async () => {
+    it('falls back to the config name/email when the developer is not in /data yet', async () => {
+      // dev_099 has no /data/developers entry — the card is synthesized
+      // from the MCP user config (PMC-BUG-0007 behaviour).
       mockMcpUser = { developerId: 'dev_099', name: 'Other User', email: 'other@test.com' };
 
       const result = await createProject({
@@ -137,21 +139,9 @@ describe('projects.js', () => {
       });
 
       const response = JSON.parse(result.content[0].text);
-      expect(response.project.developers).toHaveLength(3);
-      expect(response.project.developers[2]).toEqual({ id: 'dev_099', name: 'Other User', email: 'other@test.com' });
-    });
-
-    it('should not duplicate MCP user when already in defaults', async () => {
-      mockMcpUser = { developerId: 'dev_010', name: 'Mánu Fosela', email: 'mfosela@geniova.com' };
-
-      const result = await createProject({
-        projectId: 'NewProject',
-        name: 'New Project',
-        abbreviation: 'NP'
-      });
-
-      const response = JSON.parse(result.content[0].text);
-      expect(response.project.developers).toHaveLength(2);
+      expect(response.project.developers).toEqual([
+        { id: 'dev_099', name: 'Other User', email: 'other@test.com' }
+      ]);
     });
 
     it('should use MCP user email in createdBy', async () => {

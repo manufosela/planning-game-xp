@@ -34,6 +34,18 @@ fi
 
 echo "${GREEN}✅ Tests completados${NC}"
 
+# Si el commit toca mcp/, ejecutar también la suite interna del MCP (PMC-BUG-0008)
+if git diff --name-only --cached | grep -q "^mcp/"; then
+  echo "${BLUE}🧪 Cambios en mcp/ detectados: ejecutando suite interna del MCP...${NC}"
+  npm run test:mcp
+  if [ $? -ne 0 ]; then
+    echo "${RED}❌ Commit bloqueado: Fallan tests de la suite interna del MCP (mcp/tests)${NC}"
+    echo "${YELLOW}💡 Corrige los tests antes de hacer commit (npm run test:mcp)${NC}"
+    exit 1
+  fi
+  echo "${GREEN}✅ Suite interna del MCP en verde${NC}"
+fi
+
 echo "${BLUE}🔒 Ejecutando verificación de seguridad pre-commit...${NC}"
 
 # Ejecutar verificación de seguridad con auto-fix
