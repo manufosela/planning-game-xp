@@ -7,6 +7,12 @@ Auto-generated from git commits on each build.
 
 ### Added
 
+- Unify plan proposals into proposal cards (PLN-TSK-0357) (#249)
+
+## [1.195.0] - 2026-08-08
+
+### Added
+
 - TaskCategory + repositoryLabel visible en la UI (PLN-TSK-0356) (#247)
 
 ### Fixed
