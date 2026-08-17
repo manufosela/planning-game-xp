@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { getDatabase, getFirestore } from '../firebase-adapter.js';
 import { getMcpUserId } from '../user.js';
-import { getAbbrId } from '../../shared/utils.js';
+import { getAbbrId, buildSectionPath } from '../../shared/utils.js';
 
 const VALID_PLAN_STATUSES = ['draft', 'accepted', 'rejected'];
 
@@ -48,7 +48,8 @@ export const createPlanSchema = z.object({
   projectId: z.string().describe('Project ID'),
   title: z.string().describe('Plan title (max 150 chars)'),
   objective: z.string().optional().describe('Plan objective (max 500 chars)'),
-  proposalId: z.string().optional().describe('Plan Proposal ID to link this plan to (auto-updates the proposal planIds)'),
+  proposalId: z.string().optional().describe('DEPRECATED (legacy plan proposals, PLN-TSK-0357). Use proposalCardId instead.'),
+  proposalCardId: z.string().optional().describe('Proposal CARD id (e.g. "KJR-PRP-0009") this plan originates from. Validates the card exists and marks it with convertedToPlan=<planCardId> for traceability.'),
   phases: z.array(z.object({
     name: z.string().describe('Phase name (max 150 chars)'),
     description: z.string().optional().describe('Phase description (max 500 chars)'),
@@ -139,7 +140,7 @@ export async function getPlan({ projectId, planId }) {
   return { content: [{ type: 'text', text: JSON.stringify(plan, null, 2) }] };
 }
 
-export async function createPlan({ projectId, title, objective, proposalId, phases }) {
+export async function createPlan({ projectId, title, objective, proposalId, proposalCardId, phases }) {
   if (!title || title.trim().length === 0) {
     throw new Error('title is required and must be a non-empty string');
   }
@@ -159,12 +160,30 @@ export async function createPlan({ projectId, title, objective, proposalId, phas
   const now = new Date().toISOString();
   const createdBy = getMcpUserId();
 
-  // Validate proposalId if provided
+  // Validate proposalId if provided (legacy plan proposals — deprecated,
+  // kept for backwards compatibility until /planProposals is fully retired)
   if (proposalId) {
     const proposalSnap = await db.ref(`planProposals/${projectId}/${proposalId}`).once('value');
     if (!proposalSnap.exists()) {
       throw new Error(`Plan proposal "${proposalId}" not found in project "${projectId}"`);
     }
+  }
+
+  // Validate proposalCardId if provided (the unified flow, PLN-TSK-0357):
+  // plans originate from a proposal CARD of the Proposals tab.
+  let proposalCardRef = null;
+  if (proposalCardId) {
+    const proposalsPath = buildSectionPath(projectId, 'proposal');
+    const proposalsSnap = await db.ref(proposalsPath).once('value');
+    const proposalsData = proposalsSnap.val() || {};
+    const entry = Object.entries(proposalsData).find(([, c]) => c && c.cardId === proposalCardId);
+    if (!entry) {
+      throw new Error(
+        `Proposal card "${proposalCardId}" not found in project "${projectId}". ` +
+        `Use list_cards type=proposal to see available proposals.`
+      );
+    }
+    proposalCardRef = db.ref(`${proposalsPath}/${entry[0]}`);
   }
 
   // Generate human-readable cardId (e.g. "PLN-PLA-0001") via Firestore counter,
@@ -206,9 +225,22 @@ export async function createPlan({ projectId, title, objective, proposalId, phas
   if (proposalId) {
     planData.proposalId = proposalId;
   }
+  if (proposalCardId) {
+    planData.proposalCardId = proposalCardId;
+  }
 
   const newRef = db.ref(`plans/${projectId}`).push();
   await newRef.set(planData);
+
+  // Mark the source proposal card as converted to this plan (traceability,
+  // mirrors the proposal→task conversion pattern). PLN-TSK-0357.
+  if (proposalCardRef) {
+    await proposalCardRef.update({
+      convertedToPlan: cardId,
+      updatedAt: now,
+      updatedBy: createdBy
+    });
+  }
 
   // Auto-add planId to proposal's planIds array
   if (proposalId) {
@@ -238,7 +270,8 @@ export async function createPlan({ projectId, title, objective, proposalId, phas
         status: 'draft',
         phases: planData.phases.length,
         totalTasks,
-        proposalId: proposalId || null
+        proposalId: proposalId || null,
+        proposalCardId: proposalCardId || null
       }, null, 2)
     }]
   };

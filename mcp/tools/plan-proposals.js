@@ -94,51 +94,18 @@ export async function getPlanProposal({ projectId, proposalId }) {
   return { content: [{ type: 'text', text: JSON.stringify(proposal, null, 2) }] };
 }
 
-export async function createPlanProposal({ projectId, title, description, tags, sourceDocumentUrl }) {
-  if (!title || title.trim().length === 0) {
-    throw new Error('title is required and must be a non-empty string');
-  }
-
-  const db = getDatabase();
-
-  // Verify project exists
-  const projectSnap = await db.ref(`projects/${projectId}`).once('value');
-  if (!projectSnap.exists()) {
-    throw new Error(`Project "${projectId}" not found`);
-  }
-
-  const now = new Date().toISOString();
-  const createdBy = getMcpUserId();
-
-  const proposalData = {
-    title: title.trim().slice(0, 200),
-    description: (description || '').trim().slice(0, 5000),
-    status: 'pending',
-    tags: (tags || []).map(t => t.trim().slice(0, 50)).filter(t => t.length > 0),
-    planIds: [],
-    createdAt: now,
-    updatedAt: now,
-    createdBy
-  };
-
-  if (sourceDocumentUrl) {
-    proposalData.sourceDocumentUrl = sourceDocumentUrl.trim().slice(0, 500);
-  }
-
-  const newRef = db.ref(`planProposals/${projectId}`).push();
-  await newRef.set(proposalData);
-
-  return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        message: 'Plan proposal created successfully',
-        proposalId: newRef.key,
-        title: proposalData.title,
-        status: 'pending'
-      }, null, 2)
-    }]
-  };
+export async function createPlanProposal() {
+  // DEPRECATED (PLN-TSK-0357): proposals were unified into proposal CARDS.
+  // Plan proposals never got adoption (5 entries total, one project, all
+  // already consumed) while proposal cards are the living system. New
+  // ideas go through the Proposals tab; plans link to them directly.
+  // Read tools (list/get) remain functional for historical data until
+  // /planProposals is fully retired post-migration.
+  throw new Error(
+    'DEPRECATED: create_plan_proposal was retired (PLN-TSK-0357). ' +
+    'Create a proposal card instead: create_card type=proposal. ' +
+    'Then link it to a plan with create_plan proposalCardId="<XXX-PRP-NNNN>".'
+  );
 }
 
 export async function updatePlanProposal({ projectId, proposalId, updates }) {
