@@ -29,7 +29,6 @@ vi.mock('../../public/js/wc/dev-plans-section-styles.js', () => ({
 }));
 
 // Mock child components
-vi.mock('../../public/js/wc/PlanProposalsList.js', () => ({}));
 vi.mock('../../public/js/wc/DevPlansList.js', () => ({}));
 
 // Now import the component
@@ -59,13 +58,6 @@ describe('DevPlansSection', () => {
     });
   });
 
-  describe('_handleGenerateFromProposal', () => {
-    it('should exist as a method', () => {
-      const section = new DevPlansSection();
-      expect(typeof section._handleGenerateFromProposal).toBe('function');
-    });
-  });
-
   describe('render', () => {
     it('should return a template', () => {
       const section = new DevPlansSection();
@@ -73,6 +65,16 @@ describe('DevPlansSection', () => {
       const result = section.render();
       expect(result).toBeDefined();
       expect(result.strings).toBeDefined();
+    });
+
+    it('does NOT render the retired plan-proposals sub-tab (PLN-TSK-0357)', () => {
+      const section = new DevPlansSection();
+      section.projectId = 'PLN';
+      const result = section.render();
+      const template = result.strings.join('');
+      expect(template).not.toContain('plan-proposals-list');
+      // Default tab is now Plans.
+      expect(template).toContain('active-tab="plans"');
     });
   });
 });

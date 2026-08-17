@@ -119,71 +119,20 @@ describe('plan-proposals.js', () => {
     });
   });
 
-  describe('createPlanProposal', () => {
-    beforeEach(() => {
-      setMockRtdbData('/projects/TestProject', { name: 'Test Project' });
-    });
-
-    it('should create a proposal with all fields', async () => {
-      const result = await createPlanProposal({
-        projectId: 'TestProject',
-        title: 'New Feature Request',
-        description: 'We need a new authentication system',
-        tags: ['auth', 'security'],
-        sourceDocumentUrl: 'https://docs.google.com/doc/123'
-      });
-
-      const response = JSON.parse(result.content[0].text);
-      expect(response.message).toContain('created successfully');
-      expect(response.title).toBe('New Feature Request');
-      expect(response.status).toBe('pending');
-      expect(response.proposalId).toBeTruthy();
-    });
-
-    it('should create a minimal proposal with only title', async () => {
-      const result = await createPlanProposal({
-        projectId: 'TestProject',
-        title: 'Simple Request'
-      });
-
-      const response = JSON.parse(result.content[0].text);
-      expect(response.message).toContain('created successfully');
-      expect(response.title).toBe('Simple Request');
-    });
-
-    it('should throw error for empty title', async () => {
+  describe('createPlanProposal — DEPRECATED (PLN-TSK-0357)', () => {
+    it('rejects with an actionable deprecation error', async () => {
       await expect(
-        createPlanProposal({ projectId: 'TestProject', title: '' })
-      ).rejects.toThrow('title is required');
+        createPlanProposal({ projectId: 'TestProject', title: 'New Feature Request' })
+      ).rejects.toThrow(/DEPRECATED/);
     });
 
-    it('should throw error for non-existent project', async () => {
+    it('the error tells the caller the unified flow (proposal card + proposalCardId)', async () => {
       await expect(
-        createPlanProposal({ projectId: 'NonExistent', title: 'Test' })
-      ).rejects.toThrow('not found');
-    });
-
-    it('should truncate long title', async () => {
-      const longTitle = 'A'.repeat(300);
-      const result = await createPlanProposal({
-        projectId: 'TestProject',
-        title: longTitle
-      });
-
-      const response = JSON.parse(result.content[0].text);
-      expect(response.title.length).toBe(200);
-    });
-
-    it('should use MCP user as createdBy when configured', async () => {
-      mockMcpUser = { email: 'user@test.com', developerId: 'dev_001' };
-
-      const result = await createPlanProposal({
-        projectId: 'TestProject',
-        title: 'User Proposal'
-      });
-
-      const response = JSON.parse(result.content[0].text);
-      expect(response.proposalId).toBeTruthy();
+        createPlanProposal({ projectId: 'TestProject', title: 'X' })
+      ).rejects.toThrow(/create_card type=proposal/);
+      await expect(
+        createPlanProposal({ projectId: 'TestProject', title: 'X' })
+      ).rejects.toThrow(/proposalCardId/);
     });
   });
 

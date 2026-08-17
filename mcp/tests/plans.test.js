@@ -216,6 +216,43 @@ describe('plans.js', () => {
       expect(response.message).toContain('created successfully');
     });
 
+    // ── proposalCardId tests (unified flow, PLN-TSK-0357) ──
+
+    it('creates a plan linked to a proposal CARD and marks it convertedToPlan', async () => {
+      setMockRtdbData('/cards/TestProject/PROPOSALS_TestProject/-cardKey1', {
+        cardId: 'TST-PRP-0001',
+        cardType: 'proposal-card',
+        title: 'Idea desde la pestaña Proposals',
+        status: 'To Do'
+      });
+
+      const result = await createPlan({
+        projectId: 'TestProject',
+        title: 'Plan desde proposal card',
+        proposalCardId: 'TST-PRP-0001'
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.message).toContain('created successfully');
+      expect(response.proposalCardId).toBe('TST-PRP-0001');
+
+      // The source card gets traceability back to the plan.
+      const { getDatabase } = await import('./__mocks__/firebase.js');
+      const db = getDatabase();
+      const cardSnap = await db.ref('/cards/TestProject/PROPOSALS_TestProject/-cardKey1').once('value');
+      const card = cardSnap.val();
+      expect(card.convertedToPlan).toBe(response.cardId);
+      expect(card.updatedAt).toBeTruthy();
+    });
+
+    it('rejects a proposalCardId that does not exist', async () => {
+      await expect(createPlan({
+        projectId: 'TestProject',
+        title: 'Plan huérfano',
+        proposalCardId: 'TST-PRP-9999'
+      })).rejects.toThrow(/Proposal card "TST-PRP-9999" not found/);
+    });
+
     it('should auto-update proposal planIds when creating plan with proposalId', async () => {
       setMockRtdbData('/planProposals/TestProject/-prop1', {
         title: 'Feature Request',
