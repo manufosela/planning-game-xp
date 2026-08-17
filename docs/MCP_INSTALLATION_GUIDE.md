@@ -221,7 +221,7 @@ Al arrancar Claude Code con el MCP conectado:
 > Use setup_mcp_user to configure my identity
 ```
 
-Esto crea un `.mcp-user.json` con tu ID de developer, usado para tracking de quién crea/actualiza cards.
+Esto crea un `mcp.user.json` con tu ID de developer, usado para tracking de quién crea/actualiza cards.
 
 #### Multi-instancia
 
@@ -243,7 +243,116 @@ claude mcp add planning-game-teamB --scope user \
   -- planning-game-mcp
 ```
 
-Cada instancia mantiene su propio `.mcp-user.json` en su `MCP_INSTANCE_DIR`.
+Cada instancia mantiene su propio `mcp.user.json` en su `MCP_INSTANCE_DIR`.
+
+#### Receta completa para añadir una instancia nueva
+
+Procedimiento verificado de principio a fin, útil cuando se añade un segundo (o tercer)
+Planning Game sobre un proyecto Firebase distinto.
+
+**1. Guardar la clave fuera del repo, en un directorio de secretos**
+
+Convención recomendada: un único directorio con permisos restrictivos para todas las claves,
+y un *symlink* desde cada instancia. Así la clave existe una sola vez en disco y nunca puede
+colarse en un commit.
+
+```bash
+mkdir -p ~/.secrets/firebase && chmod 700 ~/.secrets/firebase
+mv ~/Downloads/<proyecto>-firebase-adminsdk-*.json ~/.secrets/firebase/<proyecto>-sa.json
+chmod 600 ~/.secrets/firebase/<proyecto>-sa.json
+
+# Symlink desde el directorio de instancia
+ln -sf ~/.secrets/firebase/<proyecto>-sa.json <INSTANCE_DIR>/serviceAccountKey.json
+```
+
+**2. Averiguar la URL de la RTDB sin entrar en la consola**
+
+La región no se puede adivinar. Se puede consultar con la propia clave, usando la API de
+gestión de Realtime Database:
+
+```bash
+python3 - <<'EOF'
+import json, urllib.request
+from google.oauth2 import service_account
+import google.auth.transport.requests as gt
+
+KEY = '/ruta/a/serviceAccountKey.json'
+c = service_account.Credentials.from_service_account_file(
+        KEY, scopes=['https://www.googleapis.com/auth/firebase'])
+c.refresh(gt.Request())
+
+pid = json.load(open(KEY))['project_id']
+url = f'https://firebasedatabase.googleapis.com/v1beta/projects/{pid}/locations/-/instances'
+req = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + c.token})
+for i in json.load(urllib.request.urlopen(req)).get('instances', []):
+    print(i['type'], i['state'], '->', i['databaseUrl'])
+EOF
+```
+
+Salida esperada: `DEFAULT_DATABASE ACTIVE -> https://<proyecto>-default-rtdb.<región>.firebasedatabase.app`
+
+> Si la instancia ya tiene un `.env.prod`, la URL suele estar en `PUBLIC_FIREBASE_DATABASE_URL`.
+
+**3. Comprobar el acceso antes de registrar nada**
+
+Merece la pena validar que la clave llega a la base de datos, para no depurar a ciegas después.
+Con el Admin SDK las reglas de seguridad no se aplican, así que una lectura correcta confirma
+credencial y URL a la vez:
+
+```bash
+python3 - <<'EOF'
+import json, urllib.request
+from google.oauth2 import service_account
+import google.auth.transport.requests as gt
+
+KEY = '/ruta/a/serviceAccountKey.json'
+DB  = 'https://<proyecto>-default-rtdb.<región>.firebasedatabase.app'
+c = service_account.Credentials.from_service_account_file(KEY, scopes=[
+        'https://www.googleapis.com/auth/firebase.database',
+        'https://www.googleapis.com/auth/userinfo.email'])
+c.refresh(gt.Request())
+req = urllib.request.Request(DB + '/.json?shallow=true',
+                             headers={'Authorization': 'Bearer ' + c.token})
+print(json.load(urllib.request.urlopen(req)))
+EOF
+```
+
+**4. Crear el `mcp.user.json` de la instancia**
+
+Los IDs deben existir ya en esa base de datos (`data/developers`, `data/stakeholders`):
+
+```jsonc
+{
+  "developerId": "dev_001",
+  "stakeholderId": "stk_001",
+  "name": "<Nombre Apellido>",
+  "email": "<usuario@dominio>"
+}
+```
+
+**5. Registrar el MCP con un nombre distinto**
+
+El nombre debe ser único: es el prefijo de las herramientas (`mcp__<nombre>__list_projects`).
+
+```bash
+INST=/ruta/a/planning-game-instances/<nombre-instancia>
+
+claude mcp add planning-game-<nombre> --scope user \
+  -e MCP_INSTANCE_DIR="$INST" \
+  -e GOOGLE_APPLICATION_CREDENTIALS="$INST/serviceAccountKey.json" \
+  -e FIREBASE_DATABASE_URL="https://<proyecto>-default-rtdb.<región>.firebasedatabase.app" \
+  -- planning-game-mcp
+
+claude mcp list | grep planning     # debe mostrar "✔ Connected"
+```
+
+> Conviene hacer copia de `~/.claude.json` antes (`cp ~/.claude.json ~/.claude.json.bak`).
+
+**6. ⚠️ Reiniciar Claude Code**
+
+`claude mcp list` puede decir **✔ Connected** y aun así las herramientas
+`mcp__planning-game-<nombre>__*` **no estarán disponibles en la sesión que ya está abierta**.
+El registro se lee al arrancar: hay que **cerrar y volver a abrir Claude Code** para poder usarlas.
 
 #### Variables de entorno
 

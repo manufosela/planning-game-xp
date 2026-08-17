@@ -24,11 +24,11 @@ describe('normalizeGmailEmail', () => {
   }
 
   it('should remove dots from Gmail local part', () => {
-    expect(normalizeGmailEmail('jorge.casar@gmail.com')).toBe('jorgecasar@gmail.com');
+    expect(normalizeGmailEmail('john.doe@gmail.com')).toBe('johndoe@gmail.com');
   });
 
   it('should remove multiple dots from Gmail', () => {
-    expect(normalizeGmailEmail('j.o.r.g.e@gmail.com')).toBe('jorge@gmail.com');
+    expect(normalizeGmailEmail('j.o.h.n@gmail.com')).toBe('john@gmail.com');
   });
 
   it('should handle googlemail.com domain', () => {
@@ -36,11 +36,11 @@ describe('normalizeGmailEmail', () => {
   });
 
   it('should NOT remove dots from non-Gmail domains', () => {
-    expect(normalizeGmailEmail('jorge.casar@geniova.com')).toBe('jorge.casar@geniova.com');
+    expect(normalizeGmailEmail('john.doe@company.com')).toBe('john.doe@company.com');
   });
 
   it('should lowercase the email', () => {
-    expect(normalizeGmailEmail('Jorge.Casar@Gmail.com')).toBe('jorgecasar@gmail.com');
+    expect(normalizeGmailEmail('John.Doe@Gmail.com')).toBe('johndoe@gmail.com');
   });
 
   it('should handle empty string', () => {
@@ -61,7 +61,7 @@ describe('normalizeGmailEmail', () => {
   });
 
   it('should handle Gmail without dots (no-op)', () => {
-    expect(normalizeGmailEmail('jorgecasar@gmail.com')).toBe('jorgecasar@gmail.com');
+    expect(normalizeGmailEmail('johndoe@gmail.com')).toBe('johndoe@gmail.com');
   });
 });
 
@@ -78,7 +78,7 @@ describe('encodeEmailForFirebase', () => {
   });
 
   it('should encode . as !', () => {
-    expect(encodeEmailForFirebase('jorge.casar@geniova.com')).toBe('jorge!casar|geniova!com');
+    expect(encodeEmailForFirebase('john.doe@company.com')).toBe('john!doe|company!com');
   });
 
   it('should encode # as -', () => {
@@ -194,10 +194,10 @@ describe('setEncodedEmailClaim auto-provision', () => {
       .mockResolvedValueOnce(null)  // exact match NOT found
       .mockResolvedValueOnce({ PlanningGame: { developer: true, stakeholder: false } });
 
-    const result = await isEmailPreAuthorized('jorge.casar@gmail.com', dbLookup);
+    const result = await isEmailPreAuthorized('john.doe@gmail.com', dbLookup);
     expect(result).toBe(true);
-    expect(dbLookup).toHaveBeenCalledWith('/users/jorge!casar|gmail!com/projects');
-    expect(dbLookup).toHaveBeenCalledWith('/users/jorgecasar|gmail!com/projects');
+    expect(dbLookup).toHaveBeenCalledWith('/users/john!doe|gmail!com/projects');
+    expect(dbLookup).toHaveBeenCalledWith('/users/johndoe|gmail!com/projects');
   });
 
   it('should return false for non-authorized email', async () => {

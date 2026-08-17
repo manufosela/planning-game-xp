@@ -41,7 +41,7 @@ describe('setup-user.js', () => {
     it('should list available developers when no developerId provided', async () => {
       // setup-user.js reads from /users/ (centralized model)
       setMockRtdbData('/users', {
-        'mfosela|geniova!com': { name: 'Mánu Fosela', email: 'mfosela@geniova.com', developerId: 'dev_010', active: true },
+        'mfosela|geniova!com': { name: 'Mánu Fosela', email: 'dev@company.com', developerId: 'dev_010', active: true },
         'becaria|ia!local': { name: 'BecarIA', email: 'becaria@ia.local', developerId: 'dev_016', active: true }
       });
 
@@ -54,10 +54,10 @@ describe('setup-user.js', () => {
 
     it('should show current user when already configured', async () => {
       mockConfigured = true;
-      mockCurrentUser = { developerId: 'dev_010', name: 'Mánu Fosela', email: 'mfosela@geniova.com' };
+      mockCurrentUser = { developerId: 'dev_010', name: 'Mánu Fosela', email: 'dev@company.com' };
 
       setMockRtdbData('/users', {
-        'mfosela|geniova!com': { name: 'Mánu Fosela', email: 'mfosela@geniova.com', developerId: 'dev_010', active: true }
+        'mfosela|geniova!com': { name: 'Mánu Fosela', email: 'dev@company.com', developerId: 'dev_010', active: true }
       });
 
       const result = await setupMcpUser({});
@@ -72,7 +72,7 @@ describe('setup-user.js', () => {
     beforeEach(() => {
       // setup-user.js reads from /users/ (centralized model)
       setMockRtdbData('/users', {
-        'mfosela|geniova!com': { name: 'Mánu Fosela', email: 'mfosela@geniova.com', developerId: 'dev_010', stakeholderId: 'stk_014', active: true },
+        'mfosela|geniova!com': { name: 'Mánu Fosela', email: 'dev@company.com', developerId: 'dev_010', stakeholderId: 'stk_014', active: true },
         'other|test!com': { name: 'Other', email: 'other@test.com', stakeholderId: 'stk_020', active: true }
       });
     });
@@ -86,13 +86,13 @@ describe('setup-user.js', () => {
       expect(writtenUserData.developerId).toBe('dev_010');
       expect(writtenUserData.stakeholderId).toBe('stk_014');
       expect(writtenUserData.name).toBe('Mánu Fosela');
-      expect(writtenUserData.email).toBe('mfosela@geniova.com');
+      expect(writtenUserData.email).toBe('dev@company.com');
     });
 
     it('should warn when no matching stakeholder found', async () => {
       // Add a developer WITHOUT stakeholderId
       setMockRtdbData('/users', {
-        'mfosela|geniova!com': { name: 'Mánu Fosela', email: 'mfosela@geniova.com', developerId: 'dev_010', stakeholderId: 'stk_014', active: true },
+        'mfosela|geniova!com': { name: 'Mánu Fosela', email: 'dev@company.com', developerId: 'dev_010', stakeholderId: 'stk_014', active: true },
         'nostk|test!com': { name: 'No Stk', email: 'nostk@test.com', developerId: 'dev_099', active: true }
       });
 

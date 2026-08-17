@@ -43,7 +43,7 @@ function decodeEmailFromFirebase(encodedEmail) {
 
 /**
  * Normalize a Gmail address by removing dots from the local part.
- * Gmail treats "jorge.casar@gmail.com" and "jorgecasar@gmail.com" as the same.
+ * Gmail treats "john.doe@gmail.com" and "johndoe@gmail.com" as the same.
  * For non-Gmail addresses, returns the email as-is (lowercased).
  * @param {string} email
  * @returns {string}
