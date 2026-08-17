@@ -77,7 +77,7 @@ describe('global-config guidelines versioning', () => {
         name: 'Bad Path',
         content: 'Content',
         targetFile: '../../../etc/passwd'
-      })).rejects.toThrow('targetFile must be a relative path');
+      })).rejects.toThrow('targetFile cannot contain ".." path traversal');
     });
 
     it('should not set version for non-guidelines types', async () => {
@@ -181,7 +181,7 @@ describe('global-config guidelines versioning', () => {
         type: 'guidelines',
         configId: GUIDELINE_ID,
         updates: { targetFile: '../../etc/passwd' }
-      })).rejects.toThrow('targetFile must be a relative path');
+      })).rejects.toThrow('targetFile cannot contain ".." path traversal');
     });
 
     it('should allow valid targetFile on update', async () => {

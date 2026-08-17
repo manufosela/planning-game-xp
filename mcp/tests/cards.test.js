@@ -263,15 +263,19 @@ describe('cards.js', () => {
         projectId: 'TestProject',
         type: 'task',
         title: 'Test Task'
-      })).rejects.toThrow(/Tasks require descriptionStructured/);
+      })).rejects.toThrow(/descriptionStructured/);
     });
 
     it('should throw error when descriptionStructured item is incomplete', async () => {
+      // AC + epic provided so the batched preflight passes and the
+      // item-level validation is reached.
       await expect(createCard({
         projectId: 'TestProject',
         type: 'task',
         title: 'Test Task',
-        descriptionStructured: [{ role: 'user' }] // missing goal and benefit
+        descriptionStructured: [{ role: 'user' }], // missing goal and benefit
+        acceptanceCriteria: 'Should work',
+        epic: 'TP-EPC-0001'
       })).rejects.toThrow(/is incomplete/);
     });
 
@@ -281,7 +285,7 @@ describe('cards.js', () => {
         type: 'task',
         title: 'Test Task',
         descriptionStructured: [{ role: 'user', goal: 'do something', benefit: 'get value' }]
-      })).rejects.toThrow(/Tasks require acceptance criteria/);
+      })).rejects.toThrow(/acceptanceCriteria OR acceptanceCriteriaStructured/);
     });
 
     it('should throw error when epic is missing for task', async () => {
@@ -291,7 +295,7 @@ describe('cards.js', () => {
         title: 'Test Task',
         descriptionStructured: [{ role: 'user', goal: 'do something', benefit: 'get value' }],
         acceptanceCriteria: 'Should work correctly'
-      })).rejects.toThrow(/Tasks require an epic/);
+      })).rejects.toThrow(/epic \(use list_cards type=epic/);
     });
 
     it('should throw error when epic does not exist and list available epics', async () => {
@@ -312,7 +316,7 @@ describe('cards.js', () => {
       }
     });
 
-    it('should list available epics when epic is missing', async () => {
+    it('points the caller at list_cards when epic is missing (batched preflight)', async () => {
       try {
         await createCard({
           projectId: 'TestProject',
@@ -323,9 +327,10 @@ describe('cards.js', () => {
         });
         expect.fail('Should have thrown');
       } catch (error) {
-        expect(error.message).toMatch(/Tasks require an epic/);
-        expect(error.message).toContain('TP-EPC-0001');
-        expect(error.message).toContain('Test Epic');
+        // The batched preflight no longer inlines the epic list — it
+        // directs to the list_cards tool instead.
+        expect(error.message).toMatch(/Cannot create task/);
+        expect(error.message).toMatch(/list_cards type=epic/);
       }
     });
 
@@ -558,11 +563,8 @@ describe('cards.js', () => {
     });
 
     it('should save all optional fields correctly', async () => {
-      // Setup sprint for this test
-      setMockRtdbData('/cards/TestProject/SPRINTS_TestProject', {
-        'sprint1': { cardId: 'TP-SPR-0001', title: 'Sprint 1' }
-      });
-
+      // NOTE: sprint intentionally NOT passed — it is forbidden on create
+      // since the sprint-on-In-Progress policy (assigned via update_card).
       await createCard({
         projectId: 'TestProject',
         type: 'task',
@@ -572,7 +574,6 @@ describe('cards.js', () => {
         acceptanceCriteria: 'All criteria met',
         epic: 'TP-EPC-0001',
         developer: 'dev_456',
-        sprint: 'TP-SPR-0001', // Must be a valid sprint ID now
         devPoints: 3,
         businessPoints: 4,
         status: 'To Do',
@@ -589,7 +590,7 @@ describe('cards.js', () => {
       expect(savedCard.acceptanceCriteria).toBe('All criteria met');
       expect(savedCard.epic).toBe('TP-EPC-0001');
       expect(savedCard.developer).toBe('dev_456');
-      expect(savedCard.sprint).toBe('TP-SPR-0001');
+      expect(savedCard.sprint).toBeUndefined();
       // Priority is now calculated automatically (4/3 ~= 133%)
       expect(savedCard.priority).toBeDefined();
       expect(typeof savedCard.priority).toBe('number');
@@ -749,7 +750,11 @@ describe('cards.js', () => {
       });
 
       const response = JSON.parse(result.content[0].text);
-      expect(response.card.implementationPlan.planStatus).toBe('in_progress');
+      expect(response.message).toBe('Card updated successfully');
+      // The response card is a trimmed shape (no implementationPlan) —
+      // assert against the PERSISTED card instead.
+      const saved = getMockRtdbData('/cards/TestProject/TASKS_TestProject')['task1'];
+      expect(saved.implementationPlan.planStatus).toBe('in_progress');
     });
 
     it('should warn when moving to In Progress with plan still in proposed status', async () => {
@@ -784,8 +789,10 @@ describe('cards.js', () => {
       expect(response.warnings).toBeDefined();
       const planWarning = response.warnings.find(w => w.code === 'PLAN_NOT_VALIDATED');
       expect(planWarning).toBeDefined();
-      // planStatus should NOT auto-transition from proposed
-      expect(response.card.implementationPlan.planStatus).toBe('proposed');
+      // planStatus should NOT auto-transition from proposed (checked on the
+      // persisted card — the response card is a trimmed shape).
+      const saved = getMockRtdbData('/cards/TestProject/TASKS_TestProject')['task1'];
+      expect(saved.implementationPlan.planStatus).toBe('proposed');
     });
 
     it('should require commits for To Validate status', async () => {
@@ -931,7 +938,8 @@ describe('cards.js', () => {
 
     it('should pass for non-Fixed/Closed status transitions', () => {
       const currentBug = { status: 'Created' };
-      const updates = { status: 'Assigned' };
+      // Assigned now requires startDate (when work begins on the bug).
+      const updates = { status: 'Assigned', startDate: '2026-01-10T10:00:00Z' };
       expect(() => validateBugStatusTransition(currentBug, updates)).not.toThrow();
     });
 
@@ -954,9 +962,11 @@ describe('cards.js', () => {
     });
 
     it('should pass when fixing bug with all required fields', () => {
-      const currentBug = { status: 'Assigned' };
+      // Fixed now also requires startDate and endDate.
+      const currentBug = { status: 'Assigned', startDate: '2024-01-19T09:00:00Z' };
       const updates = {
         status: 'Fixed',
+        endDate: '2024-01-20T10:00:00Z',
         commits: [{ hash: 'abc123', message: 'fix: bug', date: '2024-01-20T10:00:00Z', author: 'dev' }],
         pipelineStatus: { prCreated: { prUrl: 'https://github.com/org/repo/pull/1', prNumber: 1, date: '2024-01-20T10:00:00Z' } }
       };
@@ -1053,8 +1063,11 @@ describe('cards.js', () => {
 
       const response = JSON.parse(result.content[0].text);
       expect(response.card.status).toBe('Closed');
-      expect(response.card.rootCause).toBe('Null pointer exception due to uninitialized variable');
-      expect(response.card.resolution).toBe('Initialize variable before use');
+      // rootCause/resolution are not in the trimmed response card —
+      // assert against the persisted card.
+      const saved = getMockRtdbData('/cards/TestProject/BUGS_TestProject')['bug1'];
+      expect(saved.rootCause).toBe('Null pointer exception due to uninitialized variable');
+      expect(saved.resolution).toBe('Initialize variable before use');
     });
   });
 
@@ -1177,10 +1190,12 @@ describe('cards.js', () => {
         acceptanceCriteria: 'Should work',
         epic: 'TP-EPC-0001',
         priority: 'High'
-      })).rejects.toThrow(/Cannot set priority directly for tasks/);
+      })).rejects.toThrow(/REMOVE priority — it is auto-calculated/);
     });
 
-    it('should reject non-existent sprint in createCard', async () => {
+    it('should reject ANY sprint in createCard (sprint is assigned on In Progress)', async () => {
+      // The batched preflight forbids sprint at creation time — valid or
+      // not, it must be assigned later via update_card.
       await expect(createCard({
         projectId: 'TestProject',
         type: 'task',
@@ -1188,23 +1203,8 @@ describe('cards.js', () => {
         descriptionStructured: [{ role: 'user', goal: 'do something', benefit: 'get value' }],
         acceptanceCriteria: 'Should work',
         epic: 'TP-EPC-0001',
-        sprint: 'Invalid-Sprint'
-      })).rejects.toThrow(/Sprint "Invalid-Sprint" not found/);
-    });
-
-    it('should accept valid sprint ID in createCard', async () => {
-      const result = await createCard({
-        projectId: 'TestProject',
-        type: 'task',
-        title: 'Test Task',
-        descriptionStructured: [{ role: 'user', goal: 'do something', benefit: 'get value' }],
-        acceptanceCriteria: 'Should work',
-        epic: 'TP-EPC-0001',
         sprint: 'TP-SPR-0001'
-      });
-
-      const response = JSON.parse(result.content[0].text);
-      expect(response.message).toBe('Card created successfully');
+      })).rejects.toThrow(/REMOVE sprint — it is FORBIDDEN on create/);
     });
 
     it('should calculate priority when devPoints and businessPoints provided', async () => {
@@ -1882,13 +1882,14 @@ describe('cards.js', () => {
     });
 
     it('should succeed with commits and pipelineStatus present', async () => {
+      // Fixed also requires startDate (on the bug) and endDate (in updates).
       setMockRtdbData('/cards/TestProject/BUGS_TestProject', {
-        bug1: { cardId: 'TP-BUG-0001', title: 'Test Bug', status: 'Assigned', developer: 'dev_001' }
+        bug1: { cardId: 'TP-BUG-0001', title: 'Test Bug', status: 'Assigned', developer: 'dev_001', startDate: '2024-01-30T09:00:00Z' }
       });
 
       const result = await updateCard({
         projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
-        updates: { status: 'Fixed', commits: [validCommit], pipelineStatus: validPipelineStatus }
+        updates: { status: 'Fixed', endDate: '2024-02-01T11:00:00Z', commits: [validCommit], pipelineStatus: validPipelineStatus }
       });
 
       const response = JSON.parse(result.content[0].text);
@@ -1897,19 +1898,21 @@ describe('cards.js', () => {
 
     it('should succeed without rootCause/resolution for Fixed status (not required)', async () => {
       setMockRtdbData('/cards/TestProject/BUGS_TestProject', {
-        bug1: { cardId: 'TP-BUG-0001', title: 'Test Bug', status: 'Assigned', developer: 'dev_001' }
+        bug1: { cardId: 'TP-BUG-0001', title: 'Test Bug', status: 'Assigned', developer: 'dev_001', startDate: '2024-01-30T09:00:00Z' }
       });
 
       const result = await updateCard({
         projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
-        updates: { status: 'Fixed', commits: [validCommit], pipelineStatus: validPipelineStatus }
+        updates: { status: 'Fixed', endDate: '2024-02-01T11:00:00Z', commits: [validCommit], pipelineStatus: validPipelineStatus }
       });
 
       const response = JSON.parse(result.content[0].text);
       expect(response.card.status).toBe('Fixed');
-      // rootCause and resolution are only required for Closed, not Fixed
-      expect(response.card.rootCause).toBeUndefined();
-      expect(response.card.resolution).toBeUndefined();
+      // rootCause and resolution are only required for Closed, not Fixed —
+      // and they are not part of the trimmed response card anyway.
+      const saved = getMockRtdbData('/cards/TestProject/BUGS_TestProject')['bug1'];
+      expect(saved.rootCause).toBeUndefined();
+      expect(saved.resolution).toBeUndefined();
     });
   });
 
@@ -1960,8 +1963,10 @@ describe('cards.js', () => {
 
       const response = JSON.parse(result.content[0].text);
       expect(response.card.status).toBe('Closed');
-      expect(response.card.rootCause).toBe('Bad SQL query');
-      expect(response.card.resolution).toBe('Fixed the query with parameterized version');
+      // rootCause/resolution are not in the trimmed response — assert persisted state.
+      const saved = getMockRtdbData('/cards/TestProject/BUGS_TestProject')['bug1'];
+      expect(saved.rootCause).toBe('Bad SQL query');
+      expect(saved.resolution).toBe('Fixed the query with parameterized version');
     });
 
     it('should succeed when commits are already on the currentCard (not in updates)', async () => {
@@ -2183,11 +2188,13 @@ describe('cards.js', () => {
         updates: { commits: [commit2, commit3] }
       });
 
-      const response = JSON.parse(result.content[0].text);
-      expect(response.card.commits).toHaveLength(3);
-      expect(response.card.commits[0].hash).toBe('aaa111');
-      expect(response.card.commits[1].hash).toBe('bbb222');
-      expect(response.card.commits[2].hash).toBe('ccc333');
+      JSON.parse(result.content[0].text);
+      // commits are not in the trimmed response — assert persisted state.
+      const saved = getMockRtdbData('/cards/TestProject/TASKS_TestProject')['task1'];
+      expect(saved.commits).toHaveLength(3);
+      expect(saved.commits[0].hash).toBe('aaa111');
+      expect(saved.commits[1].hash).toBe('bbb222');
+      expect(saved.commits[2].hash).toBe('ccc333');
     });
 
     it('should deduplicate commits with the same hash', async () => {
@@ -2206,11 +2213,12 @@ describe('cards.js', () => {
         updates: { commits: [commit1, commit2] }
       });
 
-      const response = JSON.parse(result.content[0].text);
+      JSON.parse(result.content[0].text);
       // commit1 already exists, so only commit2 should be added
-      expect(response.card.commits).toHaveLength(2);
-      expect(response.card.commits[0].hash).toBe('aaa111');
-      expect(response.card.commits[1].hash).toBe('bbb222');
+      const saved = getMockRtdbData('/cards/TestProject/TASKS_TestProject')['task1'];
+      expect(saved.commits).toHaveLength(2);
+      expect(saved.commits[0].hash).toBe('aaa111');
+      expect(saved.commits[1].hash).toBe('bbb222');
     });
 
     it('should throw for invalid commit format (missing hash)', async () => {
@@ -2296,8 +2304,9 @@ describe('cards.js', () => {
         updates: { commits: [commit2] }
       });
 
-      const response = JSON.parse(result.content[0].text);
-      expect(response.card.commits).toHaveLength(2);
+      JSON.parse(result.content[0].text);
+      const saved = getMockRtdbData('/cards/TestProject/BUGS_TestProject')['bug1'];
+      expect(saved.commits).toHaveLength(2);
     });
   });
 

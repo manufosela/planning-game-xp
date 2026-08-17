@@ -102,6 +102,17 @@ class MockRef {
     this._lastPushKey = null;
   }
 
+  // Minimal query-chain support (orderByChild().equalTo().limitToFirst())
+  // used by syncProjectRolesToUsers — resolves to "no match" which is the
+  // safe default for unit tests. PMC-BUG-0008.
+  orderByChild() { return this; }
+  equalTo() { return this; }
+  limitToFirst() {
+    return {
+      once: async () => ({ val: () => null, exists: () => false })
+    };
+  }
+
   async once(eventType) {
     // First try exact path match
     let data = mockRtdbData[this.path];

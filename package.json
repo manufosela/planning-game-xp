@@ -39,6 +39,7 @@
     "emulator": "node scripts/instance-manager.cjs select && ./scripts/emulation/start-emulators.sh",
     "demo": "./scripts/start-demo.sh",
     "test": "vitest",
+    "test:mcp": "npm --prefix mcp run test",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:watch": "vitest --watch",
