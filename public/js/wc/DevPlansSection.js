@@ -28,6 +28,37 @@ export class DevPlansSection extends LitElement {
     this.projectId = '';
   }
 
+  /**
+   * Open the plan creator seeded with a proposal card (PLN-TSK-0358).
+   * Called by the hosting page when a proposal is approved as a plan, either
+   * in place (convert-proposal-to-plan event) or after landing here with
+   * ?fromProposal=<cardId>.
+   *
+   * @param {Object} proposal
+   * @param {string} proposal.proposalCardId - Proposal card id (e.g. "SIM-PRP-0002")
+   * @param {string} proposal.title - Proposal title
+   * @param {string} proposal.description - Context handed to the plan generator
+   * @returns {Promise<void>}
+   */
+  async openPlanCreatorFromProposal({ proposalCardId, title, description }) {
+    if (!proposalCardId) {
+      throw new Error('openPlanCreatorFromProposal requires a proposalCardId');
+    }
+
+    await this.updateComplete;
+
+    const tabs = this.shadowRoot?.querySelector('color-tabs');
+    tabs?.setActiveTab('plans');
+
+    const plansList = this.shadowRoot?.querySelector('dev-plans-list');
+    if (!plansList) {
+      throw new Error('dev-plans-list is not available in dev-plans-section');
+    }
+
+    await plansList.updateComplete;
+    plansList.openCreatorFromProposal(proposalCardId, title, description);
+  }
+
   render() {
     return html`
       <div class="dev-plans-section">

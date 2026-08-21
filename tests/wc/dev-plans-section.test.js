@@ -9,6 +9,7 @@ vi.mock('https://cdn.jsdelivr.net/npm/lit@3.0.2/+esm', () => ({
     constructor() {
       this.shadowRoot = null;
       this._properties = {};
+      this.updateComplete = Promise.resolve(true);
     }
     connectedCallback() {}
     disconnectedCallback() {}
@@ -75,6 +76,65 @@ describe('DevPlansSection', () => {
       expect(template).not.toContain('plan-proposals-list');
       // Default tab is now Plans.
       expect(template).toContain('active-tab="plans"');
+    });
+  });
+
+  describe('openPlanCreatorFromProposal (PLN-TSK-0358)', () => {
+    /**
+     * @returns {{section: DevPlansSection, tabs: Object, plansList: Object}}
+     */
+    function mountWithStubs() {
+      const section = new DevPlansSection();
+      section.projectId = 'SimuladorEstrategico';
+
+      const tabs = { setActiveTab: vi.fn() };
+      const plansList = {
+        updateComplete: Promise.resolve(true),
+        openCreatorFromProposal: vi.fn()
+      };
+
+      section.shadowRoot = {
+        querySelector: (selector) => {
+          if (selector === 'color-tabs') return tabs;
+          if (selector === 'dev-plans-list') return plansList;
+          return null;
+        }
+      };
+
+      return { section, tabs, plansList };
+    }
+
+    it('should switch to the Plans sub-tab and seed the creator with the proposal', async () => {
+      const { section, tabs, plansList } = mountWithStubs();
+
+      await section.openPlanCreatorFromProposal({
+        proposalCardId: 'SIM-PRP-0002',
+        title: 'Las partidas viven en el servidor',
+        description: 'Contexto de la propuesta'
+      });
+
+      expect(tabs.setActiveTab).toHaveBeenCalledWith('plans');
+      expect(plansList.openCreatorFromProposal).toHaveBeenCalledWith(
+        'SIM-PRP-0002',
+        'Las partidas viven en el servidor',
+        'Contexto de la propuesta'
+      );
+    });
+
+    it('should reject without a proposal card id instead of opening an empty creator', async () => {
+      const { section, plansList } = mountWithStubs();
+
+      await expect(section.openPlanCreatorFromProposal({ title: 'Sin id' }))
+        .rejects.toThrow(/proposalCardId/);
+      expect(plansList.openCreatorFromProposal).not.toHaveBeenCalled();
+    });
+
+    it('should fail loudly when the plans list is not in the DOM', async () => {
+      const section = new DevPlansSection();
+      section.shadowRoot = { querySelector: () => null };
+
+      await expect(section.openPlanCreatorFromProposal({ proposalCardId: 'SIM-PRP-0002' }))
+        .rejects.toThrow(/dev-plans-list/);
     });
   });
 });

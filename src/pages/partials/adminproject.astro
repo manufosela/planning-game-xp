@@ -1299,6 +1299,84 @@ return;
 </script>
 
 <script type="module">
+  // PLN-TSK-0358 — approving a proposal as a dev plan.
+  // A proposal card has two approval routes: task (handled by the card
+  // itself) and plan (handled here, because switching page tabs and
+  // reaching <dev-plans-section> is the page's job, not the card's).
+  import { FirebaseService } from '/js/services/firebase-service.js';
+
+  /**
+   * Move the page to the Dev Plans tab and open the plan creator seeded
+   * with the given proposal.
+   * @param {{proposalCardId: string, title: string, description: string}} proposal
+   * @returns {Promise<void>}
+   */
+  async function openPlanCreator(proposal) {
+    const devPlansSection = document.getElementById('devPlansSection');
+    if (!devPlansSection) return;
+
+    document.querySelector('[data-section="devPlans"]')?.click();
+    await devPlansSection.openPlanCreatorFromProposal(proposal);
+  }
+
+  // In-place route: the proposal card lives on this same page.
+  // preventDefault() tells the card we took over, so it does not navigate.
+  document.addEventListener('convert-proposal-to-plan', (event) => {
+    if (!document.getElementById('devPlansSection')) return;
+
+    event.preventDefault();
+    openPlanCreator(event.detail).catch((error) => {
+      console.error('[adminproject] Could not open the plan creator:', error);
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: 'No se pudo abrir el creador de planes', type: 'error' } }
+      }));
+    });
+  });
+
+  // Arrival route: the proposal was approved from another page and sent us
+  // here with ?fromProposal=<cardId>.
+  document.addEventListener('astro:page-load', async () => {
+    const params = new URLSearchParams(window.location.search);
+    const proposalCardId = params.get('fromProposal');
+    const projectId = params.get('projectId');
+    if (!proposalCardId || !projectId) return;
+
+    // Consume the parameter so a reload does not reopen the creator.
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('fromProposal');
+    window.history.replaceState({}, '', cleanUrl.toString());
+
+    try {
+      const proposals = await FirebaseService.getCards(
+        FirebaseService.getPathBySectionAndProjectId('proposals', projectId)
+      );
+      const proposal = Object.values(proposals || {}).find((card) => card.cardId === proposalCardId);
+      if (!proposal) {
+        throw new Error(`Proposal ${proposalCardId} not found in ${projectId}`);
+      }
+
+      const structured = [proposal.descDado, proposal.descCuando, proposal.descPara].filter(Boolean).join('\n');
+      const context = [
+        structured || proposal.description || '',
+        proposal.acceptanceCriteria ? `Criterios de aceptación:\n${proposal.acceptanceCriteria}` : '',
+        proposal.notes ? `Notas:\n${proposal.notes}` : ''
+      ].filter(Boolean).join('\n\n');
+
+      await openPlanCreator({
+        proposalCardId,
+        title: proposal.title || '',
+        description: context
+      });
+    } catch (error) {
+      console.error('[adminproject] Could not open the plan creator from URL:', error);
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: `No se pudo abrir la propuesta ${proposalCardId}`, type: 'error' } }
+      }));
+    }
+  });
+</script>
+
+<script type="module">
 // Edit Project functionality
 import { showModal } from '@manufosela/app-modal';
 import 'https://esm.sh/@manufosela/md-renderer';
