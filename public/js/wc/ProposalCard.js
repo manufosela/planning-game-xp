@@ -961,6 +961,9 @@ return;
    * navigate to the project admin page, which reads ?fromProposal= on load.
    */
   convertToPlan() {
+    // The creator opens behind this card's modal: get out of the way first.
+    this._closeModal();
+
     const handledInPlace = !document.dispatchEvent(new CustomEvent('convert-proposal-to-plan', {
       detail: {
         proposalCardId: this.cardId,
@@ -1269,19 +1272,25 @@ return;
   /**
  * Oculta la tarjeta del DOM con una animación suave
  */
+  /**
+   * Close the modal this card is expanded in, leaving the card itself in place.
+   * @returns {void}
+   */
+  _closeModal() {
+    if (!this.expanded) return;
+
+    // target: 'all' porque el sistema de modales no reconoce contentElementId
+    document.dispatchEvent(new CustomEvent('close-modal', {
+      bubbles: true,
+      composed: true,
+      detail: { target: 'all' }
+    }));
+    this.expanded = false;
+  }
+
   _hideCard() {
     // Cerrar modal PRIMERO si está expandida (sin cambiar expanded aún)
-    if (this.expanded) {
-      // Disparar close-modal para cerrar el AppModal
-      // Usar target: 'all' porque el sistema de modales no reconoce contentElementId
-      document.dispatchEvent(new CustomEvent('close-modal', {
-        bubbles: true,
-        composed: true,
-        detail: { target: 'all' }
-      }));
-      // Ahora sí actualizar el estado
-      this.expanded = false;
-    }
+    this._closeModal();
 
     // Buscar la tarjeta compacta en el DOM principal (no la expandida en modal)
     const compactCard = document.querySelector(`proposal-card[id="${this.id}"]:not([expanded])`);
