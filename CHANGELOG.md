@@ -7,6 +7,13 @@ Auto-generated from git commits on each build.
 
 ### Added
 
+- Each proposal in its place and shape, and name the tabs (PLN-TSK-0360)
+- Reject plan proposals disguised as task proposals (PMC-TSK-0075)
+
+## [1.198.0] - 2026-08-21
+
+### Added
+
 - Restore create_plan_proposal and document both proposal kinds (PMC-TSK-0074)
 - Bring back plan proposals alongside task proposals (PLN-TSK-0359)
 
