@@ -51,6 +51,9 @@ export class ProposalCard extends BaseCard {
       descPara: { type: String },
       // Converting legacy description state
       _isConvertingDescription: { type: Boolean, state: true },
+      // Card id of the dev plan this proposal was approved as (PLN-TSK-0358).
+      // Written both by the UI and by the MCP (create_plan proposalCardId).
+      convertedToPlan: { type: String },
     };
   }
 
@@ -106,6 +109,7 @@ export class ProposalCard extends BaseCard {
     this.descCuando = '';
     this.descPara = '';
     this._isConvertingDescription = false;
+    this.convertedToPlan = '';
 
     // Set today's date as default register date
     if (!this.registerDate) {
@@ -351,6 +355,32 @@ this._projectDevelopers = [];
   }
 
   /**
+   * A proposal approved as a dev plan keeps its card for traceability
+   * (the MCP does the same via create_plan proposalCardId), but it is done:
+   * it cannot be approved a second time.
+   * @returns {boolean}
+   */
+  get isConverted() {
+    return !!this.convertedToPlan;
+  }
+
+  /**
+   * Both approval routes (task / plan) need a saved, still-open proposal.
+   * @returns {boolean}
+   */
+  get canConvert() {
+    return !this.isNewProposal && !!this.id && !this.isConverted;
+  }
+
+  /**
+   * URL of the Dev Plans tab of this proposal's project.
+   * @returns {string}
+   */
+  get devPlansUrl() {
+    return `/adminproject?projectId=${encodeURIComponent(this.projectId || '')}#devPlans`;
+  }
+
+  /**
    * Formatea una fecha ISO 8601 al formato día-mes-año.
    * Si la cadena está vacía, devuelve una cadena vacía.
    * Si la fecha no es válida, devuelve "Invalid Date".
@@ -390,18 +420,38 @@ this._projectDevelopers = [];
           <div class="card-actions">
             ${this.attachment ? html`<span class="attachment-indicator" title="Tiene archivo adjunto">📎</span>` : ''}
             <button class="copy-link-button" title="Copiar enlace" @click=${this._handleCopyLinkClick}>🔗</button>
-            ${this.id ? html`
+            ${this.canConvert ? html`
               <button
                 class="copy-link-button convert-button"
                 title="Convertir en tarea"
                 @click=${this.showConvertConfirmation}>
                 🔁
+              </button>
+              <button
+                class="copy-link-button convert-plan-button"
+                title="Convertir en plan de desarrollo"
+                @click=${this.showConvertToPlanConfirmation}>
+                🗺️
               </button>` : ''}
+            ${this.isConverted ? this.renderConvertedBadge() : ''}
             ${this.canMoveToProject ? html`<button class="move-project-button" title="Mover a otro proyecto" @click=${(e) => { e.stopPropagation(); this._handleMoveToProject(e); }}>📦</button>` : ''}
             ${this.canDelete ? html`<button class="delete-button" @click=${this.showDeleteModal}>🗑️</button>` : ''}
           </div>
         </div>
       </div>
+    `;
+  }
+
+  /**
+   * Traceability mark for a proposal already approved as a dev plan.
+   * @returns {import('lit').TemplateResult}
+   */
+  renderConvertedBadge() {
+    return html`
+      <a class="converted-badge"
+         href=${this.devPlansUrl}
+         title="Aprobada como plan ${this.convertedToPlan}"
+         @click=${(e) => e.stopPropagation()}>→ ${this.convertedToPlan}</a>
     `;
   }
 
@@ -624,13 +674,27 @@ const developerValue = developerOptions.find(opt => opt.value === this.developer
           </card-history-viewer>` : ''}
       </div>
 
-      ${!this.isNewProposal ? html`
-        <button
-          @click=${this.showConvertConfirmation}
-          style="background-color: var(--brand-secondary); margin: 1rem;"
-        >
-          Convert to Task
-        </button>
+      ${this.canConvert ? html`
+        <div class="approve-actions">
+          <button
+            @click=${this.showConvertConfirmation}
+            style="background-color: var(--brand-secondary);"
+          >
+            Convertir en tarea
+          </button>
+          <button
+            @click=${this.showConvertToPlanConfirmation}
+            style="background-color: var(--brand-primary, #4a9eff);"
+          >
+            Convertir en plan
+          </button>
+        </div>
+      ` : ''}
+
+      ${this.isConverted ? html`
+        <p class="converted-note">
+          Aprobada como plan ${this.renderConvertedBadge()}
+        </p>
       ` : ''}
 
       ${this.canEdit ? html`
@@ -856,6 +920,95 @@ return;
         }
       }
     }));
+  }
+
+  /**
+   * Second approval route (PLN-TSK-0358): turn the proposal into a dev plan,
+   * which will in turn generate its own tasks.
+   * @param {Event} [event]
+   */
+  showConvertToPlanConfirmation(event) {
+    if (event) {
+      event.stopPropagation();
+    }
+
+    if (!this.id) {
+      this._showNotification('Guarda la propuesta antes de convertirla', 'warning');
+      return;
+    }
+
+    document.dispatchEvent(new CustomEvent('show-modal', {
+      detail: {
+        options: {
+          title: 'Convertir propuesta en plan',
+          message: `¿Quieres aprobar la propuesta <b>${this.title || this.cardId}</b> como plan de desarrollo?<br><br>Se abrirá el creador de planes con su contenido como contexto. La propuesta se conservará marcada con el plan generado.`,
+          button1Text: 'Convertir',
+          button2Text: 'Cancelar',
+          button1css: 'background-color: var(--brand-primary, #4a9eff);',
+          button2css: 'background-color: #6b7280;',
+          button1Action: () => this.convertToPlan(),
+          button2Action: () => { },
+          maxWidth: '520px'
+        }
+      }
+    }));
+  }
+
+  /**
+   * Ask the page to open the plan creator seeded with this proposal.
+   * The event is cancelable: a page that already hosts <dev-plans-section>
+   * handles it in place and calls preventDefault(); from anywhere else we
+   * navigate to the project admin page, which reads ?fromProposal= on load.
+   */
+  convertToPlan() {
+    const handledInPlace = !document.dispatchEvent(new CustomEvent('convert-proposal-to-plan', {
+      detail: {
+        proposalCardId: this.cardId,
+        proposalFirebaseId: this.getIdForFirebase(),
+        projectId: this.projectId,
+        title: this.title,
+        description: this._buildPlanContext()
+      },
+      cancelable: true,
+      bubbles: true
+    }));
+
+    if (handledInPlace) return;
+
+    this._navigate(`/adminproject?projectId=${encodeURIComponent(this.projectId || '')}&fromProposal=${encodeURIComponent(this.cardId)}#devPlans`);
+  }
+
+  /**
+   * Context handed to the plan creator: everything the proposal knows, so the
+   * generated plan does not start from just a title.
+   * @returns {string}
+   */
+  _buildPlanContext() {
+    const parts = [];
+    const structured = [this.descDado, this.descCuando, this.descPara].filter(Boolean).join('\n');
+
+    if (structured) {
+      parts.push(structured);
+    } else if (this.description) {
+      parts.push(this.description);
+    }
+
+    if (this.acceptanceCriteria) {
+      parts.push(`Criterios de aceptación:\n${this.acceptanceCriteria}`);
+    }
+    if (this.notes) {
+      parts.push(`Notas:\n${this.notes}`);
+    }
+
+    return parts.join('\n\n');
+  }
+
+  /**
+   * Isolated so navigation can be asserted in tests.
+   * @param {string} url
+   */
+  _navigate(url) {
+    window.location.href = url;
   }
 
   // Input handlers

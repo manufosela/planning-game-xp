@@ -604,6 +604,18 @@ export const DevPlansListStyles = css`
     margin-bottom: 1rem;
   }
 
+  /* Plan being created from an approved proposal (PLN-TSK-0358) */
+  .plan-from-proposal {
+    background: var(--bg-secondary, #f8f9fa);
+    border-left: 3px solid var(--brand-primary, #4a9eff);
+    border-radius: 4px;
+    color: var(--text-primary, #222);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+    padding: 0.6rem 0.9rem;
+  }
+
   .plan-ai-notice {
     background: var(--bg-secondary, #f8f9fa);
     color: var(--brand-primary, #4a9eff);

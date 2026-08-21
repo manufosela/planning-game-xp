@@ -163,12 +163,16 @@
         <button id="proposalsTableViewBtn" class="view-button active">Table View</button>
         <button id="proposalsListViewBtn" class="view-button">Cards View</button>
         <button id="proposalsDeptViewBtn" class="view-button">Department View</button>
+        <label class="show-converted-toggle" title="Las propuestas aprobadas como plan se conservan, pero no se listan">
+          <input type="checkbox" id="showConvertedProposals" /> Mostrar aprobadas
+        </label>
         <button id="importProposalsBtn" class="import-backlog-btn" style="display: none;">
           Importar de <span id="importProposalsYear"></span> (<span id="importProposalsCount">0</span>)
         </button>
         <button id="addProposalCard" class="add-button">+ New Proposal</button>
       </div>
     </section>
+    <p class="subheader-hint">Ideas pendientes de aprobar. Al aprobarlas se convierten en una <strong>tarea</strong> (🔁) o en un <strong>plan</strong> (🗺️), que a su vez generará sus tareas.</p>
     <section class="cards-container" id="proposalsCardsList" style="display:none"></section>
     <section class="dept-view" id="proposalsDeptView" style="display:none">
       <div class="dept-kanban-columns" id="proposalsDeptColumns"></div>
@@ -1299,6 +1303,86 @@ return;
 </script>
 
 <script type="module">
+  // PLN-TSK-0358 — approving a proposal as a dev plan.
+  // A proposal card has two approval routes: task (handled by the card
+  // itself) and plan (handled here, because switching page tabs and
+  // reaching <dev-plans-section> is the page's job, not the card's).
+  import { FirebaseService } from '/js/services/firebase-service.js';
+
+  /**
+   * Move the page to the Dev Plans tab and open the plan creator seeded
+   * with the given proposal.
+   * @param {{proposalCardId: string, title: string, description: string}} proposal
+   * @returns {Promise<void>}
+   */
+  async function openPlanCreator(proposal) {
+    const devPlansSection = document.getElementById('devPlansSection');
+    if (!devPlansSection) return;
+
+    document.querySelector('[data-section="devPlans"]')?.click();
+    await devPlansSection.openPlanCreatorFromProposal(proposal);
+  }
+
+  // In-place route: the proposal card lives on this same page.
+  // preventDefault() tells the card we took over, so it does not navigate.
+  document.addEventListener('convert-proposal-to-plan', (event) => {
+    if (!document.getElementById('devPlansSection')) return;
+
+    event.preventDefault();
+    openPlanCreator(event.detail).catch((error) => {
+      console.error('[adminproject] Could not open the plan creator:', error);
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: 'No se pudo abrir el creador de planes', type: 'error' } }
+      }));
+    });
+  });
+
+  // Arrival route: the proposal was approved from another page and sent us
+  // here with ?fromProposal=<cardId>.
+  document.addEventListener('astro:page-load', async () => {
+    const params = new URLSearchParams(window.location.search);
+    const proposalCardId = params.get('fromProposal');
+    const projectId = params.get('projectId');
+    if (!proposalCardId || !projectId) return;
+
+    // Consume the parameter so a reload does not reopen the creator.
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('fromProposal');
+    window.history.replaceState({}, '', cleanUrl.toString());
+
+    try {
+      const proposals = await FirebaseService.getCards(
+        FirebaseService.getPathBySectionAndProjectId('proposals', projectId)
+      );
+      const entry = Object.entries(proposals || {}).find(([, card]) => card?.cardId === proposalCardId);
+      if (!entry) {
+        throw new Error(`Proposal ${proposalCardId} not found in ${projectId}`);
+      }
+      const [proposalFirebaseId, proposal] = entry;
+
+      const structured = [proposal.descDado, proposal.descCuando, proposal.descPara].filter(Boolean).join('\n');
+      const context = [
+        structured || proposal.description || '',
+        proposal.acceptanceCriteria ? `Criterios de aceptación:\n${proposal.acceptanceCriteria}` : '',
+        proposal.notes ? `Notas:\n${proposal.notes}` : ''
+      ].filter(Boolean).join('\n\n');
+
+      await openPlanCreator({
+        proposalCardId,
+        proposalFirebaseId,
+        title: proposal.title || '',
+        description: context
+      });
+    } catch (error) {
+      console.error('[adminproject] Could not open the plan creator from URL:', error);
+      document.dispatchEvent(new CustomEvent('show-slide-notification', {
+        detail: { options: { message: `No se pudo abrir la propuesta ${proposalCardId}`, type: 'error' } }
+      }));
+    }
+  });
+</script>
+
+<script type="module">
 // Edit Project functionality
 import { showModal } from '@manufosela/app-modal';
 import 'https://esm.sh/@manufosela/md-renderer';
@@ -1958,6 +2042,17 @@ document.addEventListener('astro:page-load', () => {
     margin: 0;
     color: var(--text-muted, #6c757d);
     font-size: 0.9rem;
+  }
+
+  /* Proposals: show/hide the ones already approved as a plan (PLN-TSK-0358) */
+  .show-converted-toggle {
+    align-items: center;
+    color: var(--text-muted, #6c757d);
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 0.85rem;
+    gap: 0.35rem;
+    white-space: nowrap;
   }
 
   .container {

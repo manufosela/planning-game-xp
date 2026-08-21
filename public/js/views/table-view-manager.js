@@ -5,6 +5,8 @@ import { AppEventBus, AppEvents } from '../services/app-event-bus.js';
 import { APP_CONSTANTS } from '../constants/app-constants.js';
 import { TASK_SCHEMA, BUG_SCHEMA, PROPOSAL_SCHEMA } from '../schemas/card-field-schemas.js';
 
+const SHOW_CONVERTED_PROPOSALS_KEY = 'pgxp_show_converted_proposals';
+
 /**
  * Gestor de vista tipo tabla con reactividad en tiempo real
  * Sustituye la lógica de carga única por subscripciones Firebase
@@ -23,6 +25,9 @@ export class TableViewManager {
     this.previousYearBugs = [];
     this.previousYearTasks = [];
     this.searchQuery = ''; // Search query for cardId/title search
+    // Proposals approved as a dev plan are kept for traceability but leave
+    // the working list unless the user asks for them (PLN-TSK-0358).
+    this.showConvertedProposals = this._readShowConvertedPreference();
 
     // Initialize unified filter service
     this.unifiedFilterService = getUnifiedFilterService();
@@ -107,6 +112,64 @@ export class TableViewManager {
     this._setupImportProposalsButton();
     this._setupImportBugsButton();
     this._setupImportTasksButton();
+    this._setupShowConvertedProposalsToggle();
+  }
+
+  /**
+   * Read the "show approved proposals" preference (per browser).
+   * @returns {boolean}
+   */
+  _readShowConvertedPreference() {
+    try {
+      return window.localStorage.getItem(SHOW_CONVERTED_PROPOSALS_KEY) === 'true';
+    } catch {
+      // Private mode / storage disabled: default to the clean list.
+      return false;
+    }
+  }
+
+  /**
+   * Wire the "Mostrar aprobadas" checkbox of the Proposals tab.
+   */
+  _setupShowConvertedProposalsToggle() {
+    const setupToggle = () => {
+      const toggle = document.getElementById('showConvertedProposals');
+      if (!toggle || toggle.dataset.listenerAdded) return;
+
+      toggle.dataset.listenerAdded = 'true';
+      toggle.checked = this.showConvertedProposals;
+      toggle.addEventListener('change', (event) => {
+        this.showConvertedProposals = event.target.checked;
+        try {
+          window.localStorage.setItem(SHOW_CONVERTED_PROPOSALS_KEY, String(this.showConvertedProposals));
+        } catch {
+          // Preference is a convenience: not persisting it must not break the view.
+        }
+        this.renderCurrentView();
+      });
+    };
+
+    document.addEventListener('astro:page-load', setupToggle);
+    setupToggle();
+  }
+
+  /**
+   * Drop proposals already approved as a plan, unless the user wants them.
+   * @param {Object} cards - Cards keyed by Firebase id
+   * @returns {Object} Cards to render
+   */
+  _filterConvertedProposals(cards) {
+    if (this.currentSection !== 'proposals' || this.showConvertedProposals) {
+      return cards;
+    }
+
+    const visible = {};
+    Object.entries(cards).forEach(([firebaseId, card]) => {
+      if (!card?.convertedToPlan) {
+        visible[firebaseId] = card;
+      }
+    });
+    return visible;
   }
 
   /**
@@ -863,8 +926,8 @@ return filteredCards;
       return;
     }
 
-    // First filter by year
-    const yearFilteredCards = this._filterByYear(this.cardsCache);
+    // First filter by year, then drop proposals already approved as a plan
+    const yearFilteredCards = this._filterConvertedProposals(this._filterByYear(this.cardsCache));
 
     let filteredCards;
 

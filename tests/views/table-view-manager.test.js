@@ -485,6 +485,40 @@ describe('TableViewManager', () => {
     });
   });
 
+  describe('_filterConvertedProposals (PLN-TSK-0358)', () => {
+    const proposals = {
+      open1: { cardId: 'SIM-PRP-0001', title: 'Sin aprobar' },
+      approved: { cardId: 'SIM-PRP-0002', title: 'Aprobada', convertedToPlan: 'SIM-PLA-0003' },
+      open2: { cardId: 'SIM-PRP-0003', title: 'Otra sin aprobar' }
+    };
+
+    it('should hide proposals already approved as a plan by default', () => {
+      manager.currentSection = 'proposals';
+      manager.showConvertedProposals = false;
+
+      const visible = manager._filterConvertedProposals(proposals);
+
+      expect(Object.keys(visible)).toEqual(['open1', 'open2']);
+    });
+
+    it('should show them when the user asks for them', () => {
+      manager.currentSection = 'proposals';
+      manager.showConvertedProposals = true;
+
+      const visible = manager._filterConvertedProposals(proposals);
+
+      expect(Object.keys(visible)).toEqual(['open1', 'approved', 'open2']);
+    });
+
+    it('should not touch other sections', () => {
+      manager.currentSection = 'tasks';
+      manager.showConvertedProposals = false;
+      const tasks = { t1: { cardId: 'SIM-TSK-0001', convertedToPlan: 'ignored' } };
+
+      expect(manager._filterConvertedProposals(tasks)).toBe(tasks);
+    });
+  });
+
   describe('cleanup', () => {
     it('should reset _usingFallback flag', () => {
       manager._usingFallback = true;

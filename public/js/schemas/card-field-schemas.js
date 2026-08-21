@@ -69,12 +69,13 @@ export const PROPOSAL_SCHEMA = {
     'registerDate', 'group', 'section',
     'epic', 'businessPoints', 'projectScoringSystem',
     'developer', 'stakeholder', 'year',
-    'descDado', 'descCuando', 'descPara'
+    'descDado', 'descCuando', 'descPara',
+    'convertedToPlan'
   ],
   VIEW_FIELDS: [
     'firebaseId', 'cardId', 'title', 'status',
     'businessPoints', 'createdBy', 'stakeholder',
-    'registerDate', 'year'
+    'registerDate', 'year', 'convertedToPlan'
   ]
 };
 

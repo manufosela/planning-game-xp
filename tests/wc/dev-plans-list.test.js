@@ -27,6 +27,14 @@ vi.mock('../../public/js/wc/dev-plans-list-styles.js', () => ({
   DevPlansListStyles: {}
 }));
 
+// Mock FirebaseService (dynamically imported when marking the origin proposal)
+const updateCardMock = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../public/js/services/firebase-service.js', () => ({
+  FirebaseService: {
+    updateCard: (...args) => updateCardMock(...args)
+  }
+}));
+
 // Mock service
 vi.mock('../../public/js/services/plan-service.js', () => ({
   planService: {
@@ -146,19 +154,74 @@ describe('DevPlansList', () => {
       expect(comp.currentView).toBe('creator');
       expect(comp.aiContext).toBe('');
       expect(comp.creatorError).toBe('');
-      expect(comp.proposalId).toBe('');
+      expect(comp.proposalCardId).toBe('');
+      expect(comp.proposalFirebaseId).toBe('');
     });
   });
 
-  describe('openCreatorFromProposal', () => {
-    it('should set proposal data and switch to creator', () => {
+  describe('openCreatorFromProposal (PLN-TSK-0358)', () => {
+    it('should keep the origin proposal and seed the context with title + description', () => {
       const comp = new DevPlansList();
 
-      comp.openCreatorFromProposal('prop1', 'Title', 'Description');
+      comp.openCreatorFromProposal({
+        proposalCardId: 'SIM-PRP-0002',
+        proposalFirebaseId: '-P-Z-Cbq2XrJqIh4MYgk',
+        title: 'Las partidas viven en el servidor',
+        description: 'Descripción de la propuesta'
+      });
 
       expect(comp.currentView).toBe('creator');
-      expect(comp.proposalId).toBe('prop1');
-      expect(comp.aiContext).toBe('Description');
+      expect(comp.proposalCardId).toBe('SIM-PRP-0002');
+      expect(comp.proposalFirebaseId).toBe('-P-Z-Cbq2XrJqIh4MYgk');
+      expect(comp.aiContext).toBe('Las partidas viven en el servidor\n\nDescripción de la propuesta');
+    });
+
+    it('should refuse to open without a proposal card id', () => {
+      const comp = new DevPlansList();
+
+      expect(() => comp.openCreatorFromProposal({ title: 'Sin id' })).toThrow(/proposalCardId/);
+      expect(comp.currentView).toBe('list');
+    });
+  });
+
+  describe('_markProposalAsConverted (PLN-TSK-0358)', () => {
+    beforeEach(() => {
+      updateCardMock.mockClear();
+    });
+
+    it('should write convertedToPlan back on the origin proposal card', async () => {
+      const comp = new DevPlansList();
+      comp.projectId = 'SimuladorEstrategico';
+      comp.proposalCardId = 'SIM-PRP-0002';
+      comp.proposalFirebaseId = '-P-Z-Cbq2XrJqIh4MYgk';
+
+      await comp._markProposalAsConverted({ _id: 'plan-1', cardId: 'SIM-PLA-0003' });
+
+      expect(updateCardMock).toHaveBeenCalledWith(
+        'SimuladorEstrategico',
+        'proposals',
+        '-P-Z-Cbq2XrJqIh4MYgk',
+        { convertedToPlan: 'SIM-PLA-0003' }
+      );
+    });
+
+    it('should fail loudly when the plan has no cardId instead of marking a wrong value', async () => {
+      const comp = new DevPlansList();
+      comp.projectId = 'SimuladorEstrategico';
+      comp.proposalCardId = 'SIM-PRP-0002';
+      comp.proposalFirebaseId = '-P-Z-Cbq2XrJqIh4MYgk';
+
+      await expect(comp._markProposalAsConverted({ _id: 'plan-1' })).rejects.toThrow(/cardId/);
+      expect(updateCardMock).not.toHaveBeenCalled();
+    });
+
+    it('should fail loudly when the proposal Firebase id is missing', async () => {
+      const comp = new DevPlansList();
+      comp.projectId = 'SimuladorEstrategico';
+      comp.proposalCardId = 'SIM-PRP-0002';
+
+      await expect(comp._markProposalAsConverted({ cardId: 'SIM-PLA-0003' })).rejects.toThrow(/Firebase id/);
+      expect(updateCardMock).not.toHaveBeenCalled();
     });
   });
 
