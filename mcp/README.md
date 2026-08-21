@@ -92,6 +92,22 @@ This creates a `.mcp-user.json` file with your developer ID, used to track who c
 | `relate_cards` | Create relations between cards (related, blocks/blockedBy) |
 | `get_transition_rules` | Get valid status transitions for a card type |
 
+#### Proposals: one idea, two outcomes
+
+A **proposal** is an idea pending approval — not work in progress. Create it with
+`create_card type=proposal` (a `description` matters: it is the context used when
+it gets approved). Approving it turns it into exactly one of:
+
+- a **task**, when it is one unit of work — done from the UI, which converts the
+  proposal into a task card;
+- a **plan**, when it will produce several tasks — `create_plan
+  proposalCardId="<XXX-PRP-NNNN>"`, which creates the plan and marks the proposal
+  with `convertedToPlan=<plan cardId>`.
+
+`list_cards type=proposal` returns `convertedToPlan` / `convertedToTask`: a
+proposal carrying either one is already approved, the rest are still pending.
+There is no separate "plan proposal" entity — it was retired in PLN-TSK-0357.
+
 ### Sprints
 | Tool | Description |
 |------|-------------|
@@ -115,7 +131,7 @@ This creates a `.mcp-user.json` file with your developer ID, used to track who c
 | Tool | Description |
 |------|-------------|
 | `list_plans` / `get_plan` / `create_plan` / `update_plan` / `delete_plan` | Development plans |
-| `list_plan_proposals` / `get_plan_proposal` / `create_plan_proposal` / `update_plan_proposal` / `delete_plan_proposal` | Plan proposals |
+| `list_plan_proposals` / `get_plan_proposal` / `update_plan_proposal` / `delete_plan_proposal` | Legacy plan proposals — read/maintenance only. `create_plan_proposal` is retired: use `create_card type=proposal` + `create_plan proposalCardId=...` (see [Proposals](#proposals-one-idea-two-outcomes)) |
 
 ### Global Configuration
 | Tool | Description |

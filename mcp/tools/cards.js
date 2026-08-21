@@ -195,7 +195,7 @@ export function applyTypeDefaults(type, data) {
 
 export const listCardsSchema = z.object({
   projectId: z.string().describe('Project ID (e.g., "Cinema4D", "Intranet")'),
-  type: z.enum(['task', 'bug', 'epic', 'proposal', 'qa']).describe('Card type to list'),
+  type: z.enum(['task', 'bug', 'epic', 'proposal', 'qa']).describe('Card type to list. For "proposal", the listing includes convertedToPlan / convertedToTask: a proposal carrying either one is already approved; the ones without them are still pending.'),
   status: z.string().optional().describe('Filter by status (e.g., "To Do", "In Progress", "Done&Validated")'),
   sprint: z.string().optional().describe('Filter by sprint name'),
   developer: z.string().optional().describe('Filter by developer name'),
@@ -243,9 +243,9 @@ export const implementationPlanSchema = z.object({
 
 export const createCardSchema = z.object({
   projectId: z.string().describe('Project ID'),
-  type: z.enum(['task', 'bug', 'epic', 'proposal', 'qa']).describe('Card type to create'),
+  type: z.enum(['task', 'bug', 'epic', 'proposal', 'qa']).describe('Card type to create. A "proposal" is an idea pending approval: approve it as a task (from the UI) when it is one unit of work, or as a plan with create_plan proposalCardId="<XXX-PRP-NNNN>" when it will produce several tasks.'),
   title: z.string().describe('Card title'),
-  description: z.string().optional().describe('Card description (legacy - use descriptionStructured for tasks)'),
+  description: z.string().optional().describe('Card description (legacy for tasks — use descriptionStructured there). Strongly recommended for proposals: it is the context used when the proposal is approved as a task or as a plan.'),
   descriptionStructured: z.array(descriptionStructuredItemSchema).optional().describe('Structured user story format: [{role: "Como...", goal: "Quiero...", benefit: "Para..."}]. REQUIRED for tasks.'),
   acceptanceCriteria: z.string().optional().describe('Acceptance criteria as plain text. REQUIRED for tasks (use this OR acceptanceCriteriaStructured).'),
   acceptanceCriteriaStructured: z.array(acceptanceCriteriaItemSchema).optional().describe('Acceptance criteria in Gherkin format: [{given: "...", when: "...", then: "..."}]. REQUIRED for tasks (use this OR acceptanceCriteria).'),
@@ -320,6 +320,9 @@ export async function listCards({ projectId, type, status, sprint, developer, pl
   // status or priority — never project those fields, even if older docs
   // still carry stale values pending the cleanup migration.
   const isEpic = type === 'epic';
+  // Proposals carry their approval outcome (PMC-TSK-0073): a proposal with
+  // convertedToPlan / convertedToTask is done; the rest are still pending.
+  const isProposal = type === 'proposal';
   const summary = cards.map(c => {
     const base = {
       firebaseId: c.firebaseId,
@@ -332,6 +335,10 @@ export async function listCards({ projectId, type, status, sprint, developer, pl
     if (!isEpic) {
       base.status = c.status;
       base.priority = c.priority;
+    }
+    if (isProposal) {
+      base.convertedToPlan = c.convertedToPlan || null;
+      base.convertedToTask = c.convertedToTask || null;
     }
     return base;
   });

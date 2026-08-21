@@ -42,6 +42,13 @@ export const USAGE_RULES_CONTENT = `
 
 **Proposal** (create_card type=proposal):
 - \`title\`: Proposal title (REQUIRED)
+- \`description\` or \`descriptionStructured\`: strongly recommended — it is the
+  context used when the proposal is approved
+- A proposal is an idea pending approval, with TWO outcomes:
+  - small enough for one unit of work → approve it as a **task** (from the UI)
+  - big enough to produce several tasks → approve it as a **plan** with
+    \`create_plan proposalCardId="<XXX-PRP-NNNN>"\`
+- \`convertedToPlan\` / \`convertedToTask\` mark it as already approved
 
 ### 3b. Required Fields for Status Transitions (update_card)
 

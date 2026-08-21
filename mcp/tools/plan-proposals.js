@@ -103,8 +103,11 @@ export async function createPlanProposal() {
   // /planProposals is fully retired post-migration.
   throw new Error(
     'DEPRECATED: create_plan_proposal was retired (PLN-TSK-0357). ' +
-    'Create a proposal card instead: create_card type=proposal. ' +
-    'Then link it to a plan with create_plan proposalCardId="<XXX-PRP-NNNN>".'
+    'There is a single kind of proposal: an idea pending approval, created with ' +
+    'create_card type=proposal (title + description). ' +
+    'Approving it has two outcomes: as a TASK when it is one unit of work (done from the UI), ' +
+    'or as a PLAN when it will produce several tasks — ' +
+    'create_plan proposalCardId="<XXX-PRP-NNNN>", which marks the proposal with convertedToPlan.'
   );
 }
 

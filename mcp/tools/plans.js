@@ -49,7 +49,7 @@ export const createPlanSchema = z.object({
   title: z.string().describe('Plan title (max 150 chars)'),
   objective: z.string().optional().describe('Plan objective (max 500 chars)'),
   proposalId: z.string().optional().describe('DEPRECATED (legacy plan proposals, PLN-TSK-0357). Use proposalCardId instead.'),
-  proposalCardId: z.string().optional().describe('Proposal CARD id (e.g. "KJR-PRP-0009") this plan originates from. Validates the card exists and marks it with convertedToPlan=<planCardId> for traceability.'),
+  proposalCardId: z.string().optional().describe('Proposal CARD id (e.g. "KJR-PRP-0009") this plan originates from — this is how a proposal gets approved as a plan, the right outcome when the idea will produce several tasks (a one-unit-of-work idea is approved as a task from the UI instead). Validates the card exists and marks it with convertedToPlan=<planCardId> for traceability.'),
   phases: z.array(z.object({
     name: z.string().describe('Phase name (max 150 chars)'),
     description: z.string().optional().describe('Phase description (max 500 chars)'),
