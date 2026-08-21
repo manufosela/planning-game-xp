@@ -27,6 +27,14 @@ vi.mock('../../public/js/wc/dev-plans-list-styles.js', () => ({
   DevPlansListStyles: {}
 }));
 
+// Mock the plan proposal service (dynamically imported when linking a plan proposal)
+const linkPlanMock = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../public/js/services/plan-proposal-service.js', () => ({
+  planProposalService: {
+    linkPlan: (...args) => linkPlanMock(...args)
+  }
+}));
+
 // Mock FirebaseService (dynamically imported when marking the origin proposal)
 const updateCardMock = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../public/js/services/firebase-service.js', () => ({
@@ -176,11 +184,48 @@ describe('DevPlansList', () => {
       expect(comp.aiContext).toBe('Las partidas viven en el servidor\n\nDescripción de la propuesta');
     });
 
-    it('should refuse to open without a proposal card id', () => {
+    it('should also open from a PLAN proposal (PLN-TSK-0359)', () => {
       const comp = new DevPlansList();
 
-      expect(() => comp.openCreatorFromProposal({ title: 'Sin id' })).toThrow(/proposalCardId/);
+      comp.openCreatorFromProposal({
+        proposalId: '-Oy7tMxPcttHqRKnYAN8',
+        title: 'Easy RAG',
+        description: 'Texto libre de la propuesta de plan'
+      });
+
+      expect(comp.currentView).toBe('creator');
+      expect(comp.proposalId).toBe('-Oy7tMxPcttHqRKnYAN8');
+      expect(comp.proposalCardId).toBe('');
+    });
+
+    it('should refuse to open with no origin at all', () => {
+      const comp = new DevPlansList();
+
+      expect(() => comp.openCreatorFromProposal({ title: 'Sin id' })).toThrow(/proposalId or a proposalCardId/);
       expect(comp.currentView).toBe('list');
+    });
+  });
+
+  describe('_linkPlanProposal (PLN-TSK-0359)', () => {
+    beforeEach(() => {
+      linkPlanMock.mockClear();
+    });
+
+    it('should register the generated plan on its PLAN proposal', async () => {
+      const comp = new DevPlansList();
+      comp.projectId = 'Karajan RAG';
+
+      await comp._linkPlanProposal('-Oy7tMxPcttHqRKnYAN8', { _id: '-plan-1' });
+
+      expect(linkPlanMock).toHaveBeenCalledWith('Karajan RAG', '-Oy7tMxPcttHqRKnYAN8', '-plan-1');
+    });
+
+    it('should fail loudly when the saved plan has no id', async () => {
+      const comp = new DevPlansList();
+      comp.projectId = 'Karajan RAG';
+
+      await expect(comp._linkPlanProposal('-Oy7tMxPcttHqRKnYAN8', {})).rejects.toThrow(/no id/i);
+      expect(linkPlanMock).not.toHaveBeenCalled();
     });
   });
 

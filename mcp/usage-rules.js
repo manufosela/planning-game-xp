@@ -40,15 +40,19 @@ export const USAGE_RULES_CONTENT = `
 **Epic** (create_card type=epic):
 - \`title\`: Epic title (REQUIRED)
 
-**Proposal** (create_card type=proposal):
+**Proposal** (create_card type=proposal) — TASK proposal:
 - \`title\`: Proposal title (REQUIRED)
-- \`description\` or \`descriptionStructured\`: strongly recommended — it is the
-  context used when the proposal is approved
-- A proposal is an idea pending approval, with TWO outcomes:
-  - small enough for one unit of work → approve it as a **task** (from the UI)
-  - big enough to produce several tasks → approve it as a **plan** with
-    \`create_plan proposalCardId="<XXX-PRP-NNNN>"\`
-- \`convertedToPlan\` / \`convertedToTask\` mark it as already approved
+- \`descriptionStructured\`: Como / Quiero / Para — this is a user story for ONE
+  unit of work, the way people outside the team propose something
+- Approved from the UI it becomes a task; it can also be approved as a plan
+  with \`create_plan proposalCardId="<XXX-PRP-NNNN>"\` (marks \`convertedToPlan\`)
+
+**Plan proposal** (create_plan_proposal) — a DIFFERENT entity:
+- \`title\` (REQUIRED) + \`description\` as FREE TEXT (prose, markdown), optional
+  \`tags\` and \`sourceDocumentUrl\`
+- Normally written by an AI: an analysis, a spec, a roadmap — too big for one task
+- Its outcome is a development PLAN (\`create_plan\`), which then generates tasks
+- Do NOT force this into the Como/Quiero/Para form: it is not a user story
 
 ### 3b. Required Fields for Status Transitions (update_card)
 

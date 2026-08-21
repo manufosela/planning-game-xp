@@ -119,20 +119,42 @@ describe('plan-proposals.js', () => {
     });
   });
 
-  describe('createPlanProposal — DEPRECATED (PLN-TSK-0357)', () => {
-    it('rejects with an actionable deprecation error', async () => {
-      await expect(
-        createPlanProposal({ projectId: 'TestProject', title: 'New Feature Request' })
-      ).rejects.toThrow(/DEPRECATED/);
+  describe('createPlanProposal — restored (PLN-TSK-0359)', () => {
+    beforeEach(() => {
+      setMockRtdbData('/projects/TestProject', { name: 'Test Project' });
     });
 
-    it('the error tells the caller the unified flow (proposal card + proposalCardId)', async () => {
+    it('creates a free-text plan proposal, no user-story form imposed', async () => {
+      const result = await createPlanProposal({
+        projectId: 'TestProject',
+        title: 'Easy RAG',
+        description: '## Idea\n\nCrear RAGs de forma sencilla, con despliegue opcional.',
+        tags: ['rag', 'infra'],
+        sourceDocumentUrl: 'https://example.com/spec.md'
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.proposalId).toBeTruthy();
+      expect(response.status).toBe('pending');
+
+      const saved = Object.values(getMockRtdbData('/planProposals/TestProject'))[0];
+      expect(saved.title).toBe('Easy RAG');
+      expect(saved.description).toContain('Crear RAGs de forma sencilla');
+      expect(saved.tags).toEqual(['rag', 'infra']);
+      expect(saved.sourceDocumentUrl).toBe('https://example.com/spec.md');
+      expect(saved.planIds).toEqual([]);
+    });
+
+    it('requires a title', async () => {
       await expect(
-        createPlanProposal({ projectId: 'TestProject', title: 'X' })
-      ).rejects.toThrow(/create_card type=proposal/);
+        createPlanProposal({ projectId: 'TestProject', title: '   ' })
+      ).rejects.toThrow(/title is required/);
+    });
+
+    it('refuses an unknown project', async () => {
       await expect(
-        createPlanProposal({ projectId: 'TestProject', title: 'X' })
-      ).rejects.toThrow(/proposalCardId/);
+        createPlanProposal({ projectId: 'Nope', title: 'X' })
+      ).rejects.toThrow(/not found/);
     });
   });
 

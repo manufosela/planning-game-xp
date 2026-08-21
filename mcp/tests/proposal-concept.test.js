@@ -1,8 +1,9 @@
 /**
- * PMC-TSK-0073 — the texts the MCP hands to AI agents must explain what a
- * proposal IS and its two outcomes (task or plan). Before this, they only
- * said "Proposal: REQUIRED title", which is why agents created plan-sized
- * proposals with no idea how to approve them.
+ * The MCP hands these texts to every AI agent, so they must make the TWO
+ * kinds of proposal unmistakable (PLN-TSK-0359): a TASK proposal is a
+ * Como/Quiero/Para user story for one unit of work, typically from someone
+ * outside the team; a PLAN proposal is free text, typically written by an AI,
+ * whose outcome is a development plan. One form cannot hold both.
  */
 import { describe, it, expect } from 'vitest';
 import { generateAiInstructions } from '../ai-instructions.js';
@@ -24,44 +25,45 @@ function sectionOf(text, heading) {
   return next === -1 ? rest : rest.slice(0, next);
 }
 
-describe('Proposal concept in the AI instructions (PMC-TSK-0073)', () => {
+describe('The two proposal kinds in the AI instructions (PLN-TSK-0359)', () => {
   const instructions = generateAiInstructions();
-  const proposalSection = sectionOf(instructions, '### Proposal (type="proposal")');
+  const taskProposal = sectionOf(instructions, '### Proposal (type="proposal") — TASK proposal');
+  const planProposal = sectionOf(instructions, '### Plan proposal — a DIFFERENT thing (create_plan_proposal)');
 
-  it('should describe a proposal as an idea pending approval', () => {
-    expect(proposalSection).toMatch(/pending approval/i);
+  it('should describe the TASK proposal as a user story for one unit of work', () => {
+    expect(taskProposal).toMatch(/user story/i);
+    expect(taskProposal).toMatch(/Como \/ Quiero \/ Para/);
+    expect(taskProposal).toMatch(/outside\s+the team/i);
   });
 
-  it('should spell out both outcomes: task and plan', () => {
-    expect(proposalSection).toMatch(/task/i);
-    expect(proposalSection).toMatch(/plan/i);
+  it('should describe the PLAN proposal as free text that becomes a plan', () => {
+    expect(planProposal).toMatch(/free text|prose/i);
+    expect(planProposal).toMatch(/create_plan_proposal|DEVELOPMENT PLAN/i);
   });
 
-  it('should name the tool that links a proposal to a plan', () => {
-    expect(proposalSection).toMatch(/create_plan.*proposalCardId/s);
+  it('should state they are different things, not one entity', () => {
+    expect(instructions).toMatch(/Plan proposal — a DIFFERENT thing/);
+    // And the reader is told how to pick between them.
+    expect(instructions).toMatch(/Pick by shape/i);
   });
 
-  it('should name the fields that mark an approved proposal', () => {
-    expect(proposalSection).toMatch(/convertedToPlan/);
-    expect(proposalSection).toMatch(/convertedToTask/);
-  });
-
-  it('should recommend a description so the plan generator has context', () => {
-    expect(proposalSection).toMatch(/description/i);
+  it('should keep the plan outcome available for a task proposal', () => {
+    expect(taskProposal).toMatch(/create_plan.*proposalCardId/s);
+    expect(taskProposal).toMatch(/convertedToPlan/);
   });
 });
 
-describe('Proposal concept in the usage rules (PMC-TSK-0073)', () => {
-  const proposalSection = sectionOf(USAGE_RULES_CONTENT, '**Proposal** (create_card type=proposal):');
+describe('The two proposal kinds in the usage rules (PLN-TSK-0359)', () => {
+  const taskProposal = sectionOf(USAGE_RULES_CONTENT, '**Proposal** (create_card type=proposal) — TASK proposal:');
+  const planProposal = sectionOf(USAGE_RULES_CONTENT, '**Plan proposal** (create_plan_proposal) — a DIFFERENT entity:');
 
-  it('should go beyond "title is required"', () => {
-    expect(proposalSection).toMatch(/description/i);
-    expect(proposalSection).toMatch(/create_plan/);
+  it('should give each kind its own shape', () => {
+    expect(taskProposal).toMatch(/Como \/ Quiero \/ Para/);
+    expect(planProposal).toMatch(/FREE TEXT/i);
   });
 
-  it('should explain when to approve as a plan instead of a task', () => {
-    expect(proposalSection).toMatch(/plan/i);
-    expect(proposalSection).toMatch(/task/i);
+  it('should warn against forcing free text into the user story form', () => {
+    expect(planProposal).toMatch(/not a user story|Do NOT force/i);
   });
 });
 

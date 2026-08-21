@@ -97,19 +97,26 @@ REQUIRED: title
 ### Epic (type="epic")
 REQUIRED: title
 
-### Proposal (type="proposal")
+### Proposal (type="proposal") — TASK proposal
 REQUIRED: title
-A proposal is an IDEA PENDING APPROVAL — not work in progress. Approving it
-turns it into ONE of two things:
-- a TASK, when it fits in a single unit of work (approved from the UI)
-- a PLAN, when it is big enough to produce several tasks:
-  \`create_plan proposalCardId="<XXX-PRP-NNNN>"\` creates the plan and marks
-  the proposal with \`convertedToPlan=<plan cardId>\`
-- \`description\` (or descriptionStructured) is strongly recommended: it is the
-  context the plan generator and the task conversion start from
-- \`convertedToPlan\` / \`convertedToTask\` mark an already approved proposal;
-  a proposal without them is still pending
-- there is no separate "plan proposal" entity — that was retired (PLN-TSK-0357)
+An idea for ONE unit of work, written as a user story so that people outside
+the team can propose it: description as Como / Quiero / Para
+(descriptionStructured). Approving it turns it into a task (done from the UI).
+It can also be approved as a plan when it turns out to be bigger than a task:
+\`create_plan proposalCardId="<XXX-PRP-NNNN>"\`, which marks the card with
+\`convertedToPlan\`. \`list_cards type=proposal\` returns
+\`convertedToPlan\` / \`convertedToTask\`: a proposal carrying either one is
+already approved.
+
+### Plan proposal — a DIFFERENT thing (create_plan_proposal)
+Free text (title + description as prose, optional tags and
+sourceDocumentUrl), normally written by an AI, describing something too big
+for a single task. Its outcome is a DEVELOPMENT PLAN, which in turn generates
+tasks. Lives at /planProposals, listed in the Proposals sub-tab of Dev Plans.
+
+Pick by shape, not by size alone: a user story someone outside the team wants
+built → \`create_card type=proposal\`. A written analysis, spec or roadmap you
+produced → \`create_plan_proposal\`, then \`create_plan\` from it.
 
 ## update_card: Task Status Transitions
 

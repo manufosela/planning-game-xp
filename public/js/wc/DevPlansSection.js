@@ -1,15 +1,19 @@
 /**
  * DevPlansSection Component
- * Container for Dev Plans and Task Generator sub-tabs.
+ * Container for Plan Proposals, Dev Plans and Task Generator sub-tabs.
  * Uses <color-tabs> to organize the sub-sections.
  *
- * NOTE (PLN-TSK-0357): the "Proposals" sub-tab (plan proposals, stored at
- * /planProposals) was removed — proposals were unified into the proposal
- * CARDS of the main Proposals tab. Plans link to them via
- * create_plan proposalCardId.
+ * There are TWO kinds of proposal in the app, on purpose (PLN-TSK-0359):
+ * - PLAN proposals (this sub-tab, /planProposals): free text, usually
+ *   written by the AI, and turned into a development plan.
+ * - TASK proposals (main Proposals tab, proposal cards): a Como/Quiero/Para
+ *   user story, so people outside the team can propose work.
+ * A task proposal can also be approved as a plan (PLN-TSK-0358); that path
+ * arrives here through openPlanCreatorFromProposal().
  */
 import { LitElement, html } from 'https://cdn.jsdelivr.net/npm/lit@3.0.2/+esm';
 import { DevPlansSectionStyles } from './dev-plans-section-styles.js';
+import './PlanProposalsList.js';
 import './DevPlansList.js';
 
 export class DevPlansSection extends LitElement {
@@ -26,12 +30,33 @@ export class DevPlansSection extends LitElement {
   constructor() {
     super();
     this.projectId = '';
+    this._handleGenerateFromProposal = this._handleGenerateFromProposal.bind(this);
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.addEventListener('generate-plan-from-proposal', this._handleGenerateFromProposal);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.removeEventListener('generate-plan-from-proposal', this._handleGenerateFromProposal);
   }
 
   /**
-   * Open the plan creator seeded with a proposal card (PLN-TSK-0358).
-   * Called by the hosting page when a proposal is approved as a plan, either
-   * in place (convert-proposal-to-plan event) or after landing here with
+   * A plan proposal (free text) asks for its plan: switch to the Plans
+   * sub-tab and open the creator seeded with it.
+   * @param {CustomEvent} event
+   */
+  _handleGenerateFromProposal(event) {
+    const { proposalId, title, description } = event.detail;
+    this.openPlanCreator({ proposalId, title, description });
+  }
+
+  /**
+   * Open the plan creator seeded with a proposal CARD approved as a plan
+   * (PLN-TSK-0358). Called by the hosting page, either in place
+   * (convert-proposal-to-plan event) or after landing here with
    * ?fromProposal=<cardId>.
    *
    * @param {Object} proposal
@@ -45,7 +70,16 @@ export class DevPlansSection extends LitElement {
     if (!proposalCardId) {
       throw new Error('openPlanCreatorFromProposal requires a proposalCardId');
     }
+    await this.openPlanCreator({ proposalCardId, proposalFirebaseId, title, description });
+  }
 
+  /**
+   * Shared entry point for both proposal origins.
+   * @param {Object} origin - Either {proposalId} (plan proposal) or
+   *   {proposalCardId, proposalFirebaseId} (proposal card), plus title/description
+   * @returns {Promise<void>}
+   */
+  async openPlanCreator(origin) {
     await this.updateComplete;
 
     const tabs = this.shadowRoot?.querySelector('color-tabs');
@@ -57,13 +91,16 @@ export class DevPlansSection extends LitElement {
     }
 
     await plansList.updateComplete;
-    plansList.openCreatorFromProposal({ proposalCardId, proposalFirebaseId, title, description });
+    plansList.openCreatorFromProposal(origin);
   }
 
   render() {
     return html`
       <div class="dev-plans-section">
-        <color-tabs active-tab="plans">
+        <color-tabs active-tab="proposals">
+          <color-tab name="proposals" label="Proposals" color="var(--brand-primary, #3b82f6)">
+            <plan-proposals-list .projectId=${this.projectId}></plan-proposals-list>
+          </color-tab>
           <color-tab name="plans" label="Plans" color="var(--brand-secondary, #ec3e95)">
             <dev-plans-list .projectId=${this.projectId}></dev-plans-list>
           </color-tab>
