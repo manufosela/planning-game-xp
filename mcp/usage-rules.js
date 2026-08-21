@@ -42,8 +42,10 @@ export const USAGE_RULES_CONTENT = `
 
 **Proposal** (create_card type=proposal) — TASK proposal:
 - \`title\`: Proposal title (REQUIRED)
-- \`descriptionStructured\`: Como / Quiero / Para — this is a user story for ONE
-  unit of work, the way people outside the team propose something
+- \`descriptionStructured\`: Como / Quiero / Para (REQUIRED, the three parts) —
+  a user story for ONE unit of work, the way people outside the team propose
+  something. Passing free text instead is REJECTED with a pointer to
+  \`create_plan_proposal\`
 - Approved from the UI it becomes a task; it can also be approved as a plan
   with \`create_plan proposalCardId="<XXX-PRP-NNNN>"\` (marks \`convertedToPlan\`)
 
