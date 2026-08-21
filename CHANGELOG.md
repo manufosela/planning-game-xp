@@ -7,6 +7,23 @@ Auto-generated from git commits on each build.
 
 ### Added
 
+- Keep approved proposals out of the working list (PLN-TSK-0358)
+- Link approved proposal and generated plan both ways (PLN-TSK-0358)
+- Open the plan creator seeded from a proposal (PLN-TSK-0358)
+- Add 'convert to plan' action on proposal cards (PLN-TSK-0358)
+
+### Testing
+
+- Repair internal suite and wire it into pre-commit (PMC-BUG-0008)
+
+### Other
+
+- Keep the generated version file out of the branch
+
+## [1.196.0] - 2026-08-17
+
+### Added
+
 - Unify plan proposals into proposal cards (PLN-TSK-0357) (#249)
 
 ## [1.195.0] - 2026-08-08
