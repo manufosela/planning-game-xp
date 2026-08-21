@@ -5,6 +5,16 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Fixed
+
+- Close the proposal modal when approving it as a plan (PLN-TSK-0358)
+
+### Documentation
+
+- Explain what a proposal is and its two outcomes (PMC-TSK-0073)
+
+## [1.197.0] - 2026-08-21
+
 ### Added
 
 - Keep approved proposals out of the working list (PLN-TSK-0358)
