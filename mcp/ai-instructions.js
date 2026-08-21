@@ -99,6 +99,17 @@ REQUIRED: title
 
 ### Proposal (type="proposal")
 REQUIRED: title
+A proposal is an IDEA PENDING APPROVAL — not work in progress. Approving it
+turns it into ONE of two things:
+- a TASK, when it fits in a single unit of work (approved from the UI)
+- a PLAN, when it is big enough to produce several tasks:
+  \`create_plan proposalCardId="<XXX-PRP-NNNN>"\` creates the plan and marks
+  the proposal with \`convertedToPlan=<plan cardId>\`
+- \`description\` (or descriptionStructured) is strongly recommended: it is the
+  context the plan generator and the task conversion start from
+- \`convertedToPlan\` / \`convertedToTask\` mark an already approved proposal;
+  a proposal without them is still pending
+- there is no separate "plan proposal" entity — that was retired (PLN-TSK-0357)
 
 ## update_card: Task Status Transitions
 

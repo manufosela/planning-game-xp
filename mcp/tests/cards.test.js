@@ -2342,6 +2342,22 @@ describe('cards.js', () => {
       }
     });
 
+    it('listCards type=proposal exposes the approval outcome (PMC-TSK-0073)', async () => {
+      setMockRtdbData('/cards/TestProject/PROPOSALS_TestProject', {
+        pending: { cardId: 'TP-PRP-0001', title: 'Idea sin aprobar', status: 'To Do' },
+        approved: { cardId: 'TP-PRP-0002', title: 'Aprobada como plan', status: 'To Do', convertedToPlan: 'TP-PLA-0003' }
+      });
+
+      const result = await listCards({ projectId: 'TestProject', type: 'proposal' });
+      const proposals = JSON.parse(result.content[0].text);
+
+      const pending = proposals.find(p => p.cardId === 'TP-PRP-0001');
+      const approved = proposals.find(p => p.cardId === 'TP-PRP-0002');
+      expect(pending.convertedToPlan).toBeNull();
+      expect(pending.convertedToTask).toBeNull();
+      expect(approved.convertedToPlan).toBe('TP-PLA-0003');
+    });
+
     it('listCards type=task still includes status and priority (no regression)', async () => {
       setMockRtdbData('/cards/TestProject/TASKS_TestProject', {
         task1: { cardId: 'TP-TSK-0001', title: 'A task', status: 'To Do', priority: 11 }
