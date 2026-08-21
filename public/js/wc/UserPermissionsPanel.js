@@ -18,7 +18,7 @@ import { database, ref, get, set } from '/firebase-config.js';
 const SECTION_KEYS = [
   { key: 'tasks',     label: 'Tasks' },
   { key: 'bugs',      label: 'Bugs' },
-  { key: 'proposals', label: 'Proposals' },
+  { key: 'proposals', label: 'Task Prop' },
   { key: 'epics',     label: 'Epics' },
   { key: 'sprints',   label: 'Sprints' },
   { key: 'qa',        label: 'QA' }

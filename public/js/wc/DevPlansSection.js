@@ -98,7 +98,7 @@ export class DevPlansSection extends LitElement {
     return html`
       <div class="dev-plans-section">
         <color-tabs active-tab="proposals">
-          <color-tab name="proposals" label="Proposals" color="var(--brand-primary, #3b82f6)">
+          <color-tab name="proposals" label="Plan Prop" color="var(--brand-primary, #3b82f6)">
             <plan-proposals-list .projectId=${this.projectId}></plan-proposals-list>
           </color-tab>
           <color-tab name="plans" label="Plans" color="var(--brand-secondary, #ec3e95)">
