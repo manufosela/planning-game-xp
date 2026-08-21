@@ -75,7 +75,7 @@ export const PROPOSAL_SCHEMA = {
   VIEW_FIELDS: [
     'firebaseId', 'cardId', 'title', 'status',
     'businessPoints', 'createdBy', 'stakeholder',
-    'registerDate', 'year'
+    'registerDate', 'year', 'convertedToPlan'
   ]
 };
 

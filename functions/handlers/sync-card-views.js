@@ -157,7 +157,10 @@ function extractProposalViewFields(proposalData, firebaseId) {
     createdBy: proposalData.createdBy,
     stakeholder: proposalData.stakeholder,
     registerDate: proposalData.registerDate,
-    year: proposalData.year
+    year: proposalData.year,
+    // Plan this proposal was approved as (PLN-TSK-0358). The table hides
+    // approved proposals unless the user asks for them.
+    convertedToPlan: proposalData.convertedToPlan
   };
 }
 
