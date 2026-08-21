@@ -5,6 +5,13 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Added
+
+- Restore create_plan_proposal and document both proposal kinds (PMC-TSK-0074)
+- Bring back plan proposals alongside task proposals (PLN-TSK-0359)
+
+## [1.197.1] - 2026-08-21
+
 ### Fixed
 
 - Close the proposal modal when approving it as a plan (PLN-TSK-0358)
