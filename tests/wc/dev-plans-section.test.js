@@ -31,6 +31,7 @@ vi.mock('../../public/js/wc/dev-plans-section-styles.js', () => ({
 
 // Mock child components
 vi.mock('../../public/js/wc/DevPlansList.js', () => ({}));
+vi.mock('../../public/js/wc/PlanProposalsList.js', () => ({}));
 
 // Now import the component
 const { DevPlansSection } = await import('../../public/js/wc/DevPlansSection.js');
@@ -68,14 +69,16 @@ describe('DevPlansSection', () => {
       expect(result.strings).toBeDefined();
     });
 
-    it('does NOT render the retired plan-proposals sub-tab (PLN-TSK-0357)', () => {
+    it('renders both proposal kinds side by side (PLN-TSK-0359)', () => {
       const section = new DevPlansSection();
       section.projectId = 'PLN';
       const result = section.render();
       const template = result.strings.join('');
-      expect(template).not.toContain('plan-proposals-list');
-      // Default tab is now Plans.
-      expect(template).toContain('active-tab="plans"');
+      // PLAN proposals (free text) live in their own sub-tab...
+      expect(template).toContain('plan-proposals-list');
+      expect(template).toContain('active-tab="proposals"');
+      // ...next to the plans they generate.
+      expect(template).toContain('dev-plans-list');
     });
   });
 
@@ -103,6 +106,23 @@ describe('DevPlansSection', () => {
 
       return { section, tabs, plansList };
     }
+
+    it('should seed the creator from a PLAN proposal too (PLN-TSK-0359)', async () => {
+      const { section, tabs, plansList } = mountWithStubs();
+
+      section._handleGenerateFromProposal(new CustomEvent('generate-plan-from-proposal', {
+        detail: { proposalId: '-Oy7tMxPcttHqRKnYAN8', title: 'Easy RAG', description: 'Texto libre' }
+      }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(tabs.setActiveTab).toHaveBeenCalledWith('plans');
+      expect(plansList.openCreatorFromProposal).toHaveBeenCalledWith({
+        proposalId: '-Oy7tMxPcttHqRKnYAN8',
+        title: 'Easy RAG',
+        description: 'Texto libre'
+      });
+    });
 
     it('should switch to the Plans sub-tab and seed the creator with the proposal', async () => {
       const { section, tabs, plansList } = mountWithStubs();

@@ -23,9 +23,12 @@ export class DevPlansList extends LitElement {
       creatorError: { type: String },
       isAiGenerated: { type: Boolean },
       aiContext: { type: String },
-      // Origin proposal card when the plan is being approved from one
-      // (PLN-TSK-0358): its card id goes on the plan, and the plan's card id
-      // goes back on the proposal as convertedToPlan.
+      // Origin proposal. Two kinds can seed a plan (PLN-TSK-0359):
+      // - proposalId: a PLAN proposal (free text, /planProposals) — the plan
+      //   is linked back through planProposalService.linkPlan
+      // - proposalCardId: a TASK proposal card approved as a plan
+      //   (PLN-TSK-0358) — the card is marked with convertedToPlan
+      proposalId: { type: String },
       proposalCardId: { type: String },
       proposalFirebaseId: { type: String }
     };
@@ -49,6 +52,7 @@ export class DevPlansList extends LitElement {
     this.creatorError = '';
     this.isAiGenerated = false;
     this.aiContext = '';
+    this.proposalId = '';
     this.proposalCardId = '';
     this.proposalFirebaseId = '';
     this._phaseCounter = 0;
@@ -81,20 +85,23 @@ export class DevPlansList extends LitElement {
   }
 
   /**
-   * Called externally by DevPlansSection to open the creator seeded with a
-   * proposal card that is being approved as a plan (PLN-TSK-0358).
+   * Called externally by DevPlansSection to open the creator seeded with the
+   * proposal the plan comes from. Accepts both origins (PLN-TSK-0359):
+   * a PLAN proposal (proposalId) or a TASK proposal card (proposalCardId).
    *
    * @param {Object} proposal
-   * @param {string} proposal.proposalCardId - Proposal card id (e.g. "SIM-PRP-0002")
-   * @param {string} proposal.proposalFirebaseId - Proposal RTDB key, needed to mark it afterwards
-   * @param {string} proposal.title - Proposal title, prefilled as the plan title
+   * @param {string} [proposal.proposalId] - Plan proposal key in /planProposals
+   * @param {string} [proposal.proposalCardId] - Proposal card id (e.g. "SIM-PRP-0002")
+   * @param {string} [proposal.proposalFirebaseId] - Proposal card RTDB key, needed to mark it afterwards
+   * @param {string} proposal.title - Proposal title, leads the generator context
    * @param {string} proposal.description - Context handed to the AI generator
    */
-  openCreatorFromProposal({ proposalCardId, proposalFirebaseId, title, description }) {
-    if (!proposalCardId) {
-      throw new Error('openCreatorFromProposal requires a proposalCardId');
+  openCreatorFromProposal({ proposalId, proposalCardId, proposalFirebaseId, title, description }) {
+    if (!proposalId && !proposalCardId) {
+      throw new Error('openCreatorFromProposal requires a proposalId or a proposalCardId');
     }
-    this.proposalCardId = proposalCardId;
+    this.proposalId = proposalId || '';
+    this.proposalCardId = proposalCardId || '';
     this.proposalFirebaseId = proposalFirebaseId || '';
     // The title leads the context so the generated plan keeps the proposal's
     // intent; the user can still edit everything before generating.
@@ -110,6 +117,7 @@ export class DevPlansList extends LitElement {
     this.creatorError = '';
     this.isAiGenerated = false;
     this.aiContext = '';
+    this.proposalId = '';
     this.proposalCardId = '';
     this.proposalFirebaseId = '';
   }
@@ -130,6 +138,7 @@ export class DevPlansList extends LitElement {
   _showCreator() {
     this.aiContext = '';
     this.creatorError = '';
+    this.proposalId = '';
     this.proposalCardId = '';
     this.proposalFirebaseId = '';
     this.currentView = 'creator';
@@ -319,6 +328,7 @@ export class DevPlansList extends LitElement {
           <button class="plans-btn plans-btn-secondary" @click=${this._showList}>Cancel</button>
         </div>
         ${this.proposalCardId ? html`<p class="plan-from-proposal">Plan a partir de la propuesta <strong>${this.proposalCardId}</strong>. Al guardarlo, la propuesta quedará marcada como aprobada.</p>` : nothing}
+        ${this.proposalId ? html`<p class="plan-from-proposal">Plan a partir de una propuesta de plan. Al guardarlo quedará enlazado a ella.</p>` : nothing}
         <p class="plan-creator-hint">Describe what you want to build. You can paste a full specification, user stories, or a brief context. The AI will generate a structured development plan.</p>
         <div class="plan-form-field">
           <label>Context / Description *</label>
@@ -383,6 +393,9 @@ export class DevPlansList extends LitElement {
         _aiContext: context
       };
 
+      if (this.proposalId) {
+        plan.proposalId = this.proposalId;
+      }
       if (this.proposalCardId) {
         plan.proposalCardId = this.proposalCardId;
       }
@@ -584,13 +597,16 @@ export class DevPlansList extends LitElement {
       const planToSave = {
         ...formData,
         _id: isEdit ? this.formPlan._id : undefined,
+        proposalId: this.formPlan?.proposalId || this.proposalId || undefined,
         proposalCardId: this.formPlan?.proposalCardId || this.proposalCardId || undefined
       };
 
       const savedPlan = await planService.save(this.projectId, planToSave);
 
-      // Approving a proposal as a plan marks the proposal with the plan it
-      // produced — same contract the MCP writes in create_plan proposalCardId.
+      // Link the plan back to the proposal it came from, each kind its own way.
+      if (planToSave.proposalId) {
+        await this._linkPlanProposal(planToSave.proposalId, savedPlan);
+      }
       if (planToSave.proposalCardId) {
         await this._markProposalAsConverted(savedPlan);
       }
@@ -603,7 +619,23 @@ export class DevPlansList extends LitElement {
   }
 
   /**
-   * Write convertedToPlan back on the origin proposal card so the approval is
+   * Register the generated plan on the PLAN proposal it came from
+   * (/planProposals), which tracks its plans in planIds.
+   * @param {string} proposalId - Plan proposal key
+   * @param {Object} savedPlan - Plan returned by planService.save()
+   * @returns {Promise<void>}
+   */
+  async _linkPlanProposal(proposalId, savedPlan) {
+    if (!savedPlan?._id) {
+      throw new Error('Cannot link the plan proposal: the saved plan has no id');
+    }
+
+    const { planProposalService } = await import('../services/plan-proposal-service.js');
+    await planProposalService.linkPlan(this.projectId, proposalId, savedPlan._id);
+  }
+
+  /**
+   * Write convertedToPlan back on the origin proposal CARD so the approval is
    * traceable from both ends.
    * @param {Object} savedPlan - Plan returned by planService.save()
    * @returns {Promise<void>}
@@ -661,6 +693,7 @@ export class DevPlansList extends LitElement {
           status: 'pending'
         })),
         _aiContext: extraContext,
+        proposalId: this.formPlan?.proposalId || this.proposalId || undefined,
         proposalCardId: this.formPlan?.proposalCardId || this.proposalCardId || undefined
       };
 
