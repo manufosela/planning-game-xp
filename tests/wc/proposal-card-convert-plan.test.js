@@ -175,6 +175,20 @@ describe('ProposalCard — convert to plan (PLN-TSK-0358)', () => {
       expect(navigated).toEqual([]);
     });
 
+    it('should close its own modal so the plan creator is not covered by it', () => {
+      const card = makeSavedProposal({ expanded: true });
+      vi.spyOn(card, '_navigate').mockImplementation((url) => navigated.push(url));
+      const closeEvents = [];
+      const onClose = (e) => closeEvents.push(e);
+      document.addEventListener('close-modal', onClose);
+
+      card.convertToPlan();
+      document.removeEventListener('close-modal', onClose);
+
+      expect(closeEvents).toHaveLength(1);
+      expect(card.expanded).toBe(false);
+    });
+
     it('should navigate to the project Dev Plans tab when nobody handles it', () => {
       const card = makeSavedProposal();
       vi.spyOn(card, '_navigate').mockImplementation((url) => navigated.push(url));
