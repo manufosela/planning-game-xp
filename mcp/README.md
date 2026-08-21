@@ -92,21 +92,25 @@ This creates a `.mcp-user.json` file with your developer ID, used to track who c
 | `relate_cards` | Create relations between cards (related, blocks/blockedBy) |
 | `get_transition_rules` | Get valid status transitions for a card type |
 
-#### Proposals: one idea, two outcomes
+#### Two kinds of proposal, on purpose
 
-A **proposal** is an idea pending approval — not work in progress. Create it with
-`create_card type=proposal` (a `description` matters: it is the context used when
-it gets approved). Approving it turns it into exactly one of:
+| | **Task proposal** | **Plan proposal** |
+|---|---|---|
+| Tool | `create_card type=proposal` | `create_plan_proposal` |
+| Shape | Como / Quiero / Para (user story) | Free text (prose, markdown) |
+| Who writes it | Typically someone outside the team | Typically an AI |
+| Size | One unit of work | Bigger: needs several tasks |
+| Outcome | A **task** (approved from the UI) | A **development plan** (`create_plan`), which then generates tasks |
+| Stored at | `/cards/{project}/PROPOSALS_{project}` | `/planProposals/{project}` |
+| Shown in | Proposals tab | Proposals sub-tab of Dev Plans |
 
-- a **task**, when it is one unit of work — done from the UI, which converts the
-  proposal into a task card;
-- a **plan**, when it will produce several tasks — `create_plan
-  proposalCardId="<XXX-PRP-NNNN>"`, which creates the plan and marks the proposal
-  with `convertedToPlan=<plan cardId>`.
+They are separate because the content has a different shape: a spec does not
+fit in a user-story form, and a user story is not a roadmap.
 
-`list_cards type=proposal` returns `convertedToPlan` / `convertedToTask`: a
-proposal carrying either one is already approved, the rest are still pending.
-There is no separate "plan proposal" entity — it was retired in PLN-TSK-0357.
+A task proposal that turns out to be plan-sized can still be approved as a
+plan with `create_plan proposalCardId="<XXX-PRP-NNNN>"`, which marks the card
+with `convertedToPlan`. `list_cards type=proposal` returns `convertedToPlan` /
+`convertedToTask` so you can tell approved proposals from pending ones.
 
 ### Sprints
 | Tool | Description |
@@ -131,7 +135,7 @@ There is no separate "plan proposal" entity — it was retired in PLN-TSK-0357.
 | Tool | Description |
 |------|-------------|
 | `list_plans` / `get_plan` / `create_plan` / `update_plan` / `delete_plan` | Development plans |
-| `list_plan_proposals` / `get_plan_proposal` / `update_plan_proposal` / `delete_plan_proposal` | Legacy plan proposals — read/maintenance only. `create_plan_proposal` is retired: use `create_card type=proposal` + `create_plan proposalCardId=...` (see [Proposals](#proposals-one-idea-two-outcomes)) |
+| `list_plan_proposals` / `get_plan_proposal` / `create_plan_proposal` / `update_plan_proposal` / `delete_plan_proposal` | Plan proposals — free-text ideas that become development plans (see [Two kinds of proposal](#two-kinds-of-proposal-on-purpose)) |
 
 ### Global Configuration
 | Tool | Description |

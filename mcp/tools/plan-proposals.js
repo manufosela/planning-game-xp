@@ -94,21 +94,59 @@ export async function getPlanProposal({ projectId, proposalId }) {
   return { content: [{ type: 'text', text: JSON.stringify(proposal, null, 2) }] };
 }
 
-export async function createPlanProposal() {
-  // DEPRECATED (PLN-TSK-0357): proposals were unified into proposal CARDS.
-  // Plan proposals never got adoption (5 entries total, one project, all
-  // already consumed) while proposal cards are the living system. New
-  // ideas go through the Proposals tab; plans link to them directly.
-  // Read tools (list/get) remain functional for historical data until
-  // /planProposals is fully retired post-migration.
-  throw new Error(
-    'DEPRECATED: create_plan_proposal was retired (PLN-TSK-0357). ' +
-    'There is a single kind of proposal: an idea pending approval, created with ' +
-    'create_card type=proposal (title + description). ' +
-    'Approving it has two outcomes: as a TASK when it is one unit of work (done from the UI), ' +
-    'or as a PLAN when it will produce several tasks — ' +
-    'create_plan proposalCardId="<XXX-PRP-NNNN>", which marks the proposal with convertedToPlan.'
-  );
+/**
+ * Create a PLAN proposal (free text) — restored in PLN-TSK-0359.
+ *
+ * NOT the same as a proposal CARD (create_card type=proposal): a plan
+ * proposal is prose, usually written by the AI, and its outcome is a
+ * development plan; a proposal card is a Como/Quiero/Para user story, so
+ * people outside the team can propose one unit of work.
+ */
+export async function createPlanProposal({ projectId, title, description, tags, sourceDocumentUrl }) {
+  if (!title || title.trim().length === 0) {
+    throw new Error('title is required and must be a non-empty string');
+  }
+
+  const db = getDatabase();
+
+  // Verify project exists
+  const projectSnap = await db.ref(`projects/${projectId}`).once('value');
+  if (!projectSnap.exists()) {
+    throw new Error(`Project "${projectId}" not found`);
+  }
+
+  const now = new Date().toISOString();
+  const createdBy = getMcpUserId();
+
+  const proposalData = {
+    title: title.trim().slice(0, 200),
+    description: (description || '').trim().slice(0, 5000),
+    status: 'pending',
+    tags: (tags || []).map(t => t.trim().slice(0, 50)).filter(t => t.length > 0),
+    planIds: [],
+    createdAt: now,
+    updatedAt: now,
+    createdBy
+  };
+
+  if (sourceDocumentUrl) {
+    proposalData.sourceDocumentUrl = sourceDocumentUrl.trim().slice(0, 500);
+  }
+
+  const newRef = db.ref(`planProposals/${projectId}`).push();
+  await newRef.set(proposalData);
+
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        message: 'Plan proposal created successfully',
+        proposalId: newRef.key,
+        title: proposalData.title,
+        status: 'pending'
+      }, null, 2)
+    }]
+  };
 }
 
 export async function updatePlanProposal({ projectId, proposalId, updates }) {
