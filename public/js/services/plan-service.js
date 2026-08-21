@@ -165,12 +165,28 @@ class PlanService {
         data.generatedTasks = plan.generatedTasks;
       }
 
-      // Preserve proposalId if linked
+      // Origin proposal. New plans link to a proposal CARD (PLN-TSK-0357);
+      // the legacy plan-proposal link of old plans is preserved untouched.
       if (previousData?.proposalId) {
         data.proposalId = previousData.proposalId;
       }
-      if (plan.proposalId) {
-        data.proposalId = plan.proposalId;
+      if (previousData?.proposalCardId) {
+        data.proposalCardId = previousData.proposalCardId;
+      }
+      if (plan.proposalCardId) {
+        data.proposalCardId = plan.proposalCardId;
+      }
+
+      // Every plan carries a human card id (PMC-BUG-0003). Plans created here
+      // used to miss it — only MCP-created ones had it — which left them
+      // unreferenceable from tasks, proposals and the MCP tools.
+      // Imported dynamically: this service deliberately keeps no static
+      // Firebase dependencies (see getFirebaseModules).
+      if (previousData?.cardId) {
+        data.cardId = previousData.cardId;
+      } else {
+        const { FirebaseService } = await import('./firebase-service.js');
+        data.cardId = await FirebaseService.generateProjectSectionId(projectId, 'plans');
       }
 
       if (isNew) {

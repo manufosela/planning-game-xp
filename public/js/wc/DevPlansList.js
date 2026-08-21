@@ -23,7 +23,11 @@ export class DevPlansList extends LitElement {
       creatorError: { type: String },
       isAiGenerated: { type: Boolean },
       aiContext: { type: String },
-      proposalId: { type: String }
+      // Origin proposal card when the plan is being approved from one
+      // (PLN-TSK-0358): its card id goes on the plan, and the plan's card id
+      // goes back on the proposal as convertedToPlan.
+      proposalCardId: { type: String },
+      proposalFirebaseId: { type: String }
     };
   }
 
@@ -45,7 +49,8 @@ export class DevPlansList extends LitElement {
     this.creatorError = '';
     this.isAiGenerated = false;
     this.aiContext = '';
-    this.proposalId = '';
+    this.proposalCardId = '';
+    this.proposalFirebaseId = '';
     this._phaseCounter = 0;
   }
 
@@ -76,11 +81,24 @@ export class DevPlansList extends LitElement {
   }
 
   /**
-   * Called externally by DevPlansSection to open creator from a proposal
+   * Called externally by DevPlansSection to open the creator seeded with a
+   * proposal card that is being approved as a plan (PLN-TSK-0358).
+   *
+   * @param {Object} proposal
+   * @param {string} proposal.proposalCardId - Proposal card id (e.g. "SIM-PRP-0002")
+   * @param {string} proposal.proposalFirebaseId - Proposal RTDB key, needed to mark it afterwards
+   * @param {string} proposal.title - Proposal title, prefilled as the plan title
+   * @param {string} proposal.description - Context handed to the AI generator
    */
-  openCreatorFromProposal(proposalId, title, description) {
-    this.proposalId = proposalId;
-    this.aiContext = description || '';
+  openCreatorFromProposal({ proposalCardId, proposalFirebaseId, title, description }) {
+    if (!proposalCardId) {
+      throw new Error('openCreatorFromProposal requires a proposalCardId');
+    }
+    this.proposalCardId = proposalCardId;
+    this.proposalFirebaseId = proposalFirebaseId || '';
+    // The title leads the context so the generated plan keeps the proposal's
+    // intent; the user can still edit everything before generating.
+    this.aiContext = [title, description].filter(Boolean).join('\n\n');
     this.currentView = 'creator';
   }
 
@@ -92,7 +110,8 @@ export class DevPlansList extends LitElement {
     this.creatorError = '';
     this.isAiGenerated = false;
     this.aiContext = '';
-    this.proposalId = '';
+    this.proposalCardId = '';
+    this.proposalFirebaseId = '';
   }
 
   _showDetail(plan) {
@@ -111,7 +130,8 @@ export class DevPlansList extends LitElement {
   _showCreator() {
     this.aiContext = '';
     this.creatorError = '';
-    this.proposalId = '';
+    this.proposalCardId = '';
+    this.proposalFirebaseId = '';
     this.currentView = 'creator';
   }
 
@@ -298,6 +318,7 @@ export class DevPlansList extends LitElement {
           <h2>New Development Plan</h2>
           <button class="plans-btn plans-btn-secondary" @click=${this._showList}>Cancel</button>
         </div>
+        ${this.proposalCardId ? html`<p class="plan-from-proposal">Plan a partir de la propuesta <strong>${this.proposalCardId}</strong>. Al guardarlo, la propuesta quedará marcada como aprobada.</p>` : nothing}
         <p class="plan-creator-hint">Describe what you want to build. You can paste a full specification, user stories, or a brief context. The AI will generate a structured development plan.</p>
         <div class="plan-form-field">
           <label>Context / Description *</label>
@@ -362,8 +383,8 @@ export class DevPlansList extends LitElement {
         _aiContext: context
       };
 
-      if (this.proposalId) {
-        plan.proposalId = this.proposalId;
+      if (this.proposalCardId) {
+        plan.proposalCardId = this.proposalCardId;
       }
 
       this._showForm(null, plan);
@@ -563,23 +584,15 @@ export class DevPlansList extends LitElement {
       const planToSave = {
         ...formData,
         _id: isEdit ? this.formPlan._id : undefined,
-        proposalId: this.formPlan?.proposalId || this.proposalId || undefined
+        proposalCardId: this.formPlan?.proposalCardId || this.proposalCardId || undefined
       };
 
-      await planService.save(this.projectId, planToSave);
+      const savedPlan = await planService.save(this.projectId, planToSave);
 
-      // If linked to a proposal, update proposal's planIds
-      if (planToSave.proposalId) {
-        try {
-          const { planProposalService } = await import('../services/plan-proposal-service.js');
-          const savedPlans = await planService.getAll(this.projectId);
-          const lastPlan = savedPlans[0]; // Most recently updated
-          if (lastPlan) {
-            await planProposalService.linkPlan(this.projectId, planToSave.proposalId, lastPlan._id);
-          }
-        } catch (linkError) {
-          console.error('Error linking proposal:', linkError);
-        }
+      // Approving a proposal as a plan marks the proposal with the plan it
+      // produced — same contract the MCP writes in create_plan proposalCardId.
+      if (planToSave.proposalCardId) {
+        await this._markProposalAsConverted(savedPlan);
       }
 
       await this.loadPlans();
@@ -587,6 +600,35 @@ export class DevPlansList extends LitElement {
     } catch (err) {
       this.formError = 'Error saving plan: ' + (err.message || 'Unknown error');
     }
+  }
+
+  /**
+   * Write convertedToPlan back on the origin proposal card so the approval is
+   * traceable from both ends.
+   * @param {Object} savedPlan - Plan returned by planService.save()
+   * @returns {Promise<void>}
+   */
+  async _markProposalAsConverted(savedPlan) {
+    if (!this.proposalFirebaseId) {
+      throw new Error(`Cannot mark proposal ${this.proposalCardId}: missing its Firebase id`);
+    }
+    if (!savedPlan?.cardId) {
+      throw new Error('Cannot mark the proposal: the saved plan has no cardId');
+    }
+
+    const { FirebaseService } = await import('../services/firebase-service.js');
+    await FirebaseService.updateCard(this.projectId, 'proposals', this.proposalFirebaseId, {
+      convertedToPlan: savedPlan.cardId
+    });
+
+    document.dispatchEvent(new CustomEvent('show-slide-notification', {
+      detail: {
+        options: {
+          message: `Propuesta ${this.proposalCardId} aprobada como plan ${savedPlan.cardId}`,
+          type: 'success'
+        }
+      }
+    }));
   }
 
   async _handleRegenAI() {
@@ -619,7 +661,7 @@ export class DevPlansList extends LitElement {
           status: 'pending'
         })),
         _aiContext: extraContext,
-        proposalId: this.formPlan?.proposalId || this.proposalId || undefined
+        proposalCardId: this.formPlan?.proposalCardId || this.proposalCardId || undefined
       };
 
       this._showForm(null, newPlan);

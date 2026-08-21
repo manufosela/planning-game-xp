@@ -109,16 +109,18 @@ describe('DevPlansSection', () => {
 
       await section.openPlanCreatorFromProposal({
         proposalCardId: 'SIM-PRP-0002',
+        proposalFirebaseId: '-P-Z-Cbq2XrJqIh4MYgk',
         title: 'Las partidas viven en el servidor',
         description: 'Contexto de la propuesta'
       });
 
       expect(tabs.setActiveTab).toHaveBeenCalledWith('plans');
-      expect(plansList.openCreatorFromProposal).toHaveBeenCalledWith(
-        'SIM-PRP-0002',
-        'Las partidas viven en el servidor',
-        'Contexto de la propuesta'
-      );
+      expect(plansList.openCreatorFromProposal).toHaveBeenCalledWith({
+        proposalCardId: 'SIM-PRP-0002',
+        proposalFirebaseId: '-P-Z-Cbq2XrJqIh4MYgk',
+        title: 'Las partidas viven en el servidor',
+        description: 'Contexto de la propuesta'
+      });
     });
 
     it('should reject without a proposal card id instead of opening an empty creator', async () => {

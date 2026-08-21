@@ -1319,6 +1319,10 @@ const updatedSprint = {
     const upperWord = wordToAbbr.toUpperCase().trim();
 
     if (upperWord === "BUGS") return 'BUG'; // Excepción para "BUGS"
+    // "PLANS" → "PLA" (planes de desarrollo). La heurística daría 'PLN', que
+    // choca con la abreviatura del proyecto PlanningGame. Misma excepción que
+    // shared/utils.js, usada por el MCP: ambos generan {ABBR}-PLA-NNNN.
+    if (upperWord === "PLANS") return 'PLA';
     if (upperWord === "CINEMA4D") return 'C4D'; // Excepción para "CINEMA4D"
     if (upperWord === "EXTRANET V1") return 'EX1'; // Excepción para "EXTRANET V1"
     if (upperWord === "EXTRANET V2") return 'EX2'; // Excepción para "EXTRANET V2"

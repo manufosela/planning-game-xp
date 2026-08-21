@@ -1350,10 +1350,11 @@ return;
       const proposals = await FirebaseService.getCards(
         FirebaseService.getPathBySectionAndProjectId('proposals', projectId)
       );
-      const proposal = Object.values(proposals || {}).find((card) => card.cardId === proposalCardId);
-      if (!proposal) {
+      const entry = Object.entries(proposals || {}).find(([, card]) => card?.cardId === proposalCardId);
+      if (!entry) {
         throw new Error(`Proposal ${proposalCardId} not found in ${projectId}`);
       }
+      const [proposalFirebaseId, proposal] = entry;
 
       const structured = [proposal.descDado, proposal.descCuando, proposal.descPara].filter(Boolean).join('\n');
       const context = [
@@ -1364,6 +1365,7 @@ return;
 
       await openPlanCreator({
         proposalCardId,
+        proposalFirebaseId,
         title: proposal.title || '',
         description: context
       });

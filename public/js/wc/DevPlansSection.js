@@ -36,11 +36,12 @@ export class DevPlansSection extends LitElement {
    *
    * @param {Object} proposal
    * @param {string} proposal.proposalCardId - Proposal card id (e.g. "SIM-PRP-0002")
+   * @param {string} proposal.proposalFirebaseId - Proposal RTDB key
    * @param {string} proposal.title - Proposal title
    * @param {string} proposal.description - Context handed to the plan generator
    * @returns {Promise<void>}
    */
-  async openPlanCreatorFromProposal({ proposalCardId, title, description }) {
+  async openPlanCreatorFromProposal({ proposalCardId, proposalFirebaseId, title, description }) {
     if (!proposalCardId) {
       throw new Error('openPlanCreatorFromProposal requires a proposalCardId');
     }
@@ -56,7 +57,7 @@ export class DevPlansSection extends LitElement {
     }
 
     await plansList.updateComplete;
-    plansList.openCreatorFromProposal(proposalCardId, title, description);
+    plansList.openCreatorFromProposal({ proposalCardId, proposalFirebaseId, title, description });
   }
 
   render() {
