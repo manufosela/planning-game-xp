@@ -76,6 +76,40 @@ const ProposalCardSpecificStyles = css`
     background: rgba(0,0,0,0.05);
   }
 
+  /* Proposal already approved as a dev plan (PLN-TSK-0358) */
+  .converted-badge {
+    align-self: center;
+    background: var(--brand-primary, #4a9eff);
+    border-radius: 10px;
+    color: #fff;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.75em;
+    font-weight: 600;
+    padding: 0.1rem 0.5rem;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .converted-badge:hover {
+    filter: brightness(1.1);
+  }
+
+  .converted-note {
+    color: var(--text-secondary, #6b7280);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9em;
+    margin: 1rem;
+  }
+
+  .approve-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem;
+  }
+
   .priority {
     font-size: 1.5em;
     font-weight: bold;
