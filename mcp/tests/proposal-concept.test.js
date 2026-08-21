@@ -36,6 +36,11 @@ describe('The two proposal kinds in the AI instructions (PLN-TSK-0359)', () => {
     expect(taskProposal).toMatch(/outside\s+the team/i);
   });
 
+  it('should say free text is rejected, not accepted into the story form (PMC-TSK-0075)', () => {
+    expect(taskProposal).toMatch(/REJECTED/);
+    expect(taskProposal).toMatch(/create_plan_proposal/);
+  });
+
   it('should describe the PLAN proposal as free text that becomes a plan', () => {
     expect(planProposal).toMatch(/free text|prose/i);
     expect(planProposal).toMatch(/create_plan_proposal|DEVELOPMENT PLAN/i);

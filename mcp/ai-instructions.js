@@ -98,10 +98,11 @@ REQUIRED: title
 REQUIRED: title
 
 ### Proposal (type="proposal") — TASK proposal
-REQUIRED: title
+REQUIRED: title, descriptionStructured [{role, goal, benefit}]
 An idea for ONE unit of work, written as a user story so that people outside
-the team can propose it: description as Como / Quiero / Para
-(descriptionStructured). Approving it turns it into a task (done from the UI).
+the team can propose it: Como / Quiero / Para. The three parts are REQUIRED —
+free text is REJECTED and redirected to create_plan_proposal, because prose
+does not fit a user-story form. Approving it turns it into a task (done from the UI).
 It can also be approved as a plan when it turns out to be bigger than a task:
 \`create_plan proposalCardId="<XXX-PRP-NNNN>"\`, which marks the card with
 \`convertedToPlan\`. \`list_cards type=proposal\` returns

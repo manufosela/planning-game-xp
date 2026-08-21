@@ -2310,6 +2310,61 @@ describe('cards.js', () => {
     });
   });
 
+  // ── A proposal card is a TASK proposal, never a plan one (PMC-TSK-0075) ──
+
+  describe('createCard type=proposal rejects plan proposals in disguise', () => {
+    beforeEach(() => {
+      setMockRtdbData('/projects/TestProject/abbreviation', 'TP');
+      setMockFirestoreData('projectCounters', 'TP-PRP', { lastId: 0 });
+    });
+
+    it('should reject free text and point at create_plan_proposal', async () => {
+      await expect(createCard({
+        projectId: 'TestProject',
+        type: 'proposal',
+        title: 'Las partidas viven en el servidor',
+        description: 'De donde sale: del usuario. Hoy el estado vive en el navegador y se pierde al recargar, ' +
+          'lo que obliga a rehacer la partida entera. Habria que mover el estado al servidor...'
+      })).rejects.toThrow(/create_plan_proposal/);
+    });
+
+    it('should reject a proposal with no description at all', async () => {
+      await expect(createCard({
+        projectId: 'TestProject',
+        type: 'proposal',
+        title: 'Solo un titulo'
+      })).rejects.toThrow(/descriptionStructured/);
+    });
+
+    it('should create the proposal when it is a real user story', async () => {
+      const result = await createCard({
+        projectId: 'TestProject',
+        type: 'proposal',
+        title: 'Exportar el tablero a PDF',
+        descriptionStructured: [{
+          role: 'Como stakeholder',
+          goal: 'Quiero exportar el tablero a PDF',
+          benefit: 'Para compartirlo con quien no entra en la herramienta'
+        }]
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.cardId).toBe('TP-PRP-0001');
+
+      const saved = getMockRtdbData('/cards/TestProject/PROPOSALS_TestProject');
+      expect(Object.values(saved)[0].descriptionStructured[0].goal).toMatch(/exportar el tablero/i);
+    });
+
+    it('should reject a half-filled user story (Como only, the classic free-text dump)', async () => {
+      await expect(createCard({
+        projectId: 'TestProject',
+        type: 'proposal',
+        title: 'Idea a medias',
+        descriptionStructured: [{ role: 'Un texto largo que en realidad es una especificacion entera', goal: '', benefit: '' }]
+      })).rejects.toThrow(/goal|Quiero/i);
+    });
+  });
+
   // ── Epics are containers, not workflow items (PMC-BUG-0005) ──
 
   describe('Epics expose no status', () => {

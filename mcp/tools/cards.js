@@ -243,7 +243,7 @@ export const implementationPlanSchema = z.object({
 
 export const createCardSchema = z.object({
   projectId: z.string().describe('Project ID'),
-  type: z.enum(['task', 'bug', 'epic', 'proposal', 'qa']).describe('Card type to create. A "proposal" is an idea pending approval: approve it as a task (from the UI) when it is one unit of work, or as a plan with create_plan proposalCardId="<XXX-PRP-NNNN>" when it will produce several tasks.'),
+  type: z.enum(['task', 'bug', 'epic', 'proposal', 'qa']).describe('Card type to create. A "proposal" is a TASK proposal: one unit of work written as a Como/Quiero/Para user story (descriptionStructured REQUIRED). Free-text ideas are PLAN proposals — use create_plan_proposal for those. A task proposal can still be approved as a plan later with create_plan proposalCardId="<XXX-PRP-NNNN>".'),
   title: z.string().describe('Card title'),
   description: z.string().optional().describe('Card description (legacy for tasks — use descriptionStructured there). Strongly recommended for proposals: it is the context used when the proposal is approved as a task or as a plan.'),
   descriptionStructured: z.array(descriptionStructuredItemSchema).optional().describe('Structured user story format: [{role: "Como...", goal: "Quiero...", benefit: "Para..."}]. REQUIRED for tasks.'),
@@ -499,6 +499,32 @@ export async function createCard({ projectId, type, title, description, descript
       throw new Error(
         `Cannot create task — fix these issues:\n${missing.map(m => `  • ${m}`).join('\n')}\n\n` +
         'TIP: call list_stakeholders to get validator IDs, list_cards(type=epic) for epic IDs.'
+      );
+    }
+  }
+
+  // A proposal CARD is a TASK proposal: one unit of work written as a user
+  // story. Free text belongs to a PLAN proposal, which is a different entity
+  // with its own tool (PMC-TSK-0075). Without this guard the Proposals tab
+  // fills up with specs crammed into the "Como" field.
+  if (type === 'proposal') {
+    const story = (descriptionStructured && descriptionStructured[0]) || null;
+    const hasStory = Boolean(story?.role?.trim() && story?.goal?.trim() && story?.benefit?.trim());
+
+    if (!hasStory) {
+      const looksLikeProse = Boolean(
+        (description || '').trim().length > 0 ||
+        (story && !story.goal?.trim() && (story.role || '').trim().length > 120)
+      );
+
+      throw new Error(
+        'Cannot create proposal — a proposal CARD is a TASK proposal and needs the user story:\n' +
+        '  • descriptionStructured (format: [{role: "Como...", goal: "Quiero...", benefit: "Para..."}])\n\n' +
+        (looksLikeProse
+          ? 'What you passed is free text. That is a PLAN proposal, a different entity: ' +
+            'create it with create_plan_proposal (title + description as prose), and turn it into a plan ' +
+            'with create_plan. Do NOT squeeze prose into the Como/Quiero/Para form.'
+          : 'If the idea is bigger than one unit of work, or you only have prose, use create_plan_proposal instead.')
       );
     }
   }
