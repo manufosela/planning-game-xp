@@ -5,6 +5,12 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Fixed
+
+- Create board columns with the project and stop faking an empty board
+
+## [1.199.0] - 2026-08-22
+
 ### Added
 
 - Each proposal in its place and shape, and name the tabs (PLN-TSK-0360)
