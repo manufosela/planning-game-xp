@@ -498,6 +498,12 @@ export class PgBoard extends LitElement {
     if (this.loadError) {
       return html`<div class="board-error">${this.loadError}</div>`;
     }
+    // While the board is still loading, columns is legitimately empty. Saying
+    // the project has no columns here makes a healthy project look broken on
+    // a cold load (PLN-BUG-0122).
+    if (this.status) {
+      return html`<div class="board-loading">${this.status}</div>`;
+    }
     if (this.columns.length === 0) {
       const adminUrl = `/adminproject/?projectId=${encodeURIComponent(this.projectId)}`;
       return html`
