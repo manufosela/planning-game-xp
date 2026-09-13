@@ -103,6 +103,44 @@ describe('projects.js', () => {
     });
   });
 
+  // A project without board columns is a project that opens a broken Kanban
+  // until someone visits it and the client backfills the defaults (PMC-BUG-0009).
+  describe('createProject - Default board columns', () => {
+    beforeEach(() => {
+      setMockFirestoreData('projectCounters', 'NP-PCS', { lastId: 0 });
+    });
+
+    it('should create the project with its default Kanban columns', async () => {
+      await createProject({ projectId: 'NewProject', name: 'New Project', abbreviation: 'NP' });
+
+      const columns = getMockRtdbData('/projects/NewProject/board/columns');
+      expect(columns).toBeDefined();
+
+      const names = Object.values(columns)
+        .sort((a, b) => a.order - b.order)
+        .map(c => c.name);
+      expect(names).toEqual(['To Do', 'In Progress', 'To Validate', 'Done&Validated', 'Blocked']);
+    });
+
+    it('should key each column by its id and keep the status it maps to', async () => {
+      await createProject({ projectId: 'NewProject', name: 'New Project', abbreviation: 'NP' });
+
+      const columns = getMockRtdbData('/projects/NewProject/board/columns');
+      for (const [key, column] of Object.entries(columns)) {
+        expect(key).toBe(column.id);
+        expect(column.statusKey).toBeTruthy();
+      }
+      expect(columns['to-do'].statusKey).toBe('To Do');
+    });
+
+    it('should report the created columns in the response', async () => {
+      const result = await createProject({ projectId: 'NewProject', name: 'New Project', abbreviation: 'NP' });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.boardColumns).toHaveLength(5);
+    });
+  });
+
   describe('createProject - Default MANTENIMIENTO epic', () => {
     beforeEach(() => {
       setMockFirestoreData('projectCounters', 'NP-PCS', { lastId: 0 });

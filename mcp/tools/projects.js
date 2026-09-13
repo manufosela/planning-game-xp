@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { getDatabase, getFirestore } from '../firebase-adapter.js';
 import { getMcpUser, getMcpUserId } from '../user.js';
 import { buildSectionPath, getAbbrId, SECTION_MAP } from '../../shared/utils.js';
+import { generateDefaultColumns } from '../../shared/board-columns.js';
 import { invalidateProjectCache, discoverProjectByRepo } from '../services/project-resolver.js';
 
 export const listProjectsSchema = z.object({});
@@ -361,6 +362,14 @@ export async function createProject({ projectId, name, abbreviation, description
   await projectRef.set(project);
   invalidateProjectCache();
 
+  // A project needs its Kanban columns to be usable. Without them the board
+  // opens empty and only heals when a client visits it and backfills the
+  // defaults, leaving the project half-created in the meantime (PMC-BUG-0009).
+  const boardColumns = generateDefaultColumns();
+  const columnsMap = {};
+  for (const column of boardColumns) columnsMap[column.id] = column;
+  await db.ref(`/projects/${projectId}/board/columns`).set(columnsMap);
+
   // Sync project roles to /users/ so entityDirectoryService finds them
   await syncProjectRolesToUsers(db, projectId, developers, stakeholders);
 
@@ -403,7 +412,8 @@ export async function createProject({ projectId, name, abbreviation, description
     defaultEpic: {
       cardId: epicId,
       title: '[MANTENIMIENTO]'
-    }
+    },
+    boardColumns: boardColumns.map((c) => c.name)
   };
 
   if (warnings.length > 0) {
