@@ -7,6 +7,11 @@ const TYPE_LABELS = {
   proposals: 'Propuesta'
 };
 
+// Bugs follow their own workflow (Created → Assigned → Fixed → Verified → Closed);
+// task-only statuses like "Done&Validated" or "Reopened" are invalid for them.
+const VALIDATED_STATUS = { bugs: 'Verified', tasks: 'Done&Validated', proposals: 'Done&Validated' };
+const REOPEN_STATUS = { bugs: 'Assigned', tasks: 'Reopened', proposals: 'Reopened' };
+
 export class CleanCardDetail extends LitElement {
   static styles = [CleanCardDetailStyles];
 
@@ -186,7 +191,7 @@ export class CleanCardDetail extends LitElement {
     }
 
     if (!this._canValidate() && !this._canReopen()) {
-      const statusMsg = this.status === 'Done&Validated' || this.status === 'Done'
+      const statusMsg = ['Done&Validated', 'Done', 'Verified', 'Closed'].includes(this.status)
         ? 'Esta tarea ya ha sido validada'
         : `Estado actual: ${this.status}`;
       return html`<div class="no-actions">${statusMsg}</div>`;
@@ -198,7 +203,7 @@ export class CleanCardDetail extends LitElement {
           <button class="btn-validate" @click=${this._handleValidate} ?disabled=${this._loading}>
             ✓ Validar ${TYPE_LABELS[this._getSection()] || 'Tarea'}
           </button>
-          <div class="action-hint">Al validar, el estado cambiará a "Done&Validated"</div>
+          <div class="action-hint">Al validar, el estado cambiará a "${VALIDATED_STATUS[this._getSection()]}"</div>
         ` : nothing}
 
         ${this._canReopen() && !this._reopenMode ? html`
@@ -254,8 +259,9 @@ export class CleanCardDetail extends LitElement {
       const { FirebaseService } = await import('../services/firebase-service.js');
 
       const section = this._getSection().toUpperCase();
+      const newStatus = VALIDATED_STATUS[this._getSection()];
       const updateData = {
-        status: 'Done&Validated',
+        status: newStatus,
         validatedAt: new Date().toISOString(),
         updatedBy: this.userEmail
       };
@@ -269,7 +275,7 @@ export class CleanCardDetail extends LitElement {
       this.dispatchEvent(new CustomEvent('card-validated', {
         bubbles: true,
         composed: true,
-        detail: { cardId: this.cardId, firebaseId: this.firebaseId, newStatus: 'Done&Validated' }
+        detail: { cardId: this.cardId, firebaseId: this.firebaseId, newStatus }
       }));
     } catch (error) {
       console.error('Error validating card:', error);
@@ -309,8 +315,9 @@ export class CleanCardDetail extends LitElement {
       const currentNotes = this._currentNotesRaw || '';
       const updatedNotes = currentNotes ? `${reopenNote}\n\n${currentNotes}` : reopenNote;
 
+      const newStatus = REOPEN_STATUS[this._getSection()];
       const updateData = {
-        status: 'Reopened',
+        status: newStatus,
         reopenCount: newReopenCount,
         reopenCycles,
         notes: updatedNotes,
@@ -328,7 +335,7 @@ export class CleanCardDetail extends LitElement {
       this.dispatchEvent(new CustomEvent('card-reopened', {
         bubbles: true,
         composed: true,
-        detail: { cardId: this.cardId, firebaseId: this.firebaseId, newStatus: 'Reopened', reason: this._reopenReason.trim() }
+        detail: { cardId: this.cardId, firebaseId: this.firebaseId, newStatus, reason: this._reopenReason.trim() }
       }));
 
       this._hideReopenForm();
