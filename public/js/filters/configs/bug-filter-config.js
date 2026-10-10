@@ -12,15 +12,28 @@ import { repositoryLabelMatcher } from '../matchers/repository-matcher.js';
 import { APP_CONSTANTS } from '../../constants/app-constants.js';
 
 /**
+ * Build select options from either an array of names (runtime shape of
+ * statusBugList / globalBugPriorityList) or a `{ key: { label } }` map
+ * (APP_CONSTANTS shape).
+ * @param {Array<string>|Object} list
+ * @returns {Array<{value: string, label: string}>}
+ */
+function toOptions(list) {
+  if (Array.isArray(list)) {
+    return list.map(name => ({ value: name, label: name }));
+  }
+  return Object.entries(list).map(([key, value]) => ({
+    value: key,
+    label: value?.label || key
+  }));
+}
+
+/**
  * Get status options for bugs
  * @returns {Promise<Array>}
  */
 async function getStatusOptions() {
-  const statusList = globalThis.statusBugList || APP_CONSTANTS.BUG_STATUS_LIST;
-  return Object.keys(statusList).map(key => ({
-    value: key,
-    label: statusList[key]?.label || key
-  }));
+  return toOptions(globalThis.statusBugList || APP_CONSTANTS.BUG_STATUS_LIST);
 }
 
 /**
@@ -28,11 +41,7 @@ async function getStatusOptions() {
  * @returns {Promise<Array>}
  */
 async function getPriorityOptions() {
-  const priorityList = globalThis.globalBugPriorityList || APP_CONSTANTS.BUG_PRIORITY_LIST;
-  return Object.entries(priorityList).map(([key, value]) => ({
-    value: key,
-    label: value.label || key
-  }));
+  return toOptions(globalThis.globalBugPriorityList || APP_CONSTANTS.BUG_PRIORITY_LIST);
 }
 
 /**
