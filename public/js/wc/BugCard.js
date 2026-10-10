@@ -18,6 +18,7 @@ import { entityDirectoryService } from '../services/entity-directory-service.js'
 import { openScenarioModal } from '../utils/scenario-modal.js';
 import { BUG_SCHEMA } from '../schemas/card-field-schemas.js';
 import { generateTimestamp, extractDateTimeLocal } from '../utils/timestamp-utils.js';
+import { getAutoBugDates } from '../utils/bug-status-dates.js';
 import { demoModeService } from '../services/demo-mode-service.js';
 import './FirebaseStorageUploader.js';
 
@@ -1717,23 +1718,23 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
   _handleStatusChange(e) {
     const previousStatus = this.status;
     const newStatus = e.target.value;
-    const finalStatuses = ['Fixed', 'Verified', 'Closed'];
 
-    // Auto-rellenar endDate cuando se cambia a un estado final (si no tiene valor)
-    if (finalStatuses.includes(newStatus) && !finalStatuses.includes(previousStatus)) {
-      if (!this.endDate) {
-        this.endDate = generateTimestamp(new Date(), 'end');
-      }
-    }
+    // Auto-filled dates are applied only once the transition is accepted
+    const autoDates = getAutoBugDates({
+      previousStatus,
+      newStatus,
+      startDate: this.startDate,
+      endDate: this.endDate
+    });
 
     // Validar campos requeridos para estados específicos
     if (['Fixed', 'Verified', 'Closed'].includes(newStatus) && !['Fixed', 'Verified', 'Closed'].includes(previousStatus)) {
-      // Validar campos requeridos para estados de finalización (endDate ya se auto-rellenó arriba)
+      // startDate/endDate cuentan con los valores auto-rellenados
       const requiredFields = ['startDate', 'endDate', 'developer', 'priority', 'description'];
       const missing = [];
 
       requiredFields.forEach(field => {
-        const value = this[field];
+        const value = autoDates[field] ?? this[field];
         if (!value || (typeof value === 'string' && value.trim() === '')) {
           missing.push(field);
         }
@@ -1758,6 +1759,7 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
       this.invalidFields = [];
     }
 
+    Object.assign(this, autoDates);
     this.status = newStatus;
 
     // Usar el sistema de notificaciones genérico de BaseCard
