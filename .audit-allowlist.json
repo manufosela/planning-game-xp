@@ -1,7 +1,10 @@
 {
   "allowedPackages": [
+    "@firebase/firestore",
+    "@firebase/firestore-compat",
     "@google-cloud/firestore",
     "@google-cloud/storage",
+    "@grpc/grpc-js",
     "@tootallnate/once",
     "@vitest/coverage-v8",
     "@vitest/mocker",
@@ -12,6 +15,7 @@
     "esbuild",
     "express",
     "fast-xml-parser",
+    "firebase",
     "firebase-admin",
     "gaxios",
     "google-gax",
@@ -25,12 +29,13 @@
     "sharp",
     "svgo",
     "teeny-request",
+    "tinypool",
     "uuid",
     "vitest",
     "websocket-driver"
   ],
   "allowedAdvisories": [],
-  "reason": "Pre-existing vulns in main. Transitive deps of firebase-admin v12 (gaxios, retry-request, uuid, google-gax, protobufjs, teeny-request, @google-cloud/*, body-parser) tracked in PLN-TSK-0331 (v12→v13 bump). astro XSS (define:vars + server island replay) + transitive esbuild/postcss/svgo/sharp tracked in PLN-TSK-0332 (v5→v6 bump). vitest/@vitest/ui/@vitest/coverage-v8 critical (UI server arbitrary file read/exec) tracked in PLN-TSK-0335 (v3→v4 bump, semver-major). websocket-driver critical + js-yaml + brace-expansion HIGH discovered 2026-07-12 during tribbu instance provisioning — added to allowlist to unblock deploy; will be tracked in a new maintenance card. express/qs (transitivas de firebase-functions 7.2.5) y @vitest/mocker (transitiva de vitest) aparecieron el 2026-09-13 y bloqueaban todo commit del repo; anadidas a la allowlist para desbloquear y seguidas en PLN-TSK-0361.",
-  "lastReviewed": "2026-07-12",
+  "reason": "Pre-existing vulns in main. Transitive deps of firebase-admin v12 (gaxios, retry-request, uuid, google-gax, protobufjs, teeny-request, @google-cloud/*, body-parser) tracked in PLN-TSK-0331 (v12→v13 bump). astro XSS (define:vars + server island replay) + transitive esbuild/postcss/svgo/sharp tracked in PLN-TSK-0332 (v5→v6 bump). vitest/@vitest/ui/@vitest/coverage-v8 critical (UI server arbitrary file read/exec) tracked in PLN-TSK-0335 (v3→v4 bump, semver-major). websocket-driver critical + js-yaml + brace-expansion HIGH discovered 2026-07-12 during tribbu instance provisioning — added to allowlist to unblock deploy; will be tracked in a new maintenance card. express/qs (transitivas de firebase-functions 7.2.5) y @vitest/mocker (transitiva de vitest) aparecieron el 2026-09-13 y bloqueaban todo commit del repo; anadidas a la allowlist para desbloquear y seguidas en PLN-TSK-0361. firebase/@firebase/firestore/@firebase/firestore-compat/@grpc/grpc-js (HIGH, fix requires firebase client v12 major) and tinypool (CRITICAL, transitive of vitest, see PLN-TSK-0335) appeared 2026-10-10 and blocked every commit; allowlisted and tracked in PLN-TSK-0362.",
+  "lastReviewed": "2026-10-10",
   "reviewedBy": "manu (during tribbu bootstrap)"
 }
