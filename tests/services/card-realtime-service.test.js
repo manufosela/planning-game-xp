@@ -304,7 +304,7 @@ describe('CardRealtimeService', () => {
 
       expect(mockFirebaseService.updateCard).toHaveBeenCalledWith(
         'TestProject', 'TASKS', '-abc123',
-        { _validationReverted: null, _validationError: null }
+        { _validationReverted: null, _validationRevertedAt: null, _validationError: null }
       );
     });
   });
