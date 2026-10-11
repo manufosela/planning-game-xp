@@ -5,6 +5,25 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Added
+
+- Apply new bug workflow in the UI
+- Apply new bug workflow in Cloud Functions
+- Simplify bug workflow to Created, In Progress, Fixed, Done&Validated, Rejected
+
+### Fixed
+
+- Auto-fill start and end dates on bug status changes
+- Use bug workflow statuses when validating bugs
+- Show bug status/priority names instead of indices
+
+### Other
+
+- Allowlist new firebase SDK and tinypool vulns
+- Bump to 1.26.1 (board columns on project creation)
+
+## [1.199.1] - 2026-09-13
+
 ### Fixed
 
 - Create board columns with the project and stop faking an empty board
