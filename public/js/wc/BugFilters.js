@@ -16,7 +16,7 @@ export class BugFilters extends BaseFilters {
     super();
     this._optionsLoaded = false;
     this._loadingPromise = null;
-    this.defaultStatusSelection = ['Created', 'Assigned'];
+    this.defaultStatusSelection = ['Created', 'In Progress'];
 // Configuraciones específicas de BugFilters
     this.defaultConfigs = {
       status: {
@@ -159,7 +159,7 @@ return true;
       const statusCellCompleted = cells[2];
       const statusTextCompleted = statusCellCompleted.textContent.trim();
 
-      const completedStatuses = ['Fixed', 'Verified', 'Closed', 'Cerrado'];
+      const completedStatuses = ['Fixed', 'Done&Validated'];
       if (!completedStatuses.includes(statusTextCompleted)) {
         return false;
       }
@@ -206,7 +206,7 @@ return true;
     }
 
     if (filterId === 'completedInSprint') {
-      const completedStatuses = ['Fixed', 'Verified', 'Closed', 'Cerrado'];
+      const completedStatuses = ['Fixed', 'Done&Validated'];
       if (!completedStatuses.includes(card.status)) {
         return false;
       }
@@ -245,10 +245,10 @@ return true;
         <div style='margin: 8px 0 4px 0;'><b>Estados disponibles:</b></div>
         <ul style='padding-left: 18px; margin: 0;'>
           <li><b>Created</b>: Ticket nuevo reportado sin gestionar</li>
-          <li><b>Assigned</b>: Ticket asignado para su resolución</li>
-          <li><b>Fixed</b>: Ticket resuelto sin verificar por su creador</li>
-          <li><b>Verified</b>: Ticket resuelto y verificado</li>
-          <li><b>Closed</b>: Ticket resuelto, verificado y cerrado</li>
+          <li><b>In Progress</b>: Alguien está resolviéndolo</li>
+          <li><b>Fixed</b>: Resuelto, pendiente de validar por el stakeholder</li>
+          <li><b>Done&amp;Validated</b>: Resuelto y validado por el stakeholder</li>
+          <li><b>Rejected</b>: No es un bug (duplicado, comportamiento esperado...)</li>
         </ul>
       `;
     }
@@ -285,7 +285,7 @@ return true;
           <li><b>Sin Sprint</b>: Bugs completados que no tienen sprint asignado</li>
           <li><b>Sprint específico</b>: Bugs completados dentro de un sprint concreto</li>
         </ul>
-        <div style='margin-top: 8px;'><em>Nota: Solo se muestran bugs con estado "Fixed", "Verified" o "Closed"</em></div>
+        <div style='margin-top: 8px;'><em>Nota: Solo se muestran bugs con estado "Fixed" o "Done&amp;Validated"</em></div>
       `;
     }
 

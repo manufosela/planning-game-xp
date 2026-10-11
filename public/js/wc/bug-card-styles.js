@@ -224,7 +224,8 @@ const BugCardSpecificStyles = css`
   }
 
   .field-group select,
-  .field-group input {
+  .field-group input,
+  .field-group textarea {
     padding: var(--spacing-sm);
     border: 1px solid var(--bg-border);
     border-radius: var(--radius-sm);
@@ -235,6 +236,16 @@ const BugCardSpecificStyles = css`
 
   .status-group {
     flex: 0 0 30%;
+  }
+
+  .rejection-reason-group {
+    margin-bottom: var(--spacing-md);
+  }
+
+  .rejection-reason-group textarea {
+    min-height: 3.5em;
+    resize: vertical;
+    font-family: inherit;
   }
 
   .priority-group {

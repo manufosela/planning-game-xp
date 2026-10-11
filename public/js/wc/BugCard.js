@@ -19,6 +19,7 @@ import { openScenarioModal } from '../utils/scenario-modal.js';
 import { BUG_SCHEMA } from '../schemas/card-field-schemas.js';
 import { generateTimestamp, extractDateTimeLocal } from '../utils/timestamp-utils.js';
 import { getAutoBugDates } from '../utils/bug-status-dates.js';
+import { getMissingBugFields } from '../utils/bug-status-rules.js';
 import { demoModeService } from '../services/demo-mode-service.js';
 import './FirebaseStorageUploader.js';
 
@@ -43,6 +44,7 @@ export class BugCard extends AiUsageDisplayMixin(CommitsDisplayMixin(NotesManage
       acceptanceCriteria: { type: String },
       bugType: { type: String },
       attachment: { type: String },
+      rejectionReason: { type: String },
 
       // Lists for selects
       statusList: { type: Array },
@@ -114,8 +116,9 @@ export class BugCard extends AiUsageDisplayMixin(CommitsDisplayMixin(NotesManage
       this.priorityList = window.globalBugPriorityList;
       this.priority = this.priorityList[0];
     }
-    this.statusList = window.statusBugList ? this._getOrderedStatusList(window.statusBugList) : ['Created', 'Assigned', 'Fixed', 'Verified', 'Closed'];
+    this.statusList = window.statusBugList ? this._getOrderedStatusList(window.statusBugList) : [...APP_CONSTANTS.BUG_STATUS_ORDER];
     this.status = 'Created'; // Bug nuevo siempre empieza en Created
+    this.rejectionReason = '';
     this.registerDate = new Date().toISOString(); // Fecha de creación por defecto
     this.userAuthorizedEmails = [];
     this.developerList = this._normalizeDevelopersList(
@@ -1201,6 +1204,20 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
           </div>
         </div>
 
+        ${this.status === 'Rejected' ? html`
+          <div class="field-group rejection-reason-group">
+            <label for="rejectionReason">Motivo del rechazo (no es un bug):</label>
+            <textarea
+              id="rejectionReason"
+              class="${this._getFieldClass('rejectionReason')}"
+              .value=${this.rejectionReason || ''}
+              @input=${e => { this.rejectionReason = e.target.value; }}
+              placeholder="Duplicado, comportamiento esperado, no reproducible..."
+              ?disabled=${!this.isEditable}
+            ></textarea>
+          </div>
+        ` : ''}
+
         <div class="field-group-row">
           <div class="field-group">
             <label>Developer:</label>
@@ -1727,36 +1744,27 @@ if (this.userAuthorizedEmails.includes(this.userEmail)) {
       endDate: this.endDate
     });
 
-    // Validar campos requeridos para estados específicos
-    if (['Fixed', 'Verified', 'Closed'].includes(newStatus) && !['Fixed', 'Verified', 'Closed'].includes(previousStatus)) {
-      // startDate/endDate cuentan con los valores auto-rellenados
-      const requiredFields = ['startDate', 'endDate', 'developer', 'priority', 'description'];
-      const missing = [];
-
-      requiredFields.forEach(field => {
-        const value = autoDates[field] ?? this[field];
-        if (!value || (typeof value === 'string' && value.trim() === '')) {
-          missing.push(field);
-        }
-      });
-
-      if (missing.length > 0) {
-        this.invalidFields = missing;
-        // Mostrar notificación con campos faltantes
-        const notification = document.createElement('slide-notification');
-        notification.message = `Para cambiar el estado a ${newStatus}, rellena los campos: ${missing.join(', ')}`;
-        notification.type = 'warning';
-        document.body.appendChild(notification);
-
-        // Revertir el cambio de estado
-        e.target.value = previousStatus;
-        return;
-      } else {
-        this.invalidFields = [];
+    // startDate/endDate cuentan con los valores auto-rellenados
+    const missing = getMissingBugFields({
+      previousStatus,
+      newStatus,
+      card: {
+        developer: this.developer,
+        priority: this.priority,
+        description: this.description,
+        rejectionReason: this.rejectionReason,
+        startDate: autoDates.startDate ?? this.startDate,
+        endDate: autoDates.endDate ?? this.endDate
       }
-    } else if (!['Fixed', 'Verified', 'Closed'].includes(newStatus) && ['Fixed', 'Verified', 'Closed'].includes(previousStatus)) {
-      // Limpiar campos inválidos cuando se sale de estados de finalización
-      this.invalidFields = [];
+    });
+    this.invalidFields = missing;
+
+    // Rejected se acepta: el campo de motivo aparece y se exige al guardar
+    if (missing.length > 0 && newStatus !== 'Rejected') {
+      this._showNotification(`Para cambiar el estado a ${newStatus}, rellena los campos: ${missing.join(', ')}`, 'warning');
+      // Revertir el cambio de estado
+      e.target.value = previousStatus;
+      return;
     }
 
     Object.assign(this, autoDates);
@@ -2222,6 +2230,12 @@ this.attachment = '';
   async _handleSave() {
     if (!this.canSave) {
       this._showNotification('No se puede guardar: datos inválidos o sin permisos', 'error');
+      return;
+    }
+
+    if (this.status === 'Rejected' && !this.rejectionReason?.trim()) {
+      this.invalidFields = ['rejectionReason'];
+      this._showNotification('Indica por qué no es un bug antes de guardarlo como Rejected', 'warning');
       return;
     }
 

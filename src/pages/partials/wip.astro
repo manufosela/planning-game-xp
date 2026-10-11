@@ -1162,7 +1162,7 @@ import BacklogStyles from '../../components/BacklogStyles.astro';
                 projectId,
                 cardType: 'bug-card',
                 title: bug.title || bug.cardId || bugKey,
-                status: bug.status || 'Assigned',
+                status: bug.status || 'Created',
                 addedBy: 'sync',
                 addedAt: new Date().toISOString()
               };

@@ -1,7 +1,7 @@
 import { generateTimestamp } from './timestamp-utils.js';
 
-const WORK_STARTED_STATUSES = ['Assigned', 'Fixed', 'Verified', 'Closed'];
-const FINAL_STATUSES = ['Fixed', 'Verified', 'Closed'];
+const WORK_STARTED_STATUSES = ['In Progress', 'Fixed', 'Done&Validated'];
+const FINAL_STATUSES = ['Fixed', 'Done&Validated'];
 
 /**
  * Dates a bug status change must auto-fill. Existing dates are never

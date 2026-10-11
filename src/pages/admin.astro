@@ -2020,7 +2020,7 @@ import Layout from '../layouts/Layout.astro';
           projectStats.bugs.total++;
           stats.totalBugs++;
 
-          if (bug.status === 'Fixed' || bug.status === 'Verified' || bug.status === 'Closed') {
+          if (bug.status === 'Fixed' || bug.status === 'Done&Validated') {
             projectStats.bugs.resolved++;
             stats.resolvedBugs++;
 
@@ -2143,7 +2143,7 @@ import Layout from '../layouts/Layout.astro';
         }
       }
     } else if (type === 'bugs') {
-      if (card.status === 'Fixed' || card.status === 'Verified' || card.status === 'Closed') {
+      if (card.status === 'Fixed' || card.status === 'Done&Validated') {
         dev.bugs.resolved++;
         const cardTransitions = transitionsMap ? transitionsMap.get(card.cardId) : null;
         const inProgressMs = cardTransitions ? getInProgressMs(cardTransitions, rangeStart, rangeEnd) : 0;
@@ -2838,7 +2838,7 @@ import Layout from '../layouts/Layout.astro';
       if (bugsSnap.exists()) {
         for (const [, bug] of Object.entries(bugsSnap.val())) {
           if (bug.deletedAt) continue;
-          if (bug.status !== 'Fixed' && bug.status !== 'Verified' && bug.status !== 'Closed') continue;
+          if (bug.status !== 'Fixed' && bug.status !== 'Done&Validated') continue;
           if (!isInDateRange(bug.endDate || bug.registerDate || bug.createdAt, startDate, endDate)) continue;
 
           const hours = getRawHours(bug, 'bug');

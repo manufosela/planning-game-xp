@@ -238,7 +238,7 @@ document.dispatchEvent(new CustomEvent('provide-taskcard-data', {
       
       // Fallback status list if empty
       const finalStatusList = statusList.length > 0 ? statusList : [
-        'Open', 'In Progress', 'Fixed', 'Closed', 'Reopened'
+        'Created', 'In Progress', 'Fixed', 'Done&Validated', 'Rejected'
       ];
       
       // Fallback priority list if empty - NO usar fallback hardcodeado, dejar vacío para que solicite desde Firebase
