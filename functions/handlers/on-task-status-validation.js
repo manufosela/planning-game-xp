@@ -30,6 +30,7 @@ function sanitizeEmailForKey(email) {
 const {
   REQUIRED_FIELDS_TO_LEAVE_TODO,
   VALIDATOR_ONLY_STATUSES,
+  VALID_BUG_STATUSES: VALID_BUG_STATUSES_LIST,
   hasValidValue
 } = require('../shared/index.cjs');
 
@@ -241,8 +242,7 @@ async function resolveEmailFromId(db, entityId) {
   return null;
 }
 
-// Valid statuses per card type (single source of truth from shared/constants)
-const VALID_BUG_STATUSES_LIST = ['Created', 'Assigned', 'Fixed', 'Verified', 'Closed'];
+// Valid statuses per card type (bugs come from shared/constants)
 const VALID_TASK_STATUSES_LIST = ['To Do', 'In Progress', 'Pausado', 'To Validate', 'Done&Validated', 'Blocked', 'Reopened'];
 
 /**

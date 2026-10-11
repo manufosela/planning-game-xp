@@ -1,7 +1,7 @@
 /**
  * Handler for onPortalBugResolved Cloud Function
  * Notifies the Portal de Incidencias when a bug created from
- * the portal is resolved (Fixed or Verified) in PlanningGameXP.
+ * the portal is resolved (Fixed) in PlanningGameXP.
  *
  * Bugs created via the Portal include a marker in their notes:
  *   [Portal de Incidencias] ticketId: <id>
@@ -98,12 +98,11 @@ async function handlePortalBugResolved(params, beforeData, afterData, deps) {
     return null;
   }
 
-  // Only trigger on transition TO Fixed or Verified
+  // Only trigger on transition TO Fixed (validation afterwards must not re-notify)
   const beforeStatus = beforeData?.status;
   const afterStatus = afterData?.status;
-  const resolvedStatuses = ['Fixed', 'Verified'];
 
-  if (!resolvedStatuses.includes(afterStatus) || beforeStatus === afterStatus) {
+  if (afterStatus !== 'Fixed' || beforeStatus === afterStatus) {
     return null;
   }
 

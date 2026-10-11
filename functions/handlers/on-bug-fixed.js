@@ -71,8 +71,8 @@ function generateBugFixedEmailHtml(bugData, projectId, cardId) {
         <strong>Instrucciones:</strong>
         <ul style="margin: 8px 0;">
           <li>Verifica que el bug está correctamente solucionado</li>
-          <li>Si está correcto, márcalo como <strong>"Verified"</strong> o <strong>"Closed"</strong></li>
-          <li>Si no está correcto, cámbialo a <strong>"Assigned"</strong> y añade un comentario</li>
+          <li>Si está correcto, márcalo como <strong>"Done&amp;Validated"</strong></li>
+          <li>Si no está correcto, devuélvelo a <strong>"In Progress"</strong> y añade un comentario</li>
         </ul>
       </div>
 

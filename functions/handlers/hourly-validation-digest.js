@@ -178,7 +178,7 @@ function generateDigestHtml({ validationEntries, bugFixedEntries, revertEntries 
         <strong>Recordatorio:</strong>
         <ul style="margin: 8px 0;">
           <li>Las tareas validadas se marcan como <strong>"Done"</strong></li>
-          <li>Los bugs verificados se marcan como <strong>"Verified"</strong> o <strong>"Closed"</strong></li>
+          <li>Los bugs verificados se marcan como <strong>"Done&amp;Validated"</strong></li>
           <li>Si algo no es correcto, devuelvelo a su estado anterior con un comentario</li>
         </ul>
       </div>

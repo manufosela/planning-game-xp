@@ -165,7 +165,7 @@ describe('onPortalBugResolved', () => {
 
   describe('handlePortalBugResolved', () => {
     const baseBugData = {
-      status: 'Assigned',
+      status: 'In Progress',
       title: 'Test bug',
       cardId: 'PRJ-BUG-0001',
       notes: '[Portal de Incidencias] ticketId: PORTAL-100'
@@ -187,7 +187,7 @@ describe('onPortalBugResolved', () => {
       const result = await handlePortalBugResolved(
         { projectId: 'P', section: 'BUGS_P', cardId: 'c1' },
         baseBugData,
-        { ...baseBugData, status: 'Assigned' },
+        { ...baseBugData, status: 'In Progress' },
         getDeps()
       );
 
@@ -235,16 +235,16 @@ describe('onPortalBugResolved', () => {
       expect(result).toEqual({ notifiedPortal: true, ticketId: 'PORTAL-100' });
     });
 
-    it('should notify Portal on transition to Verified', async () => {
+    it('should not notify Portal again when a fixed bug is validated', async () => {
       const result = await handlePortalBugResolved(
         { projectId: 'P', section: 'bugs_P', cardId: 'c1' },
-        baseBugData,
-        { ...baseBugData, status: 'Verified' },
+        { ...baseBugData, status: 'Fixed' },
+        { ...baseBugData, status: 'Done&Validated' },
         getDeps()
       );
 
-      expect(mockAxios.post).toHaveBeenCalledTimes(1);
-      expect(result).toEqual({ notifiedPortal: true, ticketId: 'PORTAL-100' });
+      expect(mockAxios.post).not.toHaveBeenCalled();
+      expect(result).toBeNull();
     });
 
     it('should use afterData.cardId for notification', async () => {
@@ -325,7 +325,7 @@ describe('onPortalBugResolved', () => {
       const result = await handlePortalBugResolved(
         { projectId: 'P', section: 'BUGS_P', cardId: 'c1' },
         fbNotesData,
-        { ...fbNotesData, status: 'Verified' },
+        { ...fbNotesData, status: 'Fixed' },
         getDeps()
       );
 

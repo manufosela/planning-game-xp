@@ -106,8 +106,8 @@ describe('onTaskStatusValidation', () => {
     it('should revert invalid bug status (task status on bug)', async () => {
       const result = await handleTaskStatusValidation(
         { projectId: 'Test', section: 'BUGS_Test', cardId: 'bug1' },
-        { status: 'Assigned' },
-        { status: 'Done&Validated', updatedBy: 'test@test.com' },
+        { status: 'Fixed' },
+        { status: 'Verified', updatedBy: 'test@test.com' },
         { db: mockDb, logger: mockLogger }
       );
       expect(result).not.toBeNull();
@@ -117,7 +117,7 @@ describe('onTaskStatusValidation', () => {
     it('should allow valid bug status transitions', async () => {
       const result = await handleTaskStatusValidation(
         { projectId: 'Test', section: 'BUGS_Test', cardId: 'bug1' },
-        { status: 'Assigned' },
+        { status: 'In Progress' },
         { status: 'Fixed' },
         { db: mockDb, logger: mockLogger }
       );
