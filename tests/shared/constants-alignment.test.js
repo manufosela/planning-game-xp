@@ -32,7 +32,7 @@ describe('shared/constants.js ↔ app-constants.js alignment', () => {
   });
 
   it('KANBAN_COLORS should NOT have entries for removed bug statuses', () => {
-    const removed = ['Triaged', 'In Progress', 'In Testing', 'Blocked', 'Rejected'];
+    const removed = ['Triaged', 'Assigned', 'In Testing', 'Verified', 'Closed'];
     for (const status of removed) {
       expect(APP_CONSTANTS.KANBAN_COLORS).not.toHaveProperty(status);
     }

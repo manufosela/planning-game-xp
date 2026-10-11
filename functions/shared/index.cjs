@@ -16,7 +16,7 @@ const _require = createRequire(__filename);
 
 // ── Constants (duplicated from shared/constants.js — CI test verifies alignment) ──
 
-const VALID_BUG_STATUSES = ['Created', 'Assigned', 'Fixed', 'Verified', 'Closed'];
+const VALID_BUG_STATUSES = ['Created', 'In Progress', 'Fixed', 'Done&Validated', 'Rejected'];
 
 const VALID_BUG_PRIORITIES = [
   'Application Blocker', 'Department Blocker', 'Individual Blocker',
@@ -35,7 +35,7 @@ const REQUIRED_FIELDS_TO_LEAVE_TODO = [
 ];
 
 const REQUIRED_FIELDS_FOR_TO_VALIDATE = ['startDate', 'commits'];
-const REQUIRED_FIELDS_TO_CLOSE_BUG = ['commits', 'rootCause', 'resolution'];
+const REQUIRED_FIELDS_TO_REJECT_BUG = ['rejectionReason'];
 
 const FRIENDLY_FIELD_NAMES = {
   acceptanceCriteria: 'Acceptance Criteria',
@@ -82,7 +82,7 @@ module.exports = {
   MCP_RESTRICTED_STATUSES,
   REQUIRED_FIELDS_TO_LEAVE_TODO,
   REQUIRED_FIELDS_FOR_TO_VALIDATE,
-  REQUIRED_FIELDS_TO_CLOSE_BUG,
+  REQUIRED_FIELDS_TO_REJECT_BUG,
   FRIENDLY_FIELD_NAMES,
   hasValidValue
 };

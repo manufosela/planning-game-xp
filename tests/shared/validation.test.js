@@ -110,7 +110,7 @@ describe('validateBugFields', () => {
   });
 
   it('should reject invalid bug status', () => {
-    expect(() => validateBugFields({ status: 'In Progress' })).toThrow(/Invalid bug status/);
+    expect(() => validateBugFields({ status: 'Verified' })).toThrow(/Invalid bug status/);
   });
 
   it('should reject invalid bug priority', () => {
@@ -125,7 +125,7 @@ describe('validateBugFields', () => {
 describe('validateBugStatusTransition', () => {
   it('should allow Fixed with commits, pipelineStatus, startDate and endDate', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' },
       {
         status: 'Fixed',
         endDate: '2026-01-02T17:00:00',
@@ -135,37 +135,46 @@ describe('validateBugStatusTransition', () => {
     )).not.toThrow();
   });
 
-  it('should require startDate when assigning a bug', () => {
+  it('should require startDate when starting work on a bug', () => {
     expect(() => validateBugStatusTransition(
       { status: 'Created' },
-      { status: 'Assigned' }
+      { status: 'In Progress', developer: 'dev_001' }
     )).toThrow(/startDate/);
   });
 
-  it('should allow Assigned with startDate', () => {
+  it('should require developer when starting work on a bug', () => {
     expect(() => validateBugStatusTransition(
       { status: 'Created' },
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' }
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' }
+    )).toThrow(/developer/);
+  });
+
+  it('should allow In Progress with developer and startDate', () => {
+    expect(() => validateBugStatusTransition(
+      { status: 'Created' },
+      { status: 'In Progress', developer: 'dev_001', startDate: '2026-01-01T09:00:00' }
     )).not.toThrow();
   });
 
-  it('should require fields when closing a bug', () => {
+  it('should require rejectionReason when rejecting a bug', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Verified' },
-      { status: 'Closed' }
-    )).toThrow(/Cannot close bug/);
+      { status: 'Created' },
+      { status: 'Rejected' }
+    )).toThrow(/rejectionReason/);
   });
 
-  it('should allow closing with all fields', () => {
+  it('should allow rejecting with a reason and no commits', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Verified' },
-      {
-        status: 'Closed',
-        commits: [{ hash: 'abc', message: 'fix', date: '2024-01-01', author: 'dev' }],
-        rootCause: 'Bad logic',
-        resolution: 'Fixed the logic'
-      }
+      { status: 'Created' },
+      { status: 'Rejected', rejectionReason: 'Expected behaviour' }
     )).not.toThrow();
+  });
+
+  it('should not let MCP set Done&Validated on a bug', () => {
+    expect(() => validateBugStatusTransition(
+      { status: 'Fixed' },
+      { status: 'Done&Validated' }
+    )).toThrow(/Done&Validated/);
   });
 });
 
@@ -255,14 +264,14 @@ describe('validateStatusTransition (MCP context)', () => {
 describe('validateBugStatusTransition - Fixed requires pipelineStatus', () => {
   it('should require commits and pipelineStatus.prCreated for Fixed', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned' },
+      { status: 'In Progress' },
       { status: 'Fixed' }
     )).toThrow(/commits.*pipelineStatus|pipelineStatus.*commits/);
   });
 
   it('should accept Fixed with commits, pipelineStatus.prCreated, startDate and endDate', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' },
       {
         status: 'Fixed',
         endDate: '2026-01-02T17:00:00',
@@ -274,7 +283,7 @@ describe('validateBugStatusTransition - Fixed requires pipelineStatus', () => {
 
   it('should reject Fixed with commits but no pipelineStatus', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned' },
+      { status: 'In Progress' },
       {
         status: 'Fixed',
         commits: [{ hash: 'abc', message: 'fix: bug', date: '2026-01-01', author: 'dev' }]
@@ -473,156 +482,135 @@ describe('validateBugStatusTransition — EXHAUSTIVE', () => {
 
   it('Fixed with commits but pipelineStatus missing prUrl — throws', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' },
       { status: 'Fixed', endDate: '2026-01-02T17:00:00', commits: validCommits, pipelineStatus: { prCreated: { prNumber: 5 } } }
     )).toThrow(/pipelineStatus\.prCreated/);
   });
 
   it('Fixed with commits but pipelineStatus missing prNumber — throws', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' },
       { status: 'Fixed', endDate: '2026-01-02T17:00:00', commits: validCommits, pipelineStatus: { prCreated: { prUrl: 'https://github.com/pr/1' } } }
     )).toThrow(/pipelineStatus\.prCreated/);
   });
 
   it('Fixed with pipelineStatus but empty commits array — throws', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' },
       { status: 'Fixed', endDate: '2026-01-02T17:00:00', commits: [], pipelineStatus: validPipelineStatus }
     )).toThrow(/commits/);
   });
 
   it('Fixed with pipelineStatus.prCreated = null — throws', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' },
       { status: 'Fixed', endDate: '2026-01-02T17:00:00', commits: validCommits, pipelineStatus: { prCreated: null } }
     )).toThrow(/pipelineStatus\.prCreated/);
   });
 
   it('Fixed with pipelineStatus = {} (no prCreated) — throws', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' },
       { status: 'Fixed', endDate: '2026-01-02T17:00:00', commits: validCommits, pipelineStatus: {} }
     )).toThrow(/pipelineStatus\.prCreated/);
   });
 
   it('Fixed without startDate — throws', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned' },
+      { status: 'In Progress' },
       { status: 'Fixed', endDate: '2026-01-02T17:00:00', commits: validCommits, pipelineStatus: validPipelineStatus }
     )).toThrow(/startDate/);
   });
 
   it('Fixed without endDate — throws', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' },
       { status: 'Fixed', commits: validCommits, pipelineStatus: validPipelineStatus }
     )).toThrow(/endDate/);
   });
 
   it('Fixed with commits in currentBug (not in updates) + pipelineStatus in updates — passes (merge)', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', commits: validCommits, startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', commits: validCommits, startDate: '2026-01-01T09:00:00' },
       { status: 'Fixed', pipelineStatus: validPipelineStatus, endDate: '2026-01-02T17:00:00' }
     )).not.toThrow();
   });
 
   it('Fixed with pipelineStatus in currentBug (not in updates) + commits in updates — passes (merge)', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', pipelineStatus: validPipelineStatus, startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', pipelineStatus: validPipelineStatus, startDate: '2026-01-01T09:00:00' },
       { status: 'Fixed', commits: validCommits, endDate: '2026-01-02T17:00:00' }
     )).not.toThrow();
   });
 
   it('Fixed with prNumber = 0 — throws because 0 is falsy', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' },
       { status: 'Fixed', endDate: '2026-01-02T17:00:00', commits: validCommits, pipelineStatus: { prCreated: { prUrl: 'https://github.com/pr/1', prNumber: 0 } } }
     )).toThrow(/pipelineStatus\.prCreated/);
   });
 
-  it('Closed with commits + rootCause but empty string resolution — throws', () => {
+  it('Rejected with empty rejectionReason — throws', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Verified' },
-      { status: 'Closed', commits: validCommits, rootCause: 'Bad logic', resolution: '' }
-    )).toThrow(/resolution/);
+      { status: 'Created' },
+      { status: 'Rejected', rejectionReason: '' }
+    )).toThrow(/rejectionReason/);
   });
 
-  it('Closed with commits + resolution but empty string rootCause — throws', () => {
+  it('Rejected with whitespace-only rejectionReason — throws', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Verified' },
-      { status: 'Closed', commits: validCommits, rootCause: '', resolution: 'Fixed it' }
-    )).toThrow(/rootCause/);
+      { status: 'In Progress' },
+      { status: 'Rejected', rejectionReason: '   ' }
+    )).toThrow(/rejectionReason/);
   });
 
-  it('Closed with whitespace-only rootCause — throws', () => {
+  it('Rejected with reason in currentBug, none in updates (only status) — passes (merge)', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Verified' },
-      { status: 'Closed', commits: validCommits, rootCause: '   ', resolution: 'Fixed it' }
-    )).toThrow(/rootCause/);
-  });
-
-  it('Closed with whitespace-only resolution — throws', () => {
-    expect(() => validateBugStatusTransition(
-      { status: 'Verified' },
-      { status: 'Closed', commits: validCommits, rootCause: 'Bad logic', resolution: '   ' }
-    )).toThrow(/resolution/);
-  });
-
-  it('Closed with all fields in currentBug, none in updates (only status) — passes (merge)', () => {
-    expect(() => validateBugStatusTransition(
-      { status: 'Verified', commits: validCommits, rootCause: 'Bad logic', resolution: 'Fixed it' },
-      { status: 'Closed' }
+      { status: 'Created', rejectionReason: 'Duplicate of BUG-0001' },
+      { status: 'Rejected' }
     )).not.toThrow();
   });
 
   it('No status in updates — passes (no transition)', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned' },
+      { status: 'In Progress' },
       { title: 'Updated title' }
     )).not.toThrow();
   });
 
   it('Same status — passes (no transition)', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned' },
-      { status: 'Assigned' }
+      { status: 'In Progress' },
+      { status: 'In Progress' }
     )).not.toThrow();
-  });
-
-  it('Closed with commits missing but rootCause and resolution present — throws mentioning commits', () => {
-    expect(() => validateBugStatusTransition(
-      { status: 'Verified' },
-      { status: 'Closed', rootCause: 'Bad logic', resolution: 'Fixed it' }
-    )).toThrow(/commits/);
   });
 
   it('Fixed with all fields valid — passes', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' },
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' },
       { status: 'Fixed', endDate: '2026-01-02T17:00:00', commits: validCommits, pipelineStatus: validPipelineStatus }
     )).not.toThrow();
   });
 
-  it('Created to Assigned — requires startDate', () => {
+  it('Created to In Progress — requires startDate', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Created' },
-      { status: 'Assigned' }
+      { status: 'Created', developer: 'dev_001' },
+      { status: 'In Progress' }
     )).toThrow(/startDate/);
   });
 
-  it('Created to Assigned — passes with startDate', () => {
+  it('Created to In Progress — passes with developer in currentBug and startDate', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Created' },
-      { status: 'Assigned', startDate: '2026-01-01T09:00:00' }
+      { status: 'Created', developer: 'dev_001' },
+      { status: 'In Progress', startDate: '2026-01-01T09:00:00' }
     )).not.toThrow();
   });
 
-  it('Assigned to Verified — passes without extra fields', () => {
+  it('Fixed to Done&Validated — throws (only the stakeholder validates)', () => {
     expect(() => validateBugStatusTransition(
-      { status: 'Assigned' },
-      { status: 'Verified' }
-    )).not.toThrow();
+      { status: 'Fixed' },
+      { status: 'Done&Validated' }
+    )).toThrow(/MCP cannot/);
   });
 });
 
@@ -1177,7 +1165,7 @@ describe('collectBugValidationIssues — EXHAUSTIVE', () => {
   });
 
   it('Invalid status — error with INVALID_STATUS code', () => {
-    const result = collectBugValidationIssues({ status: 'In Progress' });
+    const result = collectBugValidationIssues({ status: 'Verified' });
     expect(result.valid).toBe(false);
     expect(result.errors[0].code).toBe('INVALID_STATUS');
   });
@@ -1233,7 +1221,7 @@ describe('collectBugValidationIssues — EXHAUSTIVE', () => {
   });
 
   it('All valid bug statuses are accepted', () => {
-    for (const status of ['Created', 'Assigned', 'Fixed', 'Verified', 'Closed']) {
+    for (const status of ['Created', 'In Progress', 'Fixed', 'Done&Validated', 'Rejected']) {
       const result = collectBugValidationIssues({ status });
       expect(result.valid).toBe(true);
     }

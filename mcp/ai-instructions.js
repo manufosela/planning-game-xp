@@ -19,7 +19,7 @@ import {
   VALID_ID_PREFIXES,
   REQUIRED_FIELDS_TO_LEAVE_TODO,
   REQUIRED_FIELDS_FOR_TO_VALIDATE,
-  REQUIRED_FIELDS_TO_CLOSE_BUG,
+  REQUIRED_FIELDS_TO_REJECT_BUG,
   MCP_RESTRICTED_STATUSES,
   TASK_TRANSITION_RULES,
   BLOCKED_REQUIRED_FIELDS,
@@ -35,7 +35,7 @@ import {
 export function generateAiInstructions() {
   const requiredToLeaveTodo = REQUIRED_FIELDS_TO_LEAVE_TODO.join(', ');
   const requiredForToValidate = REQUIRED_FIELDS_FOR_TO_VALIDATE.join(', ');
-  const requiredToCloseBug = REQUIRED_FIELDS_TO_CLOSE_BUG.join(', ');
+  const requiredToRejectBug = REQUIRED_FIELDS_TO_REJECT_BUG.join(', ');
   const bugStatuses = VALID_BUG_STATUSES.join(', ');
   const bugPriorities = VALID_BUG_PRIORITIES.join(' | ');
   const taskStatuses = VALID_TASK_STATUSES.join(', ');
@@ -145,15 +145,18 @@ ${blockedFields}
 ## update_card: Bug Status Transitions
 
 Valid bug statuses: ${bugStatuses}
+Workflow: Created -> In Progress -> Fixed -> Done&Validated. "Rejected" = it is not a bug.
+
+### Bug -> "In Progress" requires: developer, startDate
 
 ### Bug -> "Fixed" requires:
 - commits: [{hash, message, date, author}]
 - pipelineStatus.prCreated: {prUrl, prNumber}
 
-### Bug -> "Closed" requires: ${requiredToCloseBug}
-- commits: [{hash, message, date, author}]
-- rootCause: string (why the bug occurred)
-- resolution: string (how it was fixed)
+### Bug -> "Rejected" requires: ${requiredToRejectBug}
+- rejectionReason: string (why it is not a bug: duplicate, expected behaviour, not reproducible...)
+
+### Bug -> "Done&Validated": MCP CANNOT set it. Only the stakeholder validates a fixed bug.
 
 ## Sprint Rules
 - sprint field MUST be an existing sprint ID (e.g., "PRJ-SPR-0001")

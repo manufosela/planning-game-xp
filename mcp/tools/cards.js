@@ -11,7 +11,7 @@ import {
   VALID_ID_PREFIXES,
   REQUIRED_FIELDS_TO_LEAVE_TODO,
   REQUIRED_FIELDS_FOR_TO_VALIDATE,
-  REQUIRED_FIELDS_TO_CLOSE_BUG,
+  REQUIRED_FIELDS_TO_REJECT_BUG,
   MCP_RESTRICTED_STATUSES,
   VALIDATOR_ONLY_STATUSES,
   FRIENDLY_FIELD_NAMES,
@@ -63,7 +63,7 @@ export {
   TASK_TRANSITION_RULES,
   REQUIRED_FIELDS_TO_LEAVE_TODO,
   REQUIRED_FIELDS_FOR_TO_VALIDATE,
-  REQUIRED_FIELDS_TO_CLOSE_BUG,
+  REQUIRED_FIELDS_TO_REJECT_BUG,
   MCP_RESTRICTED_STATUSES,
   VALIDATOR_ONLY_STATUSES,
   generatePriorityMap,
@@ -1417,7 +1417,7 @@ export async function checkPendingBlockers(db, projectId, card) {
 
     if (blockerResult) {
       const blockerStatus = blockerResult.card.status || '';
-      const isComplete = blockerStatus === 'Done&Validated' || blockerStatus === 'Closed';
+      const isComplete = blockerStatus === 'Done&Validated' || blockerStatus === 'Rejected';
 
       if (!isComplete) {
         pendingBlockers.push({
@@ -1498,14 +1498,14 @@ export async function getTransitionRules({ type = 'task' }) {
           type: 'bug',
           validStatuses: VALID_BUG_STATUSES,
           validPriorities: VALID_BUG_PRIORITIES,
-          note: 'Bugs follow a simpler workflow: Created → Assigned → Fixed → Verified → Closed',
-          requiredFieldsForFixed: ['commits', 'pipelineStatus.prCreated'],
-          requiredFieldsForClosed: ['commits', 'rootCause', 'resolution'],
+          note: 'Bugs follow a simpler workflow: Created → In Progress → Fixed → Done&Validated. "Rejected" means it is not a bug. MCP cannot set "Done&Validated".',
+          requiredFieldsForInProgress: ['developer', 'startDate'],
+          requiredFieldsForFixed: ['startDate', 'endDate', 'commits', 'pipelineStatus.prCreated'],
+          requiredFieldsForRejected: REQUIRED_FIELDS_TO_REJECT_BUG,
           fieldDescriptions: {
             commits: 'Array of commits [{hash, message, date, author}]',
             pipelineStatus: `Pipeline tracking object. ${PR_CREATED_EXPECTED_SHAPE}`,
-            rootCause: 'Why the bug occurred',
-            resolution: 'How the bug was fixed'
+            rejectionReason: 'Why it is not a bug (duplicate, expected behaviour, not reproducible...)'
           },
           exampleFixedUpdate: {
             status: 'Fixed',

@@ -36,7 +36,7 @@ const {
   VALID_BUG_PRIORITIES,
   VALID_TASK_PRIORITIES,
   REQUIRED_FIELDS_TO_LEAVE_TODO,
-  REQUIRED_FIELDS_TO_CLOSE_BUG,
+  REQUIRED_FIELDS_TO_REJECT_BUG,
   VALIDATOR_ONLY_STATUSES,
   validateBugStatusTransition,
   getSessionTasksWithoutPlan,
@@ -60,10 +60,10 @@ function setupMockLists() {
   });
   setMockRtdbData('/data/statusList/bug-card', {
     'Created': 1,
-    'Assigned': 2,
+    'In Progress': 2,
     'Fixed': 3,
-    'Verified': 4,
-    'Closed': 5
+    'Done&Validated': 4,
+    'Rejected': 5
   });
   setMockRtdbData('/data/statusList/task-card', {
     'To Do': 1,
@@ -117,7 +117,7 @@ describe('cards.js', () => {
     });
 
     it('should throw for invalid bug status', () => {
-      expect(() => validateBugFields({ status: 'In Progress' })).toThrow(/Invalid bug status/);
+      expect(() => validateBugFields({ status: 'Verified' })).toThrow(/Invalid bug status/);
     });
 
     it('should pass for valid bug priority', () => {
@@ -896,7 +896,7 @@ describe('cards.js', () => {
   describe('Constants', () => {
     it('should have correct valid bug statuses', () => {
       expect(VALID_BUG_STATUSES).toContain('Created');
-      expect(VALID_BUG_STATUSES).toContain('Closed');
+      expect(VALID_BUG_STATUSES).toEqual(['Created', 'In Progress', 'Fixed', 'Done&Validated', 'Rejected']);
     });
 
     it('should have correct valid task statuses', () => {
@@ -916,10 +916,8 @@ describe('cards.js', () => {
       expect(VALIDATOR_ONLY_STATUSES).toContain('Done&Validated');
     });
 
-    it('should have correct required fields to close bug', () => {
-      expect(REQUIRED_FIELDS_TO_CLOSE_BUG).toContain('commits');
-      expect(REQUIRED_FIELDS_TO_CLOSE_BUG).toContain('rootCause');
-      expect(REQUIRED_FIELDS_TO_CLOSE_BUG).toContain('resolution');
+    it('should only require a reason to reject a bug', () => {
+      expect(REQUIRED_FIELDS_TO_REJECT_BUG).toEqual(['rejectionReason']);
     });
   });
 
@@ -936,15 +934,14 @@ describe('cards.js', () => {
       expect(() => validateBugStatusTransition(currentBug, updates)).not.toThrow();
     });
 
-    it('should pass for non-Fixed/Closed status transitions', () => {
+    it('should pass to In Progress with developer and startDate', () => {
       const currentBug = { status: 'Created' };
-      // Assigned now requires startDate (when work begins on the bug).
-      const updates = { status: 'Assigned', startDate: '2026-01-10T10:00:00Z' };
+      const updates = { status: 'In Progress', developer: 'dev_001', startDate: '2026-01-10T10:00:00Z' };
       expect(() => validateBugStatusTransition(currentBug, updates)).not.toThrow();
     });
 
     it('should throw when fixing bug without commits', () => {
-      const currentBug = { status: 'Assigned' };
+      const currentBug = { status: 'In Progress' };
       const updates = {
         status: 'Fixed',
         pipelineStatus: { prCreated: { prUrl: 'https://github.com/org/repo/pull/1', prNumber: 1, date: '2024-01-20T10:00:00Z' } }
@@ -953,7 +950,7 @@ describe('cards.js', () => {
     });
 
     it('should throw when fixing bug without pipelineStatus', () => {
-      const currentBug = { status: 'Assigned' };
+      const currentBug = { status: 'In Progress' };
       const updates = {
         status: 'Fixed',
         commits: [{ hash: 'abc123', message: 'fix: bug', date: '2024-01-20T10:00:00Z', author: 'dev' }]
@@ -973,101 +970,67 @@ describe('cards.js', () => {
       expect(() => validateBugStatusTransition(currentBug, updates)).not.toThrow();
     });
 
-    it('should throw when closing bug without commits', () => {
-      const currentBug = { status: 'Verified' };
-      const updates = {
-        status: 'Closed',
-        rootCause: 'Memory leak',
-        resolution: 'Fixed memory allocation'
-      };
-      expect(() => validateBugStatusTransition(currentBug, updates)).toThrow(/commits/);
+    it('should throw when rejecting bug without rejectionReason', () => {
+      const currentBug = { status: 'Created' };
+      expect(() => validateBugStatusTransition(currentBug, { status: 'Rejected' })).toThrow(/rejectionReason/);
     });
 
-    it('should throw when closing bug without rootCause', () => {
-      const currentBug = { status: 'Verified' };
-      const updates = {
-        status: 'Closed',
-        commits: [{ hash: 'abc123', message: 'Fix', date: '2024-01-01', author: 'dev@test.com' }],
-        resolution: 'Fixed memory allocation'
-      };
-      expect(() => validateBugStatusTransition(currentBug, updates)).toThrow(/rootCause/);
-    });
-
-    it('should throw when closing bug without resolution', () => {
-      const currentBug = { status: 'Verified' };
-      const updates = {
-        status: 'Closed',
-        commits: [{ hash: 'abc123', message: 'Fix', date: '2024-01-01', author: 'dev@test.com' }],
-        rootCause: 'Memory leak'
-      };
-      expect(() => validateBugStatusTransition(currentBug, updates)).toThrow(/resolution/);
-    });
-
-    it('should pass when closing bug with all required fields', () => {
-      const currentBug = { status: 'Verified' };
-      const updates = {
-        status: 'Closed',
-        commits: [{ hash: 'abc123', message: 'Fix memory leak', date: '2024-01-01', author: 'dev@test.com' }],
-        rootCause: 'Memory was not being freed after use',
-        resolution: 'Added proper cleanup in destructor'
-      };
+    it('should pass when rejecting bug with a reason and no commits', () => {
+      const currentBug = { status: 'Created' };
+      const updates = { status: 'Rejected', rejectionReason: 'Duplicate of TP-BUG-0002' };
       expect(() => validateBugStatusTransition(currentBug, updates)).not.toThrow();
     });
 
-    it('should use existing values from currentBug when closing', () => {
-      const currentBug = {
-        status: 'Verified',
-        commits: [{ hash: 'abc123', message: 'Fix', date: '2024-01-01', author: 'dev@test.com' }],
-        rootCause: 'Memory leak'
-      };
-      const updates = {
-        status: 'Closed',
-        resolution: 'Fixed it'
-      };
-      expect(() => validateBugStatusTransition(currentBug, updates)).not.toThrow();
+    it('should throw when MCP tries to set Done&Validated', () => {
+      const currentBug = { status: 'Fixed' };
+      expect(() => validateBugStatusTransition(currentBug, { status: 'Done&Validated' })).toThrow(/MCP cannot/);
     });
   });
 
-  describe('updateCard - Bug closing', () => {
+  describe('updateCard - Bug rejecting', () => {
     beforeEach(() => {
       setMockRtdbData('/cards/TestProject/BUGS_TestProject', {
         'bug1': {
           cardId: 'TP-BUG-0001',
           title: 'Test Bug',
-          status: 'Verified'
+          status: 'Created'
         }
       });
     });
 
-    it('should throw error when closing bug without required fields', async () => {
+    it('should throw error when rejecting bug without a reason', async () => {
       await expect(updateCard({
         projectId: 'TestProject',
         type: 'bug',
         firebaseId: 'bug1',
-        updates: { status: 'Closed' }
-      })).rejects.toThrow(/Cannot close bug/);
+        updates: { status: 'Rejected' }
+      })).rejects.toThrow(/Cannot reject bug/);
     });
 
-    it('should allow closing bug with all required fields', async () => {
+    it('should allow rejecting bug with a reason', async () => {
       const result = await updateCard({
         projectId: 'TestProject',
         type: 'bug',
         firebaseId: 'bug1',
-        updates: {
-          status: 'Closed',
-          commits: [{ hash: 'abc123', message: 'Fix bug', date: '2024-01-01', author: 'dev@test.com' }],
-          rootCause: 'Null pointer exception due to uninitialized variable',
-          resolution: 'Initialize variable before use'
-        }
+        updates: { status: 'Rejected', rejectionReason: 'Expected behaviour' }
       });
 
       const response = JSON.parse(result.content[0].text);
-      expect(response.card.status).toBe('Closed');
-      // rootCause/resolution are not in the trimmed response card —
-      // assert against the persisted card.
+      expect(response.card.status).toBe('Rejected');
       const saved = getMockRtdbData('/cards/TestProject/BUGS_TestProject')['bug1'];
-      expect(saved.rootCause).toBe('Null pointer exception due to uninitialized variable');
-      expect(saved.resolution).toBe('Initialize variable before use');
+      expect(saved.rejectionReason).toBe('Expected behaviour');
+    });
+
+    it('should not let MCP validate a fixed bug', async () => {
+      setMockRtdbData('/cards/TestProject/BUGS_TestProject', {
+        'bug1': { cardId: 'TP-BUG-0001', title: 'Test Bug', status: 'Fixed' }
+      });
+      await expect(updateCard({
+        projectId: 'TestProject',
+        type: 'bug',
+        firebaseId: 'bug1',
+        updates: { status: 'Done&Validated' }
+      })).rejects.toThrow(/MCP cannot/);
     });
   });
 
@@ -1916,76 +1879,6 @@ describe('cards.js', () => {
     });
   });
 
-  describe('Bug: Fixed → Closed (paranoid field validation)', () => {
-    const validCommit = { hash: 'def5678', message: 'fix: resolve issue', date: '2024-02-01T10:00:00Z', author: 'dev@test.com' };
-
-    const fixedBug = {
-      cardId: 'TP-BUG-0001',
-      title: 'Test Bug',
-      status: 'Fixed',
-      developer: 'dev_001',
-      commits: [validCommit]
-    };
-
-    beforeEach(() => {
-      setMockRtdbData('/projects/TestProject/abbreviation', 'TP');
-    });
-
-    it('should throw when rootCause is missing', async () => {
-      setMockRtdbData('/cards/TestProject/BUGS_TestProject', { bug1: { ...fixedBug } });
-
-      await expect(updateCard({
-        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
-        updates: { status: 'Closed', resolution: 'Fixed the query' }
-      })).rejects.toThrow(/rootCause/i);
-    });
-
-    it('should throw when resolution is missing', async () => {
-      setMockRtdbData('/cards/TestProject/BUGS_TestProject', { bug1: { ...fixedBug } });
-
-      await expect(updateCard({
-        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
-        updates: { status: 'Closed', rootCause: 'Bad SQL query' }
-      })).rejects.toThrow(/resolution/i);
-    });
-
-    it('should succeed when all required fields are present', async () => {
-      setMockRtdbData('/cards/TestProject/BUGS_TestProject', { bug1: { ...fixedBug } });
-
-      const result = await updateCard({
-        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
-        updates: {
-          status: 'Closed',
-          rootCause: 'Bad SQL query',
-          resolution: 'Fixed the query with parameterized version'
-        }
-      });
-
-      const response = JSON.parse(result.content[0].text);
-      expect(response.card.status).toBe('Closed');
-      // rootCause/resolution are not in the trimmed response — assert persisted state.
-      const saved = getMockRtdbData('/cards/TestProject/BUGS_TestProject')['bug1'];
-      expect(saved.rootCause).toBe('Bad SQL query');
-      expect(saved.resolution).toBe('Fixed the query with parameterized version');
-    });
-
-    it('should succeed when commits are already on the currentCard (not in updates)', async () => {
-      setMockRtdbData('/cards/TestProject/BUGS_TestProject', { bug1: { ...fixedBug } });
-
-      const result = await updateCard({
-        projectId: 'TestProject', type: 'bug', firebaseId: 'bug1',
-        updates: {
-          status: 'Closed',
-          rootCause: 'Bad SQL query',
-          resolution: 'Fixed the query'
-        }
-      });
-
-      const response = JSON.parse(result.content[0].text);
-      expect(response.card.status).toBe('Closed');
-    });
-  });
-
   describe('getTransitionRules integration', () => {
     it('should return task rules with pipelineStatus.prCreated in requiredFieldsForToValidate', async () => {
       const result = await getTransitionRules({ type: 'task' });
@@ -2014,13 +1907,12 @@ describe('cards.js', () => {
       expect(response.requiredFieldsForFixed).toContain('pipelineStatus.prCreated');
     });
 
-    it('should return bug rules with rootCause and resolution in requiredFieldsForClosed', async () => {
+    it('should return bug rules for In Progress and Rejected', async () => {
       const result = await getTransitionRules({ type: 'bug' });
       const response = JSON.parse(result.content[0].text);
 
-      expect(response.requiredFieldsForClosed).toContain('rootCause');
-      expect(response.requiredFieldsForClosed).toContain('resolution');
-      expect(response.requiredFieldsForClosed).toContain('commits');
+      expect(response.requiredFieldsForInProgress).toEqual(['developer', 'startDate']);
+      expect(response.requiredFieldsForRejected).toEqual(['rejectionReason']);
     });
 
     it('should return bug rules with exampleFixedUpdate', async () => {

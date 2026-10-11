@@ -72,15 +72,15 @@ export const APP_CONSTANTS = {
   },
 
   // Bug Status Order (logical workflow order — aligned with shared/constants.js)
-  BUG_STATUS_ORDER: ['Created', 'Assigned', 'Fixed', 'Verified', 'Closed'],
+  BUG_STATUS_ORDER: ['Created', 'In Progress', 'Fixed', 'Done&Validated', 'Rejected'],
 
   // Bug Status List (object format used by filter configs as fallback)
   BUG_STATUS_LIST: {
     'Created': { label: 'Created' },
-    'Assigned': { label: 'Assigned' },
+    'In Progress': { label: 'In Progress' },
     'Fixed': { label: 'Fixed' },
-    'Verified': { label: 'Verified' },
-    'Closed': { label: 'Closed' }
+    'Done&Validated': { label: 'Done&Validated' },
+    'Rejected': { label: 'Rejected' }
   },
 
   // Bug Priority Order (severity order)
@@ -99,7 +99,7 @@ export const APP_CONSTANTS = {
   // Completed statuses - used to exclude cards from year migration
   // Tasks/bugs with these statuses are considered "finished" and won't be migrated to the next year
   TASK_COMPLETED_STATUSES: ['done', 'done&validated'],
-  BUG_COMPLETED_STATUSES: ['fixed', 'verified', 'closed'],
+  BUG_COMPLETED_STATUSES: ['fixed', 'done&validated', 'rejected'],
   PROPOSAL_COMPLETED_STATUSES: ['approved', 'rejected', 'converted'],
   KANBAN_COLORS: {
     'TO DO': 'linear-gradient(135deg, #6c757d, #495057)',
@@ -116,10 +116,10 @@ export const APP_CONSTANTS = {
     
     // Bug Status Colors (aligned with shared/constants.js — 5 statuses)
     'Created': 'linear-gradient(135deg, #6c757d, #495057)',
-    'Assigned': 'linear-gradient(135deg, #4a9eff, #007bff)',
+    'In Progress': 'linear-gradient(135deg, #ffc107, #fd7e14)',
     'Fixed': 'linear-gradient(135deg, #28a745, #218838)',
-    'Verified': 'linear-gradient(135deg, #20c997, #198754)',
-    'Closed': 'linear-gradient(135deg, #14532d, #276749)',
+    'Done&Validated': 'linear-gradient(135deg, #20c997, #198754)',
+    'Rejected': 'linear-gradient(135deg, #495057, #212529)',
     
     // Bug Priority Colors
     'Application Blocker': 'linear-gradient(135deg, #dc3545, #c82333)',

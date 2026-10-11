@@ -43,6 +43,6 @@ describe('bugFilterConfig option providers (PLN-BUG-0123)', () => {
 
   it('should fall back to constants when globals are not loaded', async () => {
     const values = (await statusOptions()).map((o) => o.value);
-    expect(values).toEqual(['Created', 'Assigned', 'Fixed', 'Verified', 'Closed']);
+    expect(values).toEqual(['Created', 'In Progress', 'Fixed', 'Done&Validated', 'Rejected']);
   });
 });
