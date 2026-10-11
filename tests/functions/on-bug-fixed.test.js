@@ -56,7 +56,7 @@ describe('onBugFixed', () => {
   describe('handleBugFixed', () => {
     it('should skip non-bug sections', async () => {
       const params = { projectId: 'C4D', section: 'tasks_C4D', cardId: 'key1' };
-      const before = { status: 'Assigned' };
+      const before = { status: 'In Progress' };
       const after = { status: 'Fixed', title: 'Not a bug', createdBy: 'user@test.com' };
 
       const result = await handleBugFixed(params, before, after, getDeps());
@@ -66,7 +66,7 @@ describe('onBugFixed', () => {
     it('should skip when status does not change to "Fixed"', async () => {
       const params = { projectId: 'C4D', section: 'bugs_C4D', cardId: 'key1' };
       const before = { status: 'Created' };
-      const after = { status: 'Assigned', title: 'Bug', createdBy: 'user@test.com' };
+      const after = { status: 'In Progress', title: 'Bug', createdBy: 'user@test.com' };
 
       const result = await handleBugFixed(params, before, after, getDeps());
       expect(result).toBeNull();
@@ -83,7 +83,7 @@ describe('onBugFixed', () => {
 
     it('should skip when no creator email', async () => {
       const params = { projectId: 'C4D', section: 'bugs_C4D', cardId: 'key1' };
-      const before = { status: 'Assigned' };
+      const before = { status: 'In Progress' };
       const after = { status: 'Fixed', title: 'Bug' };
 
       const result = await handleBugFixed(params, before, after, getDeps());
@@ -92,7 +92,7 @@ describe('onBugFixed', () => {
 
     it('should skip when creator email is invalid', async () => {
       const params = { projectId: 'C4D', section: 'bugs_C4D', cardId: 'key1' };
-      const before = { status: 'Assigned' };
+      const before = { status: 'In Progress' };
       const after = { status: 'Fixed', title: 'Bug', createdBy: 'not-an-email' };
 
       const result = await handleBugFixed(params, before, after, getDeps());
@@ -101,7 +101,7 @@ describe('onBugFixed', () => {
 
     it('should skip AI agent emails', async () => {
       const params = { projectId: 'C4D', section: 'bugs_C4D', cardId: 'key1' };
-      const before = { status: 'Assigned' };
+      const before = { status: 'In Progress' };
       const after = { status: 'Fixed', title: 'Bug', createdBy: 'becaria@ia.local' };
 
       const result = await handleBugFixed(params, before, after, getDeps());
@@ -110,7 +110,7 @@ describe('onBugFixed', () => {
 
     it('should create push notification and queue email when bug transitions to "Fixed"', async () => {
       const params = { projectId: 'C4D', section: 'bugs_C4D', cardId: 'key1' };
-      const before = { status: 'Assigned' };
+      const before = { status: 'In Progress' };
       const after = {
         status: 'Fixed',
         title: 'Crash on save',
@@ -150,7 +150,7 @@ describe('onBugFixed', () => {
       mockQueuePushRef.set.mockRejectedValue(new Error('Queue error'));
 
       const params = { projectId: 'C4D', section: 'bugs_C4D', cardId: 'key1' };
-      const before = { status: 'Assigned' };
+      const before = { status: 'In Progress' };
       const after = {
         status: 'Fixed',
         title: 'Bug',

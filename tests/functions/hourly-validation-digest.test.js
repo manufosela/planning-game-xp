@@ -317,7 +317,7 @@ describe('hourly-validation-digest', () => {
 
       expect(html).toContain('Recordatorio');
       expect(html).toContain('Done');
-      expect(html).toContain('Verified');
+      expect(html).toContain('Done&amp;Validated');
     });
   });
 });
