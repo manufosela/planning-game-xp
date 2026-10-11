@@ -15,30 +15,35 @@ describe('getAutoBugDates (PLN-BUG-0125)', () => {
       .toEqual({ startDate: STAMP, endDate: STAMP });
   });
 
-  it('should fill only startDate when a bug is assigned', () => {
-    expect(getAutoBugDates({ previousStatus: 'Created', newStatus: 'Assigned', startDate: '', endDate: '', now: NOW }))
+  it('should fill only startDate when work on a bug starts', () => {
+    expect(getAutoBugDates({ previousStatus: 'Created', newStatus: 'In Progress', startDate: '', endDate: '', now: NOW }))
       .toEqual({ startDate: STAMP });
   });
 
   it('should fill only endDate when the bug already has a startDate', () => {
-    expect(getAutoBugDates({ previousStatus: 'Assigned', newStatus: 'Fixed', startDate: '2026-10-01T09:00:00', endDate: '', now: NOW }))
+    expect(getAutoBugDates({ previousStatus: 'In Progress', newStatus: 'Fixed', startDate: '2026-10-01T09:00:00', endDate: '', now: NOW }))
       .toEqual({ endDate: STAMP });
   });
 
   it('should never overwrite existing dates', () => {
     expect(getAutoBugDates({
-      previousStatus: 'Assigned', newStatus: 'Fixed',
+      previousStatus: 'In Progress', newStatus: 'Fixed',
       startDate: '2026-10-01T09:00:00', endDate: '2026-10-02T09:00:00', now: NOW
     })).toEqual({});
   });
 
   it('should not fill endDate when moving between final statuses', () => {
-    expect(getAutoBugDates({ previousStatus: 'Fixed', newStatus: 'Verified', startDate: '2026-10-01T09:00:00', endDate: '', now: NOW }))
+    expect(getAutoBugDates({ previousStatus: 'Fixed', newStatus: 'Done&Validated', startDate: '2026-10-01T09:00:00', endDate: '', now: NOW }))
+      .toEqual({});
+  });
+
+  it('should fill no dates when a report is rejected as not a bug', () => {
+    expect(getAutoBugDates({ previousStatus: 'Created', newStatus: 'Rejected', startDate: '', endDate: '', now: NOW }))
       .toEqual({});
   });
 
   it('should fill nothing for "Created"', () => {
-    expect(getAutoBugDates({ previousStatus: 'Assigned', newStatus: 'Created', startDate: '', endDate: '', now: NOW }))
+    expect(getAutoBugDates({ previousStatus: 'In Progress', newStatus: 'Created', startDate: '', endDate: '', now: NOW }))
       .toEqual({});
   });
 });

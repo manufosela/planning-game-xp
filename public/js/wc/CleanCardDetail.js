@@ -7,10 +7,10 @@ const TYPE_LABELS = {
   proposals: 'Propuesta'
 };
 
-// Bugs follow their own workflow (Created → Assigned → Fixed → Verified → Closed);
-// task-only statuses like "Done&Validated" or "Reopened" are invalid for them.
-const VALIDATED_STATUS = { bugs: 'Verified', tasks: 'Done&Validated', proposals: 'Done&Validated' };
-const REOPEN_STATUS = { bugs: 'Assigned', tasks: 'Reopened', proposals: 'Reopened' };
+// Bugs (Created → In Progress → Fixed → Done&Validated) have no "Reopened":
+// a rejected fix goes back to "In Progress".
+const VALIDATED_STATUS = { bugs: 'Done&Validated', tasks: 'Done&Validated', proposals: 'Done&Validated' };
+const REOPEN_STATUS = { bugs: 'In Progress', tasks: 'Reopened', proposals: 'Reopened' };
 
 export class CleanCardDetail extends LitElement {
   static styles = [CleanCardDetailStyles];
@@ -191,7 +191,7 @@ export class CleanCardDetail extends LitElement {
     }
 
     if (!this._canValidate() && !this._canReopen()) {
-      const statusMsg = ['Done&Validated', 'Done', 'Verified', 'Closed'].includes(this.status)
+      const statusMsg = ['Done&Validated', 'Done'].includes(this.status)
         ? 'Esta tarea ya ha sido validada'
         : `Estado actual: ${this.status}`;
       return html`<div class="no-actions">${statusMsg}</div>`;

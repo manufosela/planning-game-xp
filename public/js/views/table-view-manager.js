@@ -365,7 +365,7 @@ export class TableViewManager {
 
     // Find bugs from PREVIOUS CALENDAR YEAR that are NOT in completed statuses
     const seenCardIds = new Set();
-    const completedStatuses = APP_CONSTANTS.BUG_COMPLETED_STATUSES || ['fixed', 'verified', 'closed'];
+    const completedStatuses = APP_CONSTANTS.BUG_COMPLETED_STATUSES;
     this.previousYearBugs = Object.entries(allCards).filter(([id, card]) => {
       const isPreviousYear = card.year && Number(card.year) === previousCalendarYear;
       const hasValidFirebaseId = id && id.startsWith('-');

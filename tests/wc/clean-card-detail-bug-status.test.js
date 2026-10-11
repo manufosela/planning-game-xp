@@ -27,11 +27,11 @@ function createCard(cardType, status) {
 describe('CleanCardDetail target statuses per card type (PLN-BUG-0124)', () => {
   beforeEach(() => updateCard.mockClear());
 
-  it('should set bugs to "Verified" when validating', async () => {
+  it('should set bugs to "Done&Validated" when validating', async () => {
     const el = createCard('bugs', 'Fixed');
     await el._handleValidate();
     expect(updateCard).toHaveBeenCalledWith('PlanningGame', 'BUGS', '-abc123',
-      expect.objectContaining({ status: 'Verified' }));
+      expect.objectContaining({ status: 'Done&Validated' }));
   });
 
   it('should keep setting tasks to "Done&Validated" when validating', async () => {
@@ -41,12 +41,12 @@ describe('CleanCardDetail target statuses per card type (PLN-BUG-0124)', () => {
       expect.objectContaining({ status: 'Done&Validated' }));
   });
 
-  it('should send bugs back to "Assigned" when requesting changes', async () => {
+  it('should send bugs back to "In Progress" when requesting changes', async () => {
     const el = createCard('bugs', 'Fixed');
     el._reopenReason = 'Still failing';
     await el._handleRequestChanges();
     expect(updateCard).toHaveBeenCalledWith('PlanningGame', 'BUGS', '-abc123',
-      expect.objectContaining({ status: 'Assigned' }));
+      expect.objectContaining({ status: 'In Progress' }));
   });
 
   it('should keep sending tasks to "Reopened" when requesting changes', async () => {

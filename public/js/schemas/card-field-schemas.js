@@ -51,7 +51,7 @@ export const BUG_SCHEMA = {
     'epic', 'sprint', 'commits',
     'cinemaFile', 'exportedFile', 'importedFile',
     'plugin', 'pluginVersion', 'treatmentType',
-    'rootCause', 'resolution',
+    'rootCause', 'resolution', 'rejectionReason',
     'aiUsage', 'pipelineStatus'
   ],
   VIEW_FIELDS: [
