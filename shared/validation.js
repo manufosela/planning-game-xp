@@ -12,6 +12,7 @@ import {
   VALID_ID_PREFIXES,
   REQUIRED_FIELDS_TO_LEAVE_TODO,
   REQUIRED_FIELDS_FOR_TO_VALIDATE,
+  REQUIRED_FIELDS_TO_REJECT_BUG,
   MCP_RESTRICTED_STATUSES,
   FRIENDLY_FIELD_NAMES,
   VALID_PLAN_STATUSES,
@@ -187,12 +188,21 @@ export function validateBugStatusTransition(currentBug, updates) {
 
   const finalBug = { ...currentBug, ...updates };
 
-  // Assigned: requires startDate (when work begins on the bug)
-  if (newStatus === 'Assigned') {
-    if (!hasValidValue(finalBug, 'startDate')) {
+  // Done&Validated: only the stakeholder validates a fixed bug
+  if (MCP_RESTRICTED_STATUSES.includes(newStatus)) {
+    throw new Error(
+      `MCP cannot change bug status to "${newStatus}". ` +
+      'Set the bug to "Fixed"; the stakeholder will set it to "Done&Validated" once verified.'
+    );
+  }
+
+  // In Progress: requires who is working on it and since when
+  if (newStatus === 'In Progress') {
+    const missingFields = ['developer', 'startDate'].filter(field => !hasValidValue(finalBug, field));
+    if (missingFields.length > 0) {
       throw new Error(
-        'Cannot set bug to "Assigned": startDate is required. ' +
-        'Set startDate to the current date/time when assigning a bug.'
+        `Cannot set bug to "In Progress": missing required fields: ${missingFields.join(', ')}. ` +
+        'Set the developer working on the bug and startDate to the current date/time.'
       );
     }
   }
@@ -221,22 +231,13 @@ export function validateBugStatusTransition(currentBug, updates) {
     }
   }
 
-  // Closed: requires commits, rootCause, resolution
-  if (newStatus === 'Closed') {
-    const missingFields = [];
-    if (!(Array.isArray(finalBug.commits) && finalBug.commits.length > 0)) {
-      missingFields.push('commits (list of commits that fixed the bug)');
-    }
-    if (!finalBug.rootCause || (typeof finalBug.rootCause === 'string' && finalBug.rootCause.trim() === '')) {
-      missingFields.push('rootCause (why the bug occurred)');
-    }
-    if (!finalBug.resolution || (typeof finalBug.resolution === 'string' && finalBug.resolution.trim() === '')) {
-      missingFields.push('resolution (how the bug was fixed)');
-    }
+  // Rejected: it is not a bug — only the reason is required, no commits
+  if (newStatus === 'Rejected') {
+    const missingFields = REQUIRED_FIELDS_TO_REJECT_BUG.filter(field => !hasValidValue(finalBug, field));
     if (missingFields.length > 0) {
       throw new Error(
-        `Cannot close bug: missing required fields: ${missingFields.join(', ')}. ` +
-        'When closing a bug, you must document the commits, root cause, and resolution.'
+        `Cannot reject bug: missing required fields: ${missingFields.join(', ')}. ` +
+        'Explain why it is not a bug (duplicate, expected behaviour, not reproducible...).'
       );
     }
   }

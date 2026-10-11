@@ -9,7 +9,7 @@
 // ──────────────────────────────────────────────
 // Bug statuses (5 states)
 // ──────────────────────────────────────────────
-export const VALID_BUG_STATUSES = ['Created', 'Assigned', 'Fixed', 'Verified', 'Closed'];
+export const VALID_BUG_STATUSES = ['Created', 'In Progress', 'Fixed', 'Done&Validated', 'Rejected'];
 
 export const VALID_BUG_PRIORITIES = [
   'Application Blocker',
@@ -91,9 +91,9 @@ export const PR_CREATED_EXAMPLE = {
 };
 
 // ──────────────────────────────────────────────
-// Required fields when closing a bug
+// Required fields when rejecting a bug (it is not a bug)
 // ──────────────────────────────────────────────
-export const REQUIRED_FIELDS_TO_CLOSE_BUG = ['commits', 'rootCause', 'resolution'];
+export const REQUIRED_FIELDS_TO_REJECT_BUG = ['rejectionReason'];
 
 // ──────────────────────────────────────────────
 // Required fields for "Blocked" status
@@ -203,7 +203,7 @@ export const VALID_PLAN_STATUSES = ['pending', 'proposed', 'validated', 'in_prog
 // Completed statuses (used for year migration exclusion)
 // ──────────────────────────────────────────────
 export const TASK_COMPLETED_STATUSES = ['done', 'done&validated'];
-export const BUG_COMPLETED_STATUSES = ['fixed', 'verified', 'closed'];
+export const BUG_COMPLETED_STATUSES = ['fixed', 'done&validated', 'rejected'];
 export const PROPOSAL_COMPLETED_STATUSES = ['approved', 'rejected', 'converted'];
 
 // ──────────────────────────────────────────────

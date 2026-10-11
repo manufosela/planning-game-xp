@@ -434,10 +434,10 @@ describe('workCycles feature', () => {
     it('should not add workCycles for bug cards', async () => {
       setMockRtdbData('/data/statusList/bug-card', {
         'Created': 1,
-        'Assigned': 2,
+        'In Progress': 2,
         'Fixed': 3,
-        'Verified': 4,
-        'Closed': 5
+        'Done&Validated': 4,
+        'Rejected': 5
       });
       setMockRtdbData('/cards/TestProject/BUGS_TestProject', {
         'bug1': {
@@ -452,7 +452,7 @@ describe('workCycles feature', () => {
         projectId: 'TestProject',
         type: 'bug',
         firebaseId: 'bug1',
-        updates: { status: 'Assigned', startDate: '2026-01-01T09:00:00' }
+        updates: { status: 'In Progress', developer: 'dev_001', startDate: '2026-01-01T09:00:00' }
       });
 
       const response = JSON.parse(result.content[0].text);
