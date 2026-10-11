@@ -555,7 +555,7 @@ describe('onTaskStatusValidation', () => {
     });
 
     describe('Revert loop prevention', () => {
-      it('should skip validation when afterData has _validationReverted flag', async () => {
+      it('should skip validation for the revert write itself', async () => {
         const afterData = {
           status: 'To Validate',
           title: 'Test Task',
@@ -564,6 +564,7 @@ describe('onTaskStatusValidation', () => {
           endDate: '2026-01-30',
           validator: 'stk_001',
           _validationReverted: true,
+          _validationRevertedAt: 1760000000000,
           _validationError: 'Some previous error'
         };
 
@@ -576,6 +577,54 @@ describe('onTaskStatusValidation', () => {
 
         expect(result).toBeNull();
         expect(mockDbSet).not.toHaveBeenCalled();
+      });
+
+      it('should validate a later change on a card that kept a stale revert flag (PLN-BUG-0127)', async () => {
+        mockDbOnce.mockResolvedValue({ val: () => ({}) });
+        mockDbSet.mockResolvedValue();
+        const stale = { _validationReverted: true, _validationRevertedAt: 1760000000000, _validationError: 'old' };
+
+        const result = await handleTaskStatusValidation(
+          { projectId: 'Test', section: 'BUGS_Test', cardId: 'bug1' },
+          { status: 'Fixed', ...stale },
+          { status: 'Verified', ...stale },
+          { db: mockDb, logger: mockLogger }
+        );
+
+        expect(result).toEqual(expect.objectContaining({ reverted: true }));
+      });
+
+      it('should validate a later change on a card with a legacy flag without timestamp (PLN-BUG-0127)', async () => {
+        mockDbOnce.mockResolvedValue({ val: () => ({}) });
+        mockDbSet.mockResolvedValue();
+        const legacy = { _validationReverted: true, _validationError: 'old' };
+
+        const result = await handleTaskStatusValidation(
+          { projectId: 'Test', section: 'BUGS_Test', cardId: 'bug1' },
+          { status: 'Fixed', ...legacy },
+          { status: 'Verified', ...legacy },
+          { db: mockDb, logger: mockLogger }
+        );
+
+        expect(result).toEqual(expect.objectContaining({ reverted: true }));
+      });
+
+      it('should mark revert writes with a new _validationRevertedAt', async () => {
+        mockDbOnce.mockResolvedValue({ val: () => ({}) });
+        mockDbSet.mockResolvedValue();
+
+        await handleTaskStatusValidation(
+          { projectId: 'Test', section: 'BUGS_Test', cardId: 'bug1' },
+          { status: 'Fixed' },
+          { status: 'Verified' },
+          { db: mockDb, logger: mockLogger }
+        );
+
+        expect(mockDbSet).toHaveBeenCalledWith(expect.objectContaining({
+          status: 'Fixed',
+          _validationReverted: true,
+          _validationRevertedAt: expect.any(Number)
+        }));
       });
 
       it('should still validate normal writes without _validationReverted flag', async () => {

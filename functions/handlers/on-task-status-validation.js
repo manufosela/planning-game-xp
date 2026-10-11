@@ -242,6 +242,17 @@ async function resolveEmailFromId(db, entityId) {
   return null;
 }
 
+/**
+ * True only for the write this function makes when it reverts a change.
+ * Each revert stamps a new _validationRevertedAt, so a flag left on the card
+ * (the client only clears it when the card is open) never disables later
+ * validations (PLN-BUG-0127).
+ */
+function isOwnRevertWrite(beforeData, afterData) {
+  const revertedAt = afterData?._validationRevertedAt;
+  return Boolean(revertedAt) && revertedAt !== beforeData?._validationRevertedAt;
+}
+
 // Valid statuses per card type (bugs come from shared/constants)
 const VALID_TASK_STATUSES_LIST = ['To Do', 'In Progress', 'Pausado', 'To Validate', 'Done&Validated', 'Blocked', 'Reopened'];
 
@@ -258,7 +269,7 @@ async function handleBugStatusValidation(params, beforeData, afterData, deps) {
   if (!afterStatus || afterStatus === beforeStatus) return null;
 
   // Skip revert writes
-  if (afterData._validationReverted) return null;
+  if (isOwnRevertWrite(beforeData, afterData)) return null;
 
   // Check if the status is valid for bugs
   if (!VALID_BUG_STATUSES_LIST.includes(afterStatus)) {
@@ -271,6 +282,7 @@ async function handleBugStatusValidation(params, beforeData, afterData, deps) {
       ...afterData,
       status: beforeStatus || 'Created',
       _validationReverted: true,
+      _validationRevertedAt: Date.now(),
       _validationError: `Invalid bug status "${afterStatus}". Valid bug statuses: ${VALID_BUG_STATUSES_LIST.join(', ')}`
     };
 
@@ -354,7 +366,7 @@ async function handleTaskStatusValidation(params, beforeData, afterData, deps) {
   // When the CF reverts a change, it sets _validationReverted=true.
   // That revert write triggers this function again — without this guard,
   // the revert itself would fail validation and trigger another revert, ad infinitum.
-  if (afterData._validationReverted) {
+  if (isOwnRevertWrite(beforeData, afterData)) {
     logger.info('onTaskStatusValidation: Skipping validation for revert write', {
       projectId,
       cardId,
@@ -414,6 +426,7 @@ async function handleTaskStatusValidation(params, beforeData, afterData, deps) {
       ...afterData,
       status: beforeStatus,
       _validationReverted: true,
+      _validationRevertedAt: Date.now(),
       _validationError: validationError.message
     };
 

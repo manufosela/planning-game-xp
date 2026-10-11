@@ -118,11 +118,13 @@ return;
             const firebaseKey = pathParts[4];
             this.firebaseService.updateCard(projectId, section, firebaseKey, {
               _validationReverted: null,
+              _validationRevertedAt: null,
               _validationError: null
             });
           }
         }
         delete cardData._validationReverted;
+        delete cardData._validationRevertedAt;
         delete cardData._validationError;
       }
 
