@@ -29,6 +29,17 @@
     </div>
 
     <div id="tab-validate" class="cv-tab-panel">
+      <div id="bulkBar" class="bulk-bar hidden">
+        <label class="bulk-select-all">
+          <input type="checkbox" id="bulkSelectAll" /> Seleccionar todas
+        </label>
+        <span id="bulkProgress" class="bulk-progress"></span>
+        <div class="bulk-actions">
+          <button id="bulkValidate" class="bulk-btn bulk-validate" disabled>Validar</button>
+          <button id="bulkReopen" class="bulk-btn bulk-reopen" disabled>Solicitar cambios</button>
+          <button id="bulkStop" class="bulk-btn bulk-stop hidden">Detener</button>
+        </div>
+      </div>
       <div id="validateList" class="card-list">Cargando...</div>
     </div>
     <div id="tab-mine" class="cv-tab-panel hidden">
@@ -52,6 +63,9 @@
   import { normalizeEmail as normalizeEmailSafe, isCurrentUserSuperAdmin } from '/js/utils/super-admin-check.js';
   import { entityDirectoryService } from '/js/services/entity-directory-service.js';
   import { FirebaseService } from '/js/services/firebase-service.js';
+  import { modalService } from '/js/services/modal-service.js';
+  import { validateCard, requestCardChanges } from '/js/utils/clean-card-actions.js';
+  import { runSequentially } from '/js/utils/bulk-action-queue.js';
   import '/js/core/app-initializer.js';
 
   // DOM elements
@@ -68,6 +82,12 @@
   const tabAll = document.getElementById('tab-all');
   const fabCreate = document.getElementById('fabCreate');
   const fabMenu = document.getElementById('fabMenu');
+  const bulkBar = document.getElementById('bulkBar');
+  const bulkSelectAll = document.getElementById('bulkSelectAll');
+  const bulkProgress = document.getElementById('bulkProgress');
+  const bulkValidate = document.getElementById('bulkValidate');
+  const bulkReopen = document.getElementById('bulkReopen');
+  const bulkStop = document.getElementById('bulkStop');
 
   // State
   let currentUserEmail = '';
@@ -77,6 +97,8 @@
   let activeTab = 'validate';
   let allCards = []; // Flat array of all cards for current project
   let activeListeners = []; // Firebase listener unsubscribers
+  const selectedIds = new Set(); // firebaseIds checked in the "A Validar" tab
+  let bulkController = null; // AbortController while a bulk run is active
 
   // Status sort order for display
   const STATUS_ORDER = {
@@ -235,12 +257,17 @@
     myTasksCount.textContent = inFlight.length;
     pendingCount.textContent = allActive.length;
 
-    renderCardList(validateList, toValidate, 'No tienes tareas pendientes de validar');
+    // Drop selections of cards that left the list (validated, reopened, reassigned)
+    const bulkIds = new Set(toValidate.filter(_canBulkValidate).map(c => c.firebaseId));
+    selectedIds.forEach(id => { if (!bulkIds.has(id)) selectedIds.delete(id); });
+
+    renderCardList(validateList, toValidate, 'No tienes tareas pendientes de validar', _canBulkValidate);
     renderCardList(myTasksList, inFlight, 'No tienes tareas en vuelo');
     renderCardList(allTasksList, allActive, 'No hay tareas activas');
+    updateBulkBar(bulkIds.size);
   }
 
-  function renderCardList(container, cards, emptyMessage) {
+  function renderCardList(container, cards, emptyMessage, isSelectable = () => false) {
     if (cards.length === 0) {
       container.innerHTML = `<div class="empty-state">${emptyMessage}</div>`;
       return;
@@ -258,10 +285,130 @@
       el.priority = card.priority || '';
       el.endDate = card.endDate || '';
       el.isMyTask = _isMyCard(card);
+      el.selectable = isSelectable(card);
+      el.selected = el.selectable && selectedIds.has(card.firebaseId);
       const devId = card.developer || '';
       el.developerName = devId ? entityDirectoryService.getDeveloperDisplayName(devId) || devId : '';
       container.append(el);
     });
+  }
+
+  // ===== Bulk validation (PLN-TSK-0366) =====
+
+  // Only the card's validator can validate it: the status-validation Cloud
+  // Function reverts Done&Validated written by anyone else.
+  function _canBulkValidate(card) {
+    return Boolean(currentStakeholderId) && card.validator === currentStakeholderId;
+  }
+
+  function updateBulkBar(selectableCount) {
+    const running = bulkController !== null;
+    const count = selectedIds.size;
+    bulkBar.classList.toggle('hidden', selectableCount === 0 && !running);
+    bulkSelectAll.checked = selectableCount > 0 && count === selectableCount;
+    bulkSelectAll.indeterminate = count > 0 && count < selectableCount;
+    bulkSelectAll.disabled = running;
+    bulkValidate.textContent = count ? `Validar (${count})` : 'Validar';
+    bulkReopen.textContent = count ? `Solicitar cambios (${count})` : 'Solicitar cambios';
+    bulkValidate.disabled = running || count === 0;
+    bulkReopen.disabled = running || count === 0;
+    bulkStop.classList.toggle('hidden', !running);
+  }
+
+  validateList.addEventListener('card-selection-change', (e) => {
+    const { firebaseId, selected } = e.detail;
+    if (selected) selectedIds.add(firebaseId);
+    else selectedIds.delete(firebaseId);
+    updateBulkBar(getMyToValidate().filter(_canBulkValidate).length);
+  });
+
+  bulkSelectAll.addEventListener('change', () => {
+    selectedIds.clear();
+    if (bulkSelectAll.checked) {
+      getMyToValidate().filter(_canBulkValidate).forEach(c => selectedIds.add(c.firebaseId));
+    }
+    renderCards();
+  });
+
+  bulkStop.addEventListener('click', () => bulkController?.abort());
+  bulkValidate.addEventListener('click', () => runBulk('validate'));
+  bulkReopen.addEventListener('click', () => runBulk('reopen'));
+
+  async function askBulkReason(count) {
+    const data = await modalService.createFormModal({
+      title: `Solicitar cambios (${count})`,
+      fields: [{ name: 'reason', label: 'Motivo de la solicitud de cambios', type: 'textarea', required: true }],
+      submitText: 'Solicitar cambios',
+      cancelText: 'Cancelar'
+    });
+    return data?.reason?.trim() ?? '';
+  }
+
+  function buildBulkAction(kind, reason) {
+    if (kind === 'validate') {
+      return (card) => validateCard({
+        projectId: card.projectId, cardType: card._section, firebaseId: card.firebaseId, userEmail: currentUserEmail
+      });
+    }
+    return (card) => requestCardChanges({
+      projectId: card.projectId,
+      cardType: card._section,
+      firebaseId: card.firebaseId,
+      userEmail: currentUserEmail,
+      status: card.status,
+      reason,
+      reopenCount: card.reopenCount ?? 0,
+      reopenCycles: card.reopenCycles ?? [],
+      notesRaw: typeof card.notes === 'string' ? card.notes : ''
+    });
+  }
+
+  function notifyBulkResult(kind, { succeeded, failed, stopped }) {
+    const verb = kind === 'validate' ? 'validadas' : 'devueltas para cambios';
+    let message = `${succeeded.length} ${verb}`;
+    if (failed.length) message += `. Con error: ${failed.map(f => f.item.cardId).join(', ')}`;
+    if (stopped) message += '. Detenido antes de terminar';
+    document.dispatchEvent(new CustomEvent('show-slide-notification', {
+      detail: { options: { message, type: failed.length ? 'warning' : 'success' } }
+    }));
+  }
+
+  async function runBulk(kind) {
+    const cards = getMyToValidate().filter(c => _canBulkValidate(c) && selectedIds.has(c.firebaseId));
+    if (cards.length === 0 || bulkController) return;
+
+    let reason = '';
+    if (kind === 'validate') {
+      const confirmed = await modalService.createConfirmationModal({
+        title: 'Validar cards',
+        message: `Se validarán ${cards.length} cards, una detrás de otra.`,
+        confirmText: 'Validar',
+        cancelText: 'Cancelar'
+      });
+      if (!confirmed) return;
+    } else {
+      reason = await askBulkReason(cards.length);
+      if (!reason) return;
+    }
+
+    bulkController = new AbortController();
+    bulkProgress.textContent = `0/${cards.length}`;
+    renderCards();
+
+    const action = buildBulkAction(kind, reason);
+    const result = await runSequentially(cards, async (card) => {
+      await action(card);
+      selectedIds.delete(card.firebaseId);
+    }, {
+      signal: bulkController.signal,
+      onProgress: (done, total) => { bulkProgress.textContent = `${done}/${total}`; }
+    });
+
+    result.failed.forEach(({ item, error }) => console.error(`Bulk ${kind} failed for ${item.cardId}:`, error));
+    bulkController = null;
+    bulkProgress.textContent = '';
+    renderCards();
+    notifyBulkResult(kind, result);
   }
 
   // ===== Card Modal =====
@@ -627,6 +774,72 @@
   .card-list {
     min-height: 100px;
   }
+
+  .bulk-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background: var(--bg-primary, #fff);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    font-size: 14px;
+    color: var(--text-primary, #1e293b);
+  }
+
+  .bulk-bar.hidden {
+    display: none;
+  }
+
+  .bulk-select-all {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .bulk-select-all input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--brand-primary, #6366f1);
+  }
+
+  .bulk-progress {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary, #64748b);
+  }
+
+  .bulk-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .bulk-btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-on-primary, #fff);
+  }
+
+  .bulk-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .bulk-validate { background: var(--status-done, #10b981); }
+  .bulk-reopen { background: var(--status-to-validate, #f59e0b); }
+  .bulk-stop { background: var(--status-blocked, #f43f5e); }
+  .bulk-stop.hidden { display: none; }
 
   .empty-state {
     text-align: center;
