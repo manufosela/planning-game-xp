@@ -104,19 +104,19 @@ export class CleanCardItem extends LitElement {
           <span class="card-type-icon">${typeIcon}</span>
           <span class="card-id">${this.cardId}</span>
         </div>
-        <div class="card-title">${this.title}</div>
+        <div class="card-title" title="${this.title}">${this.title}</div>
         <div class="card-meta">
           ${priorityClass ? html`
-            <span class="meta-item">
+            <span class="meta-item meta-priority">
               <span class="priority-dot ${priorityClass}"></span>
-              ${this._getPriorityClass()}
+              ${priorityClass}
             </span>
           ` : ''}
           ${this.developerName ? html`
-            <span class="meta-item">${this.developerName}</span>
+            <span class="meta-item meta-developer">${this.developerName}</span>
           ` : ''}
           ${dateStr ? html`
-            <span class="meta-item">${dateStr}</span>
+            <span class="meta-item meta-date">${dateStr}</span>
           ` : ''}
         </div>
       </div>

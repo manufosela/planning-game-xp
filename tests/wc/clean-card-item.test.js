@@ -186,6 +186,37 @@ describe('CleanCardItem web component', () => {
     });
   });
 
+  describe('compact row layout (PLN-TSK-0366)', () => {
+    const flatten = (tpl) => (tpl && tpl.strings)
+      ? [...tpl.strings, ...tpl.values.flatMap(flatten)]
+      : [String(tpl ?? '')];
+
+    it('should place priority, developer and date in their own grid cells', async () => {
+      const { CleanCardItem } = await import('../../public/js/wc/CleanCardItem.js');
+      const el = new CleanCardItem();
+      el.title = 'A long title';
+      el.priority = 'Application Blocker';
+      el.developerName = 'Dev Name';
+      el.endDate = new Date().toISOString();
+
+      const markup = flatten(el.render()).join('');
+      expect(markup).toContain('meta-priority');
+      expect(markup).toContain('meta-developer');
+      expect(markup).toContain('meta-date');
+      expect(markup).toContain('Dev Name');
+    });
+
+    it('should expose the full title as a tooltip since rows truncate it', async () => {
+      const { CleanCardItem } = await import('../../public/js/wc/CleanCardItem.js');
+      const el = new CleanCardItem();
+      el.title = 'A long title';
+      const tpl = el.render();
+      const markup = flatten(tpl).join('');
+      expect(markup).toMatch(/class="card-title" title="/);
+      expect(tpl.values).toContain('A long title');
+    });
+  });
+
   describe('event dispatch', () => {
     it('should dispatch open-card-detail event on click', async () => {
       const { CleanCardItem } = await import('../../public/js/wc/CleanCardItem.js');

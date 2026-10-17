@@ -93,6 +93,46 @@ export const CleanCardItemStyles = css`
   .priority-dot.medium { background: #f59e0b; }
   .priority-dot.low { background: #22c55e; }
 
+  /* Desktop: one row per card, columns aligned across rows (PLN-TSK-0366) */
+  @media (min-width: 768px) {
+    .card-item {
+      display: grid;
+      grid-template-columns: 120px 20px 110px minmax(0, 1fr) 90px 160px 70px;
+      align-items: center;
+      column-gap: 12px;
+      padding: 8px 12px;
+      margin-bottom: 4px;
+      border-radius: 6px;
+      border-left-width: 3px;
+    }
+
+    .card-item:hover {
+      transform: none;
+      background: var(--bg-secondary, #f8fafc);
+    }
+
+    .card-header,
+    .card-meta {
+      display: contents;
+    }
+
+    .status-badge { grid-column: 1; justify-self: start; }
+    .card-type-icon { grid-column: 2; }
+    .card-id { grid-column: 3; margin-left: 0; }
+
+    .card-title {
+      grid-column: 4;
+      margin-bottom: 0;
+      display: block;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .meta-priority { grid-column: 5; }
+    .meta-developer { grid-column: 6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meta-date { grid-column: 7; justify-self: end; }
+  }
+
   /* Status colors */
   .status-todo { background: var(--status-todo, #94a3b8); color: var(--status-todo-text, #fff); }
   .status-inprogress { background: var(--status-in-progress, #3b82f6); color: var(--status-in-progress-text, #fff); }
