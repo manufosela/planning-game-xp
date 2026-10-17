@@ -1,5 +1,5 @@
 // Auto-generated version file - Do not edit manually
-export const version = '1.200.0';
-export const lastUpdated = '2026-10-11T17:34:28.782Z';
-export const lastBuildCommit = '3a7d2589eda9be0532d4a32c17122f4112d1ff2f';
+export const version = '1.201.0';
+export const lastUpdated = '2026-10-17T14:53:50.280Z';
+export const lastBuildCommit = '3c1c51deb2d83a1bfe629b92ca30ee4e5bd164a7';
 export const instance = 'manufosela';

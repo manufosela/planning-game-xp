@@ -7,6 +7,22 @@ Auto-generated from git commits on each build.
 
 ### Added
 
+- Bulk validate and request changes in clean view
+- Add sequential bulk queue and selectable clean card rows
+- Show clean view cards as one row per card on desktop
+
+### Changed
+
+- Extract clean view validate/request-changes actions
+
+### Fixed
+
+- Stop stale revert flags from disabling status validation
+
+## [1.200.0] - 2026-10-11
+
+### Added
+
 - Apply new bug workflow in the UI
 - Apply new bug workflow in Cloud Functions
 - Simplify bug workflow to Created, In Progress, Fixed, Done&Validated, Rejected
