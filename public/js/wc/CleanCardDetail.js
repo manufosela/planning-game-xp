@@ -1,16 +1,18 @@
 import { LitElement, html, nothing } from 'https://cdn.jsdelivr.net/npm/lit@3.1.0/+esm';
 import { CleanCardDetailStyles } from './clean-card-detail-styles.js';
+import {
+  VALIDATED_STATUS,
+  getCardSection,
+  isAwaitingValidation,
+  validateCard,
+  requestCardChanges
+} from '../utils/clean-card-actions.js';
 
 const TYPE_LABELS = {
   tasks: 'Tarea',
   bugs: 'Bug',
   proposals: 'Propuesta'
 };
-
-// Bugs (Created → In Progress → Fixed → Done&Validated) have no "Reopened":
-// a rejected fix goes back to "In Progress".
-const VALIDATED_STATUS = { bugs: 'Done&Validated', tasks: 'Done&Validated', proposals: 'Done&Validated' };
-const REOPEN_STATUS = { bugs: 'In Progress', tasks: 'Reopened', proposals: 'Reopened' };
 
 export class CleanCardDetail extends LitElement {
   static styles = [CleanCardDetailStyles];
@@ -76,10 +78,7 @@ export class CleanCardDetail extends LitElement {
   }
 
   _getSection() {
-    const ct = (this.cardType || '').toLowerCase();
-    if (ct.includes('bug')) return 'bugs';
-    if (ct.includes('proposal')) return 'proposals';
-    return 'tasks';
+    return getCardSection(this.cardType);
   }
 
   _formatDate(dateStr) {
@@ -94,11 +93,11 @@ export class CleanCardDetail extends LitElement {
   }
 
   _canValidate() {
-    return this.status === 'To Validate' || this.status === 'Fixed';
+    return isAwaitingValidation(this.status);
   }
 
   _canReopen() {
-    return this.status === 'To Validate' || this.status === 'Fixed';
+    return isAwaitingValidation(this.status);
   }
 
   _renderDescription() {
@@ -203,7 +202,7 @@ export class CleanCardDetail extends LitElement {
           <button class="btn-validate" @click=${this._handleValidate} ?disabled=${this._loading}>
             ✓ Validar ${TYPE_LABELS[this._getSection()] || 'Tarea'}
           </button>
-          <div class="action-hint">Al validar, el estado cambiará a "${VALIDATED_STATUS[this._getSection()]}"</div>
+          <div class="action-hint">Al validar, el estado cambiará a "${VALIDATED_STATUS}"</div>
         ` : nothing}
 
         ${this._canReopen() && !this._reopenMode ? html`
@@ -256,17 +255,12 @@ export class CleanCardDetail extends LitElement {
   async _handleValidate() {
     this._loading = true;
     try {
-      const { FirebaseService } = await import('../services/firebase-service.js');
-
-      const section = this._getSection().toUpperCase();
-      const newStatus = VALIDATED_STATUS[this._getSection()];
-      const updateData = {
-        status: newStatus,
-        validatedAt: new Date().toISOString(),
-        updatedBy: this.userEmail
-      };
-
-      await FirebaseService.updateCard(this.projectId, section, this.firebaseId, updateData);
+      const newStatus = await validateCard({
+        projectId: this.projectId,
+        cardType: this.cardType,
+        firebaseId: this.firebaseId,
+        userEmail: this.userEmail
+      });
 
       document.dispatchEvent(new CustomEvent('show-slide-notification', {
         detail: { options: { message: `${this.cardId} validada correctamente`, type: 'success' } }
@@ -292,41 +286,17 @@ export class CleanCardDetail extends LitElement {
 
     this._loading = true;
     try {
-      const { FirebaseService } = await import('../services/firebase-service.js');
-
-      const section = this._getSection().toUpperCase();
-      const reason = this._reopenReason.trim();
-
-      // Follow TaskCard reopen pattern: reopenCount, reopenCycles, note
-      const newReopenCount = (this._currentReopenCount || 0) + 1;
-      const reopenCycles = Array.isArray(this._currentReopenCycles) ? [...this._currentReopenCycles] : [];
-      reopenCycles.push({
-        cycle: newReopenCount,
-        reopenedAt: new Date().toISOString(),
-        reopenedBy: this.userEmail,
-        previousStatus: this.status,
-        reason
+      const newStatus = await requestCardChanges({
+        projectId: this.projectId,
+        cardType: this.cardType,
+        firebaseId: this.firebaseId,
+        userEmail: this.userEmail,
+        status: this.status,
+        reason: this._reopenReason,
+        reopenCount: this._currentReopenCount,
+        reopenCycles: this._currentReopenCycles,
+        notesRaw: this._currentNotesRaw
       });
-
-      // Build reopen note with reason (prepend to existing notes string)
-      const reopenTag = `[REOPEN #${newReopenCount}]`;
-      const dateStr = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      const reopenNote = `${reopenTag} Solicitud de cambios (${dateStr}): ${reason}`;
-      const currentNotes = this._currentNotesRaw || '';
-      const updatedNotes = currentNotes ? `${reopenNote}\n\n${currentNotes}` : reopenNote;
-
-      const newStatus = REOPEN_STATUS[this._getSection()];
-      const updateData = {
-        status: newStatus,
-        reopenCount: newReopenCount,
-        reopenCycles,
-        notes: updatedNotes,
-        endDate: '',
-        validatedAt: '',
-        updatedBy: this.userEmail
-      };
-
-      await FirebaseService.updateCard(this.projectId, section, this.firebaseId, updateData);
 
       document.dispatchEvent(new CustomEvent('show-slide-notification', {
         detail: { options: { message: `${this.cardId} devuelta para cambios`, type: 'info' } }
