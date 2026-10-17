@@ -5,11 +5,28 @@ export const CleanCardItemStyles = css`
     display: block;
   }
 
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .select-check {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--brand-primary, #6366f1);
+  }
+
   .card-item {
+    flex: 1;
+    min-width: 0;
     background: var(--bg-primary, #fff);
     border-radius: 12px;
     padding: 14px 16px;
-    margin-bottom: 10px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     cursor: pointer;
     transition: box-shadow 0.2s ease, transform 0.15s ease;
@@ -95,13 +112,16 @@ export const CleanCardItemStyles = css`
 
   /* Desktop: one row per card, columns aligned across rows (PLN-TSK-0366) */
   @media (min-width: 768px) {
+    .row {
+      margin-bottom: 4px;
+    }
+
     .card-item {
       display: grid;
       grid-template-columns: 120px 20px 110px minmax(0, 1fr) 90px 160px 70px;
       align-items: center;
       column-gap: 12px;
       padding: 8px 12px;
-      margin-bottom: 4px;
       border-radius: 6px;
       border-left-width: 3px;
     }

@@ -21,7 +21,9 @@ export class CleanCardItem extends LitElement {
       developerName: { type: String },
       priority: { type: String },
       endDate: { type: String },
-      isMyTask: { type: Boolean }
+      isMyTask: { type: Boolean },
+      selectable: { type: Boolean },
+      selected: { type: Boolean }
     };
   }
 
@@ -37,6 +39,8 @@ export class CleanCardItem extends LitElement {
     this.priority = '';
     this.endDate = '';
     this.isMyTask = false;
+    this.selectable = false;
+    this.selected = false;
   }
 
   _getStatusClass() {
@@ -92,12 +96,27 @@ export class CleanCardItem extends LitElement {
     }));
   }
 
+  _handleSelect(e) {
+    e.stopPropagation();
+    this.selected = e.target.checked;
+    this.dispatchEvent(new CustomEvent('card-selection-change', {
+      bubbles: true,
+      composed: true,
+      detail: { firebaseId: this.firebaseId, selected: this.selected }
+    }));
+  }
+
   render() {
     const typeIcon = TYPE_ICONS[this._getSection()] || '\u{1F4CB}';
     const priorityClass = this._getPriorityClass();
     const dateStr = this._formatDate();
 
     return html`
+      <div class="row">
+      ${this.selectable ? html`
+        <input type="checkbox" class="select-check" aria-label="Seleccionar ${this.cardId}"
+          .checked=${this.selected} @click=${(e) => e.stopPropagation()} @change=${this._handleSelect} />
+      ` : ''}
       <div class="card-item ${this.isMyTask ? 'my-task' : ''}" @click=${this._handleClick}>
         <div class="card-header">
           <span class="status-badge ${this._getStatusClass()}">${this._getStatusLabel()}</span>
@@ -119,6 +138,7 @@ export class CleanCardItem extends LitElement {
             <span class="meta-item meta-date">${dateStr}</span>
           ` : ''}
         </div>
+      </div>
       </div>
     `;
   }

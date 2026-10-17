@@ -217,6 +217,49 @@ describe('CleanCardItem web component', () => {
     });
   });
 
+  describe('selection (PLN-TSK-0366)', () => {
+    const flatten = (tpl) => (tpl && tpl.strings)
+      ? [...tpl.strings, ...tpl.values.flatMap(flatten)]
+      : [String(tpl ?? '')];
+
+    it('should not be selectable nor selected by default', async () => {
+      const { CleanCardItem } = await import('../../public/js/wc/CleanCardItem.js');
+      const el = new CleanCardItem();
+      expect(el.selectable).toBe(false);
+      expect(el.selected).toBe(false);
+      expect(flatten(el.render()).join('')).not.toContain('select-check');
+    });
+
+    it('should render a checkbox only when selectable', async () => {
+      const { CleanCardItem } = await import('../../public/js/wc/CleanCardItem.js');
+      const el = new CleanCardItem();
+      el.selectable = true;
+      expect(flatten(el.render()).join('')).toContain('select-check');
+    });
+
+    it('should dispatch card-selection-change without opening the card', async () => {
+      const { CleanCardItem } = await import('../../public/js/wc/CleanCardItem.js');
+      const el = new CleanCardItem();
+      el.firebaseId = '-abc123';
+      const opened = vi.fn();
+      el.addEventListener('open-card-detail', opened);
+      const eventPromise = new Promise(resolve => {
+        el.addEventListener('card-selection-change', resolve);
+      });
+
+      const stopPropagation = vi.fn();
+      el._handleSelect({ stopPropagation, target: { checked: true } });
+
+      const event = await eventPromise;
+      expect(event.detail).toEqual({ firebaseId: '-abc123', selected: true });
+      expect(event.bubbles).toBe(true);
+      expect(event.composed).toBe(true);
+      expect(el.selected).toBe(true);
+      expect(stopPropagation).toHaveBeenCalled();
+      expect(opened).not.toHaveBeenCalled();
+    });
+  });
+
   describe('event dispatch', () => {
     it('should dispatch open-card-detail event on click', async () => {
       const { CleanCardItem } = await import('../../public/js/wc/CleanCardItem.js');
