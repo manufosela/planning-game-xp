@@ -5,6 +5,12 @@ Auto-generated from git commits on each build.
 
 ## [Unreleased]
 
+### Fixed
+
+- Let SuperAdmin validate any card in clean view
+
+## [1.201.0] - 2026-10-17
+
 ### Added
 
 - Bulk validate and request changes in clean view
