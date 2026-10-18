@@ -12,6 +12,7 @@ vi.mock('../../public/js/services/firebase-service.js', () => ({
 const {
   getCardSection,
   isAwaitingValidation,
+  canValidateCard,
   buildValidateUpdate,
   buildRequestChangesUpdate,
   validateCard,
@@ -36,6 +37,26 @@ describe('isAwaitingValidation', () => {
     expect(isAwaitingValidation('Fixed')).toBe(true);
     expect(isAwaitingValidation('In Progress')).toBe(false);
     expect(isAwaitingValidation('Done&Validated')).toBe(false);
+  });
+});
+
+// PLN-BUG-0128: same actors the status-validation Cloud Function accepts.
+describe('canValidateCard', () => {
+  const card = { validator: 'stk_002', coValidator: 'stk_003' };
+
+  it('should allow the validator and the co-validator', () => {
+    expect(canValidateCard(card, { stakeholderId: 'stk_002', isSuperAdmin: false })).toBe(true);
+    expect(canValidateCard(card, { stakeholderId: 'stk_003', isSuperAdmin: false })).toBe(true);
+  });
+
+  it('should allow a SuperAdmin on any card', () => {
+    expect(canValidateCard(card, { stakeholderId: 'stk_001', isSuperAdmin: true })).toBe(true);
+    expect(canValidateCard({}, { stakeholderId: '', isSuperAdmin: true })).toBe(true);
+  });
+
+  it('should deny anyone else', () => {
+    expect(canValidateCard(card, { stakeholderId: 'stk_001', isSuperAdmin: false })).toBe(false);
+    expect(canValidateCard({}, { stakeholderId: '', isSuperAdmin: false })).toBe(false);
   });
 });
 
