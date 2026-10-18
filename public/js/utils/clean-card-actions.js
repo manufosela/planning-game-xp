@@ -20,6 +20,14 @@ export function isAwaitingValidation(status) {
   return AWAITING_VALIDATION_STATUSES.includes(status);
 }
 
+// Same actors the status-validation Cloud Function accepts for Done&Validated:
+// validator, co-validator or SuperAdmin (PLN-BUG-0128).
+export function canValidateCard(card, { stakeholderId, isSuperAdmin }) {
+  if (isSuperAdmin) return true;
+  if (!stakeholderId) return false;
+  return card.validator === stakeholderId || card.coValidator === stakeholderId;
+}
+
 export function buildValidateUpdate({ userEmail, now = new Date() }) {
   return {
     status: VALIDATED_STATUS,

@@ -64,7 +64,7 @@
   import { entityDirectoryService } from '/js/services/entity-directory-service.js';
   import { FirebaseService } from '/js/services/firebase-service.js';
   import { modalService } from '/js/services/modal-service.js';
-  import { validateCard, requestCardChanges } from '/js/utils/clean-card-actions.js';
+  import { validateCard, requestCardChanges, canValidateCard } from '/js/utils/clean-card-actions.js';
   import { runSequentially } from '/js/utils/bulk-action-queue.js';
   import '/js/core/app-initializer.js';
 
@@ -93,6 +93,7 @@
   let currentUserEmail = '';
   let currentStakeholderId = '';
   let currentDeveloperId = '';
+  let currentIsSuperAdmin = false;
   let currentProject = localStorage.getItem('cleanview-project') || '';
   let activeTab = 'validate';
   let allCards = []; // Flat array of all cards for current project
@@ -229,7 +230,7 @@
 
   function getMyToValidate() {
     return allCards.filter(card => {
-      if (!_isMyCard(card)) return false;
+      if (!_isMyCard(card) && !_canBulkValidate(card)) return false;
       return VALIDATE_STATUSES.includes(_normalizeStatus(card.status));
     }).sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
   }
@@ -295,10 +296,10 @@
 
   // ===== Bulk validation (PLN-TSK-0366) =====
 
-  // Only the card's validator can validate it: the status-validation Cloud
-  // Function reverts Done&Validated written by anyone else.
+  // The status-validation Cloud Function reverts Done&Validated written by
+  // anyone but the validator, co-validator or a SuperAdmin (PLN-BUG-0128).
   function _canBulkValidate(card) {
-    return Boolean(currentStakeholderId) && card.validator === currentStakeholderId;
+    return canValidateCard(card, { stakeholderId: currentStakeholderId, isSuperAdmin: currentIsSuperAdmin });
   }
 
   function updateBulkBar(selectableCount) {
@@ -575,6 +576,7 @@
     // /data/projectsByUser/{email} (or defaults when no entry exists).
     const isSuperAdmin = await isCurrentUserSuperAdmin(currentUserEmail);
     const seesAllProjects = isSuperAdmin || window.isAppAdmin === true;
+    currentIsSuperAdmin = seesAllProjects;
 
     let projectNames = [];
     if (seesAllProjects) {
