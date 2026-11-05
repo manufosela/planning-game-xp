@@ -57,8 +57,9 @@ export function compressResponse(data, toolName = '') {
     }
   }
 
-  // Array of cards in response (list_cards returns text with JSON array)
-  if (Array.isArray(data.cards)) {
+  // Array of cards in response. A paginated list_cards page is already a lean
+  // summary sized by the client, with fields it asked for: leave it whole.
+  if (Array.isArray(data.cards) && !data.pagination) {
     data.cards = compressArray(data.cards, toolName);
   }
 

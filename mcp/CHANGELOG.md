@@ -2,6 +2,11 @@
 
 All notable changes to the Planning Game MCP server will be documented in this file.
 
+## [1.27.0] - 2026-11-05
+
+### Added
+- **list_cards pagination**: `offset`, `limit` (1-200, default 50) and `fields` (extra card fields, `null` when missing). With any of them the response is `{ cards, pagination: { offset, limit, total, hasMore, nextOffset } }`, cards sorted by creation order and never truncated. Without them, `list_cards` returns the same array as before.
+
 ## [1.15.0] - 2026-03-10
 
 ### Added

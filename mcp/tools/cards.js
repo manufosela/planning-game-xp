@@ -193,6 +193,10 @@ export function applyTypeDefaults(type, data) {
 // Schemas
 // ──────────────────────────────────────────────
 
+// list_cards pagination (PLN-TSK-0367)
+const LIST_CARDS_DEFAULT_LIMIT = 50;
+const LIST_CARDS_MAX_LIMIT = 200;
+
 export const listCardsSchema = z.object({
   projectId: z.string().describe('Project ID (e.g., "Cinema4D", "Intranet")'),
   type: z.enum(['task', 'bug', 'epic', 'proposal', 'qa']).describe('Card type to list. For "proposal", the listing includes convertedToPlan / convertedToTask: a proposal carrying either one is already approved; the ones without them are still pending.'),
@@ -200,7 +204,10 @@ export const listCardsSchema = z.object({
   sprint: z.string().optional().describe('Filter by sprint name'),
   developer: z.string().optional().describe('Filter by developer name'),
   planId: z.string().optional().describe('Filter tasks by plan ID (Firebase key)'),
-  year: z.number().optional().describe('Filter by year')
+  year: z.number().optional().describe('Filter by year'),
+  offset: z.number().int().min(0).optional().describe('Pagination: index of the first card to return (cards sorted by creation order). Passing offset, limit or fields switches the response to { cards, pagination: { offset, limit, total, hasMore, nextOffset } }; nextOffset is null on the last page'),
+  limit: z.number().int().min(1).max(LIST_CARDS_MAX_LIMIT).optional().describe(`Pagination: page size, 1-${LIST_CARDS_MAX_LIMIT} (default ${LIST_CARDS_DEFAULT_LIMIT}). Without offset, limit or fields the response is the legacy array, truncated to 20`),
+  fields: z.array(z.string()).optional().describe('Extra card fields to include in each listed card (e.g. ["notes", "startDate"]); a missing field comes back as null')
 });
 
 export const getCardSchema = z.object({
@@ -285,17 +292,18 @@ export const relateCardsSchema = z.object({
 // Tool handlers
 // ──────────────────────────────────────────────
 
-export async function listCards({ projectId, type, status, sprint, developer, planId, year }) {
+export async function listCards({ projectId, type, status, sprint, developer, planId, year, offset, limit, fields }) {
   const db = getDatabase();
   const sectionPath = buildSectionPath(projectId, type);
   const snapshot = await db.ref(sectionPath).once('value');
   const cardsData = snapshot.val();
+  const paginated = offset !== undefined || limit !== undefined || fields !== undefined;
 
-  if (!cardsData) {
+  if (!cardsData && !paginated) {
     return { content: [{ type: 'text', text: `No ${type} cards found in project "${projectId}".` }] };
   }
 
-  let cards = Object.entries(cardsData).map(([firebaseId, card]) => ({
+  let cards = Object.entries(cardsData || {}).map(([firebaseId, card]) => ({
     firebaseId,
     ...card
   }));
@@ -340,15 +348,32 @@ export async function listCards({ projectId, type, status, sprint, developer, pl
       base.convertedToPlan = c.convertedToPlan || null;
       base.convertedToTask = c.convertedToTask || null;
     }
+    for (const field of fields || []) {
+      base[field] = c[field] ?? null;
+    }
     return base;
   });
 
-  return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify(summary, null, 2)
-    }]
+  if (!paginated) {
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(summary, null, 2)
+      }]
+    };
+  }
+
+  // Push IDs sort in creation order, so pages stay stable between calls
+  summary.sort((a, b) => (a.firebaseId < b.firebaseId ? -1 : Number(a.firebaseId > b.firebaseId)));
+  const pageOffset = offset ?? 0;
+  const pageLimit = limit ?? LIST_CARDS_DEFAULT_LIMIT;
+  const total = summary.length;
+  const hasMore = pageOffset + pageLimit < total;
+  const page = {
+    cards: summary.slice(pageOffset, pageOffset + pageLimit),
+    pagination: { offset: pageOffset, limit: pageLimit, total, hasMore, nextOffset: hasMore ? pageOffset + pageLimit : null }
   };
+  return { content: [{ type: 'text', text: JSON.stringify(page) }] };
 }
 
 export async function getCard({ projectId, cardId }) {
